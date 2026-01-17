@@ -2439,3 +2439,175 @@ body {
     border-top: 1px solid #fde047;
   }
 }
+
+/* Visual Model (Insight Map) */
+.visual-model {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 20px;
+  background: #FFFFFF;
+  border-radius: 16px;
+  border: 1px solid #E5E7EB;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.vm-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.vm-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #9CA3AF;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0;
+}
+
+/* Core Identity Grid */
+.vm-traits-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.vm-trait-card {
+  position: relative;
+  background: #F9FAFB;
+  border: 1px solid #E5E7EB;
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: all 0.3s ease;
+}
+
+.vm-trait-card.known {
+  background: #EFF6FF; /* Light blue tint */
+  border-color: #BFDBFE;
+}
+
+.vm-trait-card.active {
+  border-color: #3B82F6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+  transform: scale(1.02);
+}
+
+.vm-trait-label {
+  font-size: 11px;
+  color: #6B7280;
+  font-weight: 500;
+}
+
+.vm-trait-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vm-trait-value:empty::before {
+  content: '...';
+  color: #D1D5DB;
+}
+
+/* Horizon (Goals) */
+.vm-horizon {
+  min-height: 200px;
+  background: #F3F4F6; /* Subtle distinct background for the "space" */
+  border-radius: 12px;
+  padding: 16px;
+  position: relative;
+}
+
+.vm-horizon.active-section {
+  box-shadow: inset 0 0 20px rgba(59, 130, 246, 0.1);
+}
+
+.vm-bubbles-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+}
+
+.vm-empty-state {
+  color: #9CA3AF;
+  font-style: italic;
+  font-size: 14px;
+  text-align: center;
+  width: 100%;
+}
+
+.vm-goal-bubble {
+  background: #FFFFFF;
+  border: 2px solid #E5E7EB;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 8px;
+  cursor: default;
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  font-size: 11px;
+  line-height: 1.2;
+  color: #4B5563;
+  overflow: hidden;
+}
+
+.vm-goal-bubble.active {
+  border-color: #3B82F6;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+  transform: translateY(-4px);
+}
+
+/* Status Bar */
+.vm-status-bar {
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid #E5E7EB;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.vm-status-label {
+  font-size: 11px;
+  color: #9CA3AF;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.vm-status-value {
+  font-size: 13px;
+  color: #3B82F6;
+  font-style: italic;
+}
+
+/* Animations */
+@keyframes pulse-ring {
+  0% { transform: scale(0.95); opacity: 0.5; }
+  50% { transform: scale(1.05); opacity: 0.8; }
+  100% { transform: scale(0.95); opacity: 0.5; }
+}
+
+.vm-pulse-ring {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  border-radius: 12px;
+  border: 2px solid #3B82F6;
+  opacity: 0;
+  animation: pulse-ring 2s infinite ease-in-out;
+  pointer-events: none;
+}

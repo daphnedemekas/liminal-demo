@@ -594,12 +594,29 @@ Generate ONLY the question:"""
         original = question
         question_lower = question.lower()
         
+        # Words that indicate the remaining text is grammatically dependent on the preamble
+        # If stripping leaves one of these at the start, DON'T strip
+        dependent_starters = [
+            'especially', 'particularly', 'in particular', 'specifically',
+            'and', 'but', 'or', 'nor', 'yet', 'so',  # conjunctions
+            'which', 'who', 'that', 'where', 'when',  # relative pronouns
+            'this', 'these', 'it',  # demonstratives pointing back
+        ]
+        
         for pattern in preamble_patterns:
             match = re.match(pattern, question_lower, re.IGNORECASE)
             if match:
                 # Found a preamble - strip it
                 preamble_end = match.end()
                 stripped = question[preamble_end:].strip()
+                
+                # Check if the remaining text starts with a dependent word
+                stripped_lower = stripped.lower()
+                is_dependent = any(stripped_lower.startswith(word) for word in dependent_starters)
+                
+                if is_dependent:
+                    print(f"[LINT] Preamble found but remaining text is dependent, keeping original")
+                    return original
                 
                 # Make sure we still have a valid question after stripping
                 if '?' in stripped and len(stripped) > 15:

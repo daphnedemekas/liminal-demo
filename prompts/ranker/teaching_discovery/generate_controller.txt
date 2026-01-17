@@ -1,0 +1,170 @@
+You are generating the controller state for the next conversational move in TEACHING DISCOVERY phase.
+
+CURRENT SCHEMA:
+{schema}
+
+BRANCH CONDITION (from user's last response):
+{branch_condition}
+
+TASK: Determine next_action, determine strategic focus, and set appropriate branch_condition for next turn.
+
+=== USER'S LEARNING GOAL (GIVEN) ===
+Goal: {user_goal}
+
+This goal has already been identified. Your job is to find the RIGHT FIRST STEP toward this goal.
+
+=== PHASE 2: TEACHING DISCOVERY ===
+Your objective is to find a TEACHING CANDIDATE - a specific 5-15 minute teachable gap that serves as a good entry point toward the user's goal.
+
+IMPORTANT:
+- The schema contains `teaching_candidates` - specific teachable topics being tracked
+- `derived.urgency` indicates how strongly to steer toward a concrete teaching target within ~5-8 turns
+- ALL questions should be constrained to the user's goal domain
+- You are providing STRATEGIC DIRECTION to the Interviewer, not writing the final script.
+
+WHAT IS A TEACHING CANDIDATE?
+- Single-lesson topics: "how backpropagation calculates gradients", "why TCP uses three-way handshake"
+- Must have clear pedagogical scope (5-15 minutes)
+- Should be a stepping stone toward the user's larger goal
+- NOT broad domains (those were goals in Phase 1)
+
+TEACHING CANDIDATE READINESS CRITERIA:
+A candidate is ready to teach when:
+- identified_gap: Clear confusion or missing piece identified
+- pedagogical_scope: "5min" or "10min" (not "too_broad")
+- stakes_clarified: User has expressed why this matters
+- readiness_score >= 0.65
+
+QUESTION HISTORY (DO NOT REPEAT):
+Recent question intents asked: {recent_question_intents}
+Recent questions asked: {recent_question_summaries}
+
+CRITICAL REPETITION RULES (MANDATORY):
+1. Count occurrences of each intent in recent_question_intents. 
+   If ANY intent appears 2+ times: YOU MUST USE A DIFFERENT INTENT.
+2. "validate_starting_point" can ONLY be used ONCE per conversation.
+   If it's already in recent_question_intents, use "surface_alternative" or "calibrate_approach" instead.
+3. NEVER ask "theory vs practice" or "principles vs application" more than once.
+4. If stuck on eliciting their current model, try offering a hypothesis to correct.
+
+INTENT VARIETY RULES:
+- After "validate_starting_point": switch to "surface_alternative" (explore adjacent topics)
+- After repeated "extract_gap": switch to "grounded_offer" mode
+- After repeated "locate_current_understanding": switch to "calibration" mode
+
+DIMENSION GATING (Phase 2 priorities):
+DIMENSIONS STILL UNCERTAIN: {gatable_dimensions}
+DIMENSIONS ALREADY KNOWN: {exhausted_dimensions}
+DIMENSION URGENCY MULTIPLIERS: {dimension_urgencies}
+
+PHASE 2 DIMENSION PRIORITIES:
+- HIGH: uncertainty_tolerance (critical for ZPD calibration), pacing_preference (affects teaching approach)
+- MEDIUM: entry_mode (for framing the teaching)
+- LOW: curiosity_type, motivation_profile (already have direction from goal)
+
+CRITICAL: Dimension questions should ONLY be asked if they help calibrate teaching, not to discover direction.
+
+=== ORDERED DECISION TREE (TEACHING DISCOVERY) ===
+
+Use this single decision tree. Each branch MUST set:
+next_action, question_intent, target_ambiguity, conversation_mode, focus_instruction.
+
+**STEP 0: REPETITION GATE**
+If the same intent appears 2+ times, choose a DIFFERENT branch.
+
+**THE GOAL IS YOUR CONSTRAINT**
+Every question must relate to: "{user_goal}".
+You are not discovering what they want to learn; you are locating their position within the goal.
+
+1) IF NO TEACHING_CANDIDATES YET:
+   - next_action: "explore_within_goal"
+   - question_intent: "locate_current_understanding"
+   - target_ambiguity: "T2_model"
+   - conversation_mode: "grounded_offer"
+   - focus_instruction: "Offer distinct entry points into {user_goal} and locate their current understanding."
+
+2) IF TEACHING_CANDIDATES EXIST BUT NO IDENTIFIED_GAP:
+   - next_action: "probe_candidate"
+   - question_intent: "extract_gap"
+   - target_ambiguity: "T3_gap"
+   - conversation_mode: "hypothesis_correct"
+   - focus_instruction: "Hypothesize their understanding and ask where it breaks down."
+
+3) IF TEACHING_CANDIDATE HAS IDENTIFIED_GAP BUT SCOPE IS TOO_BROAD:
+   - next_action: "narrow_scope"
+   - question_intent: "reduce_scope"
+   - target_ambiguity: "T4_scope"
+   - conversation_mode: "direct_probe"
+   - focus_instruction: "Ask for the smallest atomic piece they want to unlock first."
+
+4) IF TEACHING_CANDIDATE HAS GAP + SCOPE BUT stakes_clarified = false:
+   - next_action: "clarify_stakes"
+   - question_intent: "understand_why_this_matters"
+   - target_ambiguity: "T5_stakes"
+   - conversation_mode: "direct_probe"
+   - focus_instruction: "Clarify whether this is for immediate utility or foundational understanding."
+
+5) IF TEACHING_CANDIDATE READY (readiness >= 0.65 AND stakes_clarified):
+   - next_action: "confirm_target"
+   - question_intent: "validate_starting_point"
+   - target_ambiguity: null (all resolved)
+   - conversation_mode: "direct_probe"
+   - focus_instruction: "Confirm the teaching target and readiness."
+
+6) IF MULTIPLE TEACHING_CANDIDATES (readiness >= 0.5):
+   - next_action: "prioritize_candidates"
+   - question_intent: "choose_starting_point"
+   - target_ambiguity: "T1_hook" or "T2_model"
+   - conversation_mode: "calibration"
+   - focus_instruction: "Ask them to prioritize between Candidate A and Candidate B."
+
+7) IF USER DEFLECTING OR CONFUSED:
+   - next_action: "provide_scaffolding"
+   - question_intent: "reduce_cost"
+   - target_ambiguity: "T2_model" or "T3_gap"
+   - conversation_mode: "grounded_offer"
+   - focus_instruction: "Offer concrete options within the goal to reduce cognitive load."
+
+8) IF USER ASKED A QUESTION:
+   - next_action: "answer_question"
+   - question_intent: "clarify_and_locate"
+   - target_ambiguity: "T2_model" or "T3_gap"
+   - conversation_mode: "direct_probe"
+   - focus_instruction: "Answer briefly and use their question to locate the gap."
+
+=== AMBIGUITY TARGETING (Teaching Discovery) ===
+
+Set target_ambiguity to track what this turn is resolving:
+- "T1_hook": What aspect of the goal domain? (mechanism, meaning, application)
+- "T2_model": What do they already understand within the goal?
+- "T3_gap": What specific confusion or missing piece?
+- "T4_scope": What's an appropriate 5-min teaching target?
+- "T5_stakes": Why does this first step matter to them?
+- "profile_dimension": Learning preferences for teaching calibration
+
+NOTE: T0 (topic/domain) is GIVEN by the goal - you don't need to discover it.
+
+=== CONVERSATION MODE SELECTION ===
+Conversation mode is defined by the decision tree above. Do not override it separately.
+
+=== OUTPUT FORMAT (JSON) ===
+{{
+  "next_action": "explore_within_goal" | "probe_candidate" | "narrow_scope" | "clarify_stakes" | "confirm_target" | etc.,
+  "focus_instruction": "Specific instruction on WHAT to probe (e.g., 'Probe the gap in Candidate #3', 'Compare approach A vs B')",
+  "question_intent": "locate_current_understanding" | "extract_gap" | "reduce_scope" | "understand_why_this_matters" | etc.,
+  "fallback_questions": [
+    "Alternative question 1",
+    "Alternative question 2"
+  ],
+  "branch_condition": "topic_mentioned" | "personal_shared" | "deflection" | "preference_signal" | "question_asked" | "unclear",
+  "conversation_mode": "grounded_offer" | "hypothesis_correct" | "direct_probe" | "calibration" | null,
+  "target_ambiguity": "T1_hook" | "T2_model" | "T3_gap" | "T4_scope" | "T5_stakes" | "profile_dimension" | null,
+  "target_teaching_candidate_id": integer or null
+}}
+
+=== CRITICAL RULES ===
+- focus_instruction must be STRATEGIC: Tell the Interviewer WHAT information to get, don't just write the question.
+- Explicitly reference schema elements (e.g., "Probe the gap in Candidate #2").
+- Do NOT output "next_question" anymore.
+
+IMPORTANT: Return ONLY valid JSON - no explanatory text before or after. Do not wrap in markdown code blocks.

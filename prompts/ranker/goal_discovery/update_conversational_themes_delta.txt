@@ -1,0 +1,122 @@
+You are updating CONVERSATIONAL THEMES during GOAL DISCOVERY.
+
+=== PHASE CONTEXT ===
+PHASE: Goal Discovery (no learning goal identified yet)
+YOUR FOCUS: BREADTH - capture all signals that could inform goal selection
+
+In this phase, we're trying to discover WHAT the user wants to learn. We have no goal constraint.
+Every theme could potentially become or inform their learning goal.
+
+=== WHAT TO LISTEN FOR ===
+
+1. BROAD INTERESTS - "I'm interested in AI", "I want to learn about economics"
+2. ABSTRACT GOALS - "I want to understand how things work", "I want to build intuition"
+3. ENTRY SIGNALS - What pulled them in? A problem? A person? An idea?
+4. VALUES/MOTIVATIONS - What makes learning feel meaningful to them?
+5. CURIOSITY PATTERNS - Spotlight vs floodlight, mechanism vs meaning
+
+=== THEME TYPE PRIORITIES (Goal Discovery) ===
+
+1. abstract_goal (HIGH) - Could BECOME their learning goal
+   Examples: "wants to understand deeply", "wants to build intuition", "wants to feel less confused"
+
+2. concrete_topic - broad (HIGH) - Could narrow into a goal
+   Examples: "machine learning", "economics", "history of science"
+
+3. preference (MEDIUM) - Informs how to discover their goal
+   Examples: "prefers visual explanations", "likes concrete examples"
+
+4. metacognitive_pattern (MEDIUM) - Tells us about their learning style
+   Examples: "gets frustrated with abstraction", "needs to see the big picture first"
+
+=== PROBING DEPTH INTERPRETATION (Goal Discovery) ===
+
+- "mentioned": Just came up, could be anything - track it
+- "hook_identified": We know what drew them in (mechanism/meaning/usefulness)
+- "model_elicited": We understand their current mental model
+- "gap_identified": They have a clear confusion → POTENTIAL GOAL CANDIDATE SIGNAL
+- "scope_reduced": Narrowed enough to be actionable as a goal
+
+NOTE: In Goal Discovery, "gap_identified" often signals a potential LEARNING GOAL, not a specific teaching target.
+
+=== CURRENT STATE ===
+
+CURRENT CONVERSATIONAL THEMES:
+{conversational_themes}
+
+CONVERSATION:
+{conversation}
+
+=== TASK ===
+
+1) EXTRACT NEW THEMES:
+   Scan the conversation for ANY signals that could inform goal selection.
+   - Broad topic mentions → create concrete_topic theme
+   - Goal-like statements → create abstract_goal theme
+   - Learning preferences → create preference theme
+   - Patterns in how they think → create metacognitive_pattern theme
+
+2) UPDATE EXISTING THEMES:
+   If an existing theme was mentioned or clarified, update its fields.
+
+3) OPTIONAL ABANDONMENT:
+   Only if the user explicitly abandoned a theme, include its id in `abandon_ids`.
+
+=== DELTA OUTPUT FORMAT (JSON) ===
+
+NOTE: This prompt uses Python `.format(...)`, so braces are escaped as `{{` / `}}`.
+
+{{
+  "upserts": [
+    {{
+      "id": 3,                        // REQUIRED for updates to existing themes
+      "theme_seed": "exact phrase",   // include if new or corrected
+      "theme_type": "abstract_goal" | "preference" | "concrete_topic" | "metacognitive_pattern",
+      "disambiguated_hook": "mechanism" | "meaning" | "usefulness" | "beauty" | "weirdness" | null,
+      "user_phase": "triggered" | "maintained" | "emerging" | "developed" | null,
+      "current_model_summary": "..." | null,
+      "identified_gap": "..." | null,
+      "specificity": "broad" | "medium" | "specific",
+      "estimated_RPL_fit": "too_easy" | "proximal" | "too_hard" | "unknown",
+      "intrinsic_value": 0.0-1.0,
+      "utility_value": 0.0-1.0,
+      "identity_value": 0.0-1.0,
+      "perceived_cost": 0.0-1.0,
+      "probing_depth": "mentioned" | "hook_identified" | "model_elicited" | "gap_identified" | "scope_reduced",
+      "readiness_score": 0.0-1.0,
+      "confusion_type": "productive" | "hopeless" | "unclear" | null,
+      "confusion_notes": "",
+      "turns_discussed": number,
+      "last_mentioned_turn": turn_number
+    }},
+    {{
+      // NEW THEME: omit id (system assigns next available)
+      "theme_seed": "exact phrase from user",
+      "theme_type": "abstract_goal",
+      "specificity": "broad",
+      "probing_depth": "mentioned",
+      "confusion_notes": ""
+    }}
+  ],
+  "abandon_ids": []
+}}
+
+=== NON-NULLABLE FIELDS ===
+
+Do NOT output null for these fields. Use defaults if unsure:
+- specificity: "broad"
+- estimated_RPL_fit: "unknown"
+- probing_depth: "mentioned"
+- confusion_notes: "" (empty string)
+
+=== CRITICAL RULES ===
+
+1. BREADTH FOCUS: Capture everything that could inform goal selection
+2. BE LITERAL: Use EXACT words the user used for new `theme_seed`
+3. DELTA ONLY: Do NOT output the full list, only changes in `upserts`
+4. If nothing changed, return {{"upserts": [], "abandon_ids": []}}
+5. MAX 6 upserts - pick most important if more changes happened
+6. For optional fields you don't know, OMIT the key entirely
+
+IMPORTANT: Return ONLY valid JSON - no explanatory text. Do not wrap in markdown code blocks.
+

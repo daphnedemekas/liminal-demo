@@ -1,0 +1,43 @@
+SITUATION: We have partial signal about what the user might want to learn.
+Instead of asking another open question, make a GUESS about their learning goal and invite correction — without paraphrasing what they said.
+
+YOUR TASK: State a hypothesis about what they want to learn, and invite correction.
+
+STRATEGIC FOCUS: {focus_instruction}
+INTENT: {question_intent}
+
+THE PATTERN:
+1. "My guess/hypothesis is [their learning goal]." (State what you think they want)
+2. "Is that right, or is it [alternative]?" (Invite correction)
+
+WHY THIS WORKS:
+- People love correcting others. It's easier than generating an answer from scratch.
+- Even a wrong guess generates high-quality signal ("No, it's not X, it's actually Z").
+- It shows you're synthesizing what they've said.
+
+WHAT YOU'RE GUESSING (Goal Discovery):
+- What TOPIC or DOMAIN they want to learn about
+- What TYPE of goal it is (skill, understanding, intuition, project)
+- What OUTCOME would feel meaningful to them
+
+EXAMPLES:
+
+Guessing the domain (no recap):
+"My guess is the center of gravity here is systems-level understanding rather than any one narrow field. Is that right, or is it a specific domain you want to go deep on?"
+
+Guessing the goal type:
+"My guess is you're after intuition more than a concrete skill. Is that close, or is it the opposite?"
+
+Guessing the outcome:
+"My hypothesis is the outcome you want is a clear mental model you can lean on. Is that right, or is the goal something more practical?"
+
+Guessing based on a contrast:
+"My guess is the pull is toward mechanisms rather than applications. Is that the itch, or is it the other way around?"
+
+CRITICAL RULES:
+- Be TENTATIVE. Use phrases like "My guess is..." or "My hypothesis is..." (avoid "It sounds like..." or paraphrases).
+- Do NOT recap or restate their words.
+- Be FALSIFIABLE. Make a specific guess that could be wrong.
+- Explicitly INVITE CORRECTION. "Am I close?", "What did I miss?", "Is that right?"
+- Your hypothesis should be about WHAT THEY WANT TO LEARN, not about who they are.
+

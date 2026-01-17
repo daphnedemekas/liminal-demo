@@ -1,0 +1,876 @@
+"""FastAPI application for Liminal Discovery System."""
+import sys
+from pathlib import Path
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+import json
+import uuid
+
+# Add parent directory to path
+sys.path.append(str(Path(__file__).parent.parent))
+
+from backend.services.session_manager import session_manager
+from backend.services.audio_service import get_audio_service
+from backend.models.api_models import (
+    SessionCreateRequest,
+    SessionCreateResponse,
+    TopicFoundResponse,
+    LearningStartRequest,
+    LearningStartResponse
+)
+
+app = FastAPI(title="Liminal Discovery API")
+
+# CORS middleware for frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, specify your frontend URL
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Mount static files for serving audio
+audio_service = get_audio_service()
+app.mount("/audio", StaticFiles(directory=str(audio_service.audio_dir)), name="audio")
+
+
+@app.get("/")
+def read_root():
+    """Root endpoint."""
+    return {"message": "Liminal Discovery API", "version": "1.0.0"}
+
+
+# ============================================
+# User Authentication & Data Endpoints
+# ============================================
+
+from src.database.manager import DatabaseManager
+from pydantic import BaseModel
+from typing import Optional, List
+
+# Initialize database
+db = DatabaseManager()
+
+class LoginRequest(BaseModel):
+    username: str
+    onboarding_info: Optional[str] = None
+
+class LoginResponse(BaseModel):
+    user_id: str
+    username: str
+    is_new_user: bool
+    onboarding_info: Optional[str] = None
+
+class GoalResponse(BaseModel):
+    id: int
+    goal_text: str
+    created_at: Optional[str]
+    status: str
+    has_teaching_candidate: bool
+
+class UserDataResponse(BaseModel):
+    user_id: str
+    username: str
+    onboarding_info: Optional[str]
+    goals: List[GoalResponse]
+    exploration_session: Optional[dict]
+
+class CreateGoalRequest(BaseModel):
+    user_id: str
+    goal_text: str
+
+class CreateGoalResponse(BaseModel):
+    id: int
+    goal_text: str
+
+
+@app.post("/api/auth/login", response_model=LoginResponse)
+async def login(request: LoginRequest):
+    """Login with username (creates account if doesn't exist)."""
+    try:
+        # Check if user exists
+        user = db.get_user_by_username(request.username)
+        
+        if user:
+            return LoginResponse(
+                user_id=user.user_id,
+                username=user.username,
+                is_new_user=False,
+                onboarding_info=user.onboarding_info
+            )
+        else:
+            # Create new user
+            user = db.create_user_with_username(
+                request.username,
+                request.onboarding_info or ""
+            )
+            return LoginResponse(
+                user_id=user.user_id,
+                username=user.username,
+                is_new_user=True,
+                onboarding_info=user.onboarding_info
+            )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/user/{user_id}/data", response_model=UserDataResponse)
+async def get_user_data(user_id: str):
+    """Get all user data including goals and exploration session."""
+    try:
+        user = db.get_or_create_user(user_id)
+        goals = db.get_user_goals(user_id)
+        exploration = db.get_user_exploration_session(user_id)
+        
+        return UserDataResponse(
+            user_id=user.user_id,
+            username=user.username or "",
+            onboarding_info=user.onboarding_info,
+            goals=[GoalResponse(**g) for g in goals],
+            exploration_session=exploration
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/user/goals", response_model=CreateGoalResponse)
+async def create_goal(request: CreateGoalRequest):
+    """Create a new goal for user."""
+    try:
+        goal = db.create_goal(request.user_id, request.goal_text)
+        return CreateGoalResponse(
+            id=goal.id,
+            goal_text=goal.goal_text
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/user/{user_id}/onboarding")
+async def update_onboarding(user_id: str, onboarding_info: str):
+    """Update user's onboarding info."""
+    try:
+        db.update_user_onboarding(user_id, onboarding_info)
+        return {"success": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class ProfileSummaryRequest(BaseModel):
+    schema: dict
+
+
+# ============================================
+# Session Resume Endpoints
+# ============================================
+
+class ResumeSessionRequest(BaseModel):
+    user_id: str
+    goal_id: Optional[int] = None  # If resuming a goal session
+
+class ResumeSessionResponse(BaseModel):
+    session_id: str
+    conversation_history: list
+    is_new: bool
+    schema_state: Optional[dict] = None
+
+
+@app.post("/api/session/resume", response_model=ResumeSessionResponse)
+async def resume_session(request: ResumeSessionRequest):
+    """Resume an existing session or create new one for user."""
+    try:
+        if request.goal_id:
+            # Try to get existing goal session
+            existing = db.get_session_for_goal(request.goal_id)
+            if existing:
+                return ResumeSessionResponse(
+                    session_id=existing["session_id"],
+                    conversation_history=existing["conversation_history"],
+                    is_new=False,
+                    schema_state=existing["schema_state"]
+                )
+            # No existing session for this goal - will need to create one via /start
+            return ResumeSessionResponse(
+                session_id="",
+                conversation_history=[],
+                is_new=True,
+                schema_state=None
+            )
+        else:
+            # Get or create exploration session
+            session_data = db.get_or_create_exploration_session(request.user_id)
+            return ResumeSessionResponse(
+                session_id=session_data["session_id"],
+                conversation_history=session_data["conversation_history"],
+                is_new=session_data["is_new"],
+                schema_state=session_data["schema_state"]
+            )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class SaveSummaryRequest(BaseModel):
+    session_id: str
+    summary: str
+
+
+@app.post("/api/profile/summary/save")
+async def save_profile_summary(request: SaveSummaryRequest):
+    """Save the LLM-generated profile summary for a session."""
+    try:
+        db.save_profile_summary(request.session_id, request.summary)
+        return {"success": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/profile/summary")
+async def generate_profile_summary(request: ProfileSummaryRequest):
+    """Generate an LLM summary of the user's profile."""
+    try:
+        from src.llm_client import LLMClient
+        
+        schema = request.schema
+        profile = schema.get("user_profile", {})
+        goals = schema.get("goal_candidates", [])
+        themes = schema.get("conversational_themes", [])
+        interview_state = schema.get("interview_state", {})
+        
+        # Build a concise context for the LLM
+        context_parts = []
+        
+        # Add profile info
+        if profile.get("curiosity_type", {}).get("value"):
+            context_parts.append(f"Curiosity type: {profile['curiosity_type']['value']}")
+        
+        entry_mode = profile.get("entry_mode", {})
+        if entry_mode:
+            dominant = max(entry_mode.items(), key=lambda x: x[1] if x[1] else 0)
+            if dominant[1] and dominant[1] > 0.3:
+                context_parts.append(f"Entry preference: {dominant[0]}-oriented")
+        
+        if profile.get("uncertainty_tolerance", {}).get("value"):
+            context_parts.append(f"Uncertainty tolerance: {profile['uncertainty_tolerance']['value']}")
+        
+        if profile.get("pacing_preference", {}).get("value"):
+            pacing = profile['pacing_preference']['value']
+            context_parts.append(f"Pacing: {pacing}")
+        
+        motivation = profile.get("motivation_profile", {})
+        if motivation:
+            strong_motivators = [k.replace("_value", "") for k, v in motivation.items() if v and v > 0.5]
+            if strong_motivators:
+                context_parts.append(f"Key motivators: {', '.join(strong_motivators)}")
+        
+        # Add goal info
+        if interview_state.get("user_goal"):
+            context_parts.append(f"Confirmed goal: {interview_state['user_goal']}")
+        elif goals:
+            goal_texts = [g.get("goal", "") for g in goals[:2] if g.get("goal")]
+            if goal_texts:
+                context_parts.append(f"Exploring goals: {'; '.join(goal_texts)}")
+        
+        # Add themes
+        if themes:
+            theme_seeds = [t.get("theme_seed", "") for t in themes[:3] if t.get("theme_seed")]
+            if theme_seeds:
+                context_parts.append(f"Topics: {', '.join(theme_seeds)}")
+        
+        if not context_parts:
+            return {"summary": "Continue the conversation to build your learner profile."}
+        
+        # Generate summary with LLM
+        llm = LLMClient()
+        prompt = f"""Based on this learner profile data, write a 1-2 sentence summary of this person as a learner. Be warm and insightful, not clinical. Focus on what makes them unique.
+
+Profile data:
+{chr(10).join(f"- {p}" for p in context_parts)}
+
+Write only the summary, no intro or outro. Be specific to THIS person."""
+
+        summary = llm.chat(
+            messages=[{"role": "user", "content": prompt}],
+            model_name="openai:gpt-4o-mini"
+        )
+        
+        return {"summary": summary.strip()}
+    except Exception as e:
+        print(f"[Profile Summary] Error: {e}")
+        return {"summary": "Profile analysis in progress..."}
+
+
+# ============================================
+# Feed Content Endpoints
+# ============================================
+
+class FeedRequest(BaseModel):
+    user_id: str
+    context_type: str  # 'exploration', 'goal', or 'teaching_candidate'
+    goal_id: Optional[int] = None
+    goal_text: Optional[str] = None
+    teaching_candidate_id: Optional[str] = None
+    teaching_topic: Optional[str] = None
+    user_background: Optional[str] = None
+    goals_summary: Optional[str] = None  # For exploration feed - summary of all goals
+
+class FeedItemResponse(BaseModel):
+    id: int
+    title: str
+    content: str
+    source_citation: Optional[str]
+    source_url: Optional[str]
+    relevance_note: Optional[str]
+
+class FeedResponse(BaseModel):
+    items: List[FeedItemResponse]
+    generated: bool  # True if just generated, False if loaded from DB
+
+
+@app.post("/api/feed", response_model=FeedResponse)
+async def get_or_generate_feed(request: FeedRequest):
+    """Get feed items for a context, generating if needed."""
+    try:
+        # Check if feed already exists
+        has_feed = db.has_feed_items(
+            user_id=request.user_id,
+            context_type=request.context_type,
+            goal_id=request.goal_id,
+            teaching_candidate_id=request.teaching_candidate_id
+        )
+        
+        if has_feed:
+            # Return existing feed
+            items = db.get_feed_items(
+                user_id=request.user_id,
+                context_type=request.context_type,
+                goal_id=request.goal_id,
+                teaching_candidate_id=request.teaching_candidate_id
+            )
+            return FeedResponse(
+                items=[FeedItemResponse(**item) for item in items],
+                generated=False
+            )
+        
+        # Generate new feed
+        from src.llm_client import LLMClient
+        from pathlib import Path
+        
+        # Load prompt template
+        prompt_path = Path(__file__).parent.parent / "prompts" / "feed" / "generate_feed.txt"
+        with open(prompt_path) as f:
+            prompt_template = f.read()
+        
+        # Build context details
+        context_details = ""
+        if request.context_type == "exploration":
+            context_details = f"User is exploring potential learning directions.\nCurrent interests/goals: {request.goals_summary or 'Still discovering'}"
+        elif request.context_type == "goal":
+            context_details = f"User's learning goal: {request.goal_text}"
+        elif request.context_type == "teaching_candidate":
+            context_details = f"Goal: {request.goal_text}\nSpecific topic: {request.teaching_topic}"
+        
+        # Format prompt
+        prompt = prompt_template.format(
+            context_type=request.context_type,
+            context_details=context_details,
+            user_background=request.user_background or "No background provided",
+            num_items=7,
+            goal_text=request.goal_text or "",
+            teaching_topic=request.teaching_topic or ""
+        )
+        
+        # Generate with LLM
+        llm = LLMClient()
+        response = llm.chat_with_json(
+            messages=[{"role": "user", "content": prompt}],
+            model="openai:gpt-4o-mini",
+            json_top_level="array"  # Expecting a list of items
+        )
+        
+        # Parse response - it should be a list
+        if isinstance(response, list):
+            items = response
+        elif isinstance(response, dict) and "items" in response:
+            items = response["items"]
+        else:
+            print(f"[Feed] Unexpected response format: {type(response)}")
+            items = []
+
+        # Validate each item has required fields
+        validated_items = []
+        for item in items:
+            if isinstance(item, dict) and "title" in item and "content" in item:
+                validated_items.append(item)
+            else:
+                print(f"[Feed] Skipping invalid item: {item}")
+
+        items = validated_items
+
+        # Don't save empty feeds - let it retry when there's more conversation
+        if not items:
+            print(f"[Feed] No items generated - likely not enough conversation yet")
+            return FeedResponse(items=[], generated=False)
+
+        # Save to database
+        save_successful = False
+        if items:
+            try:
+                db.save_feed_items(
+                    user_id=request.user_id,
+                    context_type=request.context_type,
+                    items=items,
+                    goal_id=request.goal_id,
+                    teaching_candidate_id=request.teaching_candidate_id
+                )
+                save_successful = True
+            except Exception as e:
+                print(f"[Feed] Failed to save items to database: {e}")
+                import traceback
+                traceback.print_exc()
+                # Continue anyway - we can still return the generated items
+
+        # Retrieve saved items (to get IDs) or return generated items if save failed
+        if save_successful:
+            saved_items = db.get_feed_items(
+                user_id=request.user_id,
+                context_type=request.context_type,
+                goal_id=request.goal_id,
+                teaching_candidate_id=request.teaching_candidate_id
+            )
+            return FeedResponse(
+                items=[FeedItemResponse(**item) for item in saved_items],
+                generated=True
+            )
+        else:
+            # Return generated items directly (without IDs)
+            return FeedResponse(
+                items=[FeedItemResponse(id=i, **item) for i, item in enumerate(items)],
+                generated=True
+            )
+        
+    except Exception as e:
+        print(f"[Feed] Error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/feed/{user_id}/{context_type}")
+async def clear_feed(user_id: str, context_type: str, goal_id: Optional[int] = None):
+    """Clear feed items to force regeneration."""
+    try:
+        # This would need a delete method in DB manager
+        # For now, just return success (items will be regenerated on next request)
+        return {"success": True, "message": "Feed will be regenerated on next request"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/discovery/start", response_model=SessionCreateResponse)
+async def start_discovery(request: SessionCreateRequest = SessionCreateRequest()):
+    """Create a new discovery session or resume an existing one."""
+    try:
+        conversation_history = []
+        schema_state = None
+        profile_summary = None
+        is_resumed = False
+        
+        # Check if resuming a goal session
+        if request.goal_id and request.user_id:
+            existing = db.get_session_for_goal(request.goal_id)
+            if existing and existing.get("session_id"):
+                # Resume existing goal session
+                session_id = existing["session_id"]
+                conversation_history = existing.get("conversation_history", [])
+                schema_state = existing.get("schema_state")
+                profile_summary = existing.get("profile_summary")
+                is_resumed = True
+                print(f"[Discovery] Resuming goal session: {session_id[:8]}... ({len(conversation_history)} messages)")
+        
+        # Check if resuming exploration session
+        elif request.user_id and not request.goal:
+            exploration = db.get_or_create_exploration_session(request.user_id)
+            if not exploration.get("is_new"):
+                session_id = exploration["session_id"]
+                conversation_history = exploration.get("conversation_history", [])
+                schema_state = exploration.get("schema_state")
+                profile_summary = exploration.get("profile_summary")
+                is_resumed = True
+                print(f"[Discovery] Resuming exploration session: {session_id[:8]}... ({len(conversation_history)} messages)")
+        
+        # Generate new session if not resuming
+        if not is_resumed:
+            session_id = str(uuid.uuid4())
+            print(f"[Discovery] Creating new session: {session_id[:8]}...")
+            
+            # If this is for a goal, create session with goal_id
+            if request.goal_id and request.user_id:
+                db.create_session_with_type(session_id, request.user_id, 'goal', request.goal_id)
+            elif request.user_id:
+                db.create_session_with_type(session_id, request.user_id, 'exploration')
+
+        # Create/resume session in memory
+        session_data = session_manager.create_session(
+            session_id,
+            debug=False,
+            model_config=request.models,
+            user_goal=request.goal,
+            user_id=request.user_id,
+            conversation_history=conversation_history if is_resumed else None,
+            schema_state=schema_state if is_resumed else None
+        )
+
+        # Get opening question only for new sessions
+        opening_message = ""
+        if not is_resumed:
+            opening_message = session_data.discovery_session.start()
+
+        return SessionCreateResponse(
+            session_id=session_id,
+            opening_message=opening_message,
+            audio_url=None,
+            conversation_history=conversation_history,
+            is_resumed=is_resumed,
+            profile_summary=profile_summary
+        )
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.websocket("/ws/discovery/{session_id}")
+async def discovery_websocket(websocket: WebSocket, session_id: str):
+    """WebSocket endpoint for discovery phase conversation with streaming support."""
+    await websocket.accept()
+
+    # Get or create session
+    session_data = session_manager.get_session(session_id)
+    if not session_data:
+        await websocket.send_json({"type": "error", "message": "Session not found"})
+        await websocket.close()
+        return
+
+    try:
+        while True:
+            # Receive message from frontend
+            print(f"[WS DEBUG] Waiting for message...")
+            data = await websocket.receive_json()
+            print(f"[WS DEBUG] Received data: {str(data)[:200]}")
+            user_message = data.get("content", "")
+
+            if not user_message:
+                print(f"[WS DEBUG] Empty message, skipping")
+                continue
+
+            print(f"[WS DEBUG] Processing message: {user_message[:100]}...")
+
+            # Send status: analyzing
+            await websocket.send_json({
+                "type": "status",
+                "status": "Analyzing your response..."
+            })
+
+            # Wrap all command processing in try-except for safety
+            try:
+                # Check for special commands (goal accept/reject)
+                if user_message == "__ACCEPT_GOAL__":
+                    print(f"[WS DEBUG] User accepted proposed goal")
+                    result = session_data.discovery_session.accept_proposed_goal()
+
+                    # Check for error
+                    if "error" in result:
+                        await websocket.send_json({
+                            "type": "error",
+                            "message": result["error"]
+                        })
+                        continue
+
+                    # Send data for frontend to create new goal panel
+                    await websocket.send_json({
+                        "type": "create_goal_panel",
+                        "goal": result["goal"],
+                        "goal_id": result["goal_id"],
+                        "message": result["message"]
+                    })
+                    continue
+
+                if user_message == "__REJECT_GOAL__":
+                    print(f"[WS DEBUG] User rejected proposed goal")
+                    import asyncio
+                    loop = asyncio.get_event_loop()
+                    response = await loop.run_in_executor(
+                        None,
+                        session_data.discovery_session.reject_proposed_goal
+                    )
+                    await websocket.send_json({
+                        "type": "message",
+                        "content": response,
+                        "audio_url": None
+                    })
+                    continue
+
+                # Check for teaching candidate accept/reject commands
+                if user_message == "__ACCEPT_TEACHING__":
+                    print(f"[WS DEBUG] User accepted proposed teaching candidate")
+                    result = session_data.discovery_session.accept_proposed_teaching()
+
+                    # Check for error
+                    if not result.get("success"):
+                        await websocket.send_json({
+                            "type": "error",
+                            "message": result.get("message", "Failed to accept teaching candidate")
+                        })
+                        continue
+
+                    # Send data for frontend to create new teaching panel
+                    await websocket.send_json({
+                        "type": "create_teaching_panel",
+                        "candidate": result["candidate"],
+                        "message": result["message"]
+                    })
+                    continue
+
+                if user_message == "__REJECT_TEACHING__":
+                    print(f"[WS DEBUG] User rejected proposed teaching candidate")
+                    import asyncio
+                    loop = asyncio.get_event_loop()
+                    response = await loop.run_in_executor(
+                        None,
+                        session_data.discovery_session.reject_proposed_teaching
+                    )
+                    await websocket.send_json({
+                        "type": "message",
+                        "content": response,
+                        "audio_url": None
+                    })
+                    continue
+
+                # Process message in thread pool to avoid blocking the event loop
+                # (blocking calls can cause WebSocket timeouts)
+                print(f"[WS DEBUG] Processing message...")
+                import asyncio
+                loop = asyncio.get_event_loop()
+                response = await loop.run_in_executor(
+                    None,  # Use default thread pool
+                    session_data.discovery_session.process_user_message,
+                    user_message
+                )
+                print(f"[WS DEBUG] Got response: {response[:50]}...")
+
+                # Check if a goal was proposed (needs user confirmation)
+                if response.startswith("__GOAL_PROPOSED__:"):
+                    proposed_goal = response.split(":", 1)[1]
+                    print(f"[WS DEBUG] Goal proposed: {proposed_goal}")
+                    await websocket.send_json({
+                        "type": "goal_proposed",
+                        "goal": proposed_goal,
+                        "message": f"**Goal identified:** {proposed_goal}"
+                    })
+                    continue
+
+                # Check if a teaching candidate was proposed (needs user confirmation)
+                if response.startswith("__TEACHING_PROPOSED__:"):
+                    import json as json_module
+                    candidate_json = response.split(":", 1)[1]
+                    candidate = json_module.loads(candidate_json)
+                    print(f"[WS DEBUG] Teaching candidate proposed: {candidate['topic']}")
+                    await websocket.send_json({
+                        "type": "teaching_proposed",
+                        "candidate": candidate,
+                        "message": f"I think I found a great starting point: **{candidate['topic']}**"
+                    })
+                    continue
+
+                # Audio generation disabled by default
+                audio_url = None
+
+                # Check if discovery is complete
+                if session_data.discovery_session.is_complete():
+                    print(f"[WS DEBUG] Discovery is complete, sending topic_found")
+                    final_topic = session_data.discovery_session.get_final_topic()
+                    session_manager.save_final_topic(session_id, final_topic)
+
+                    # Send topic found message
+                    await websocket.send_json({
+                        "type": "topic_found",
+                        "content": response,
+                        "audio_url": audio_url,
+                        "topic": {
+                            "topic": final_topic.topic,
+                            "user_confusion": final_topic.user_confusion,
+                            "stakes": final_topic.stakes,
+                            "learning_hook": final_topic.learning_hook,
+                            "suggested_angles": final_topic.suggested_angles,
+                            "scores": final_topic.scores.to_dict() if final_topic.scores else {}
+                        }
+                    })
+                else:
+                    # Send regular message
+                    print(f"[WS DEBUG] Sending message response ({len(response)} chars)")
+                    await websocket.send_json({
+                        "type": "message",
+                        "content": response,
+                        "audio_url": audio_url
+                    })
+                    print(f"[WS DEBUG] Message sent successfully")
+
+            except Exception as e:
+                # Command processing failed - send error but don't disconnect
+                print(f"[WS ERROR] Command processing failed: {e}")
+                import traceback
+                traceback.print_exc()
+                await websocket.send_json({
+                    "type": "error",
+                    "message": f"An error occurred processing your message. Please try again."
+                })
+                # Continue to next message instead of disconnecting
+                continue
+
+    except WebSocketDisconnect:
+        print(f"WebSocket disconnected for session {session_id}")
+    except Exception as e:
+        print(f"Error in discovery websocket: {e}")
+        import traceback
+        traceback.print_exc()
+
+        # Check if it's a rate limit error
+        error_message = str(e)
+        if "rate limit" in error_message.lower() or "429" in error_message or "token" in error_message.lower() and "limit" in error_message.lower():
+            friendly_message = "⚠️ API rate limit reached. The service has hit its daily token quota. Please try again later or contact support."
+        else:
+            friendly_message = f"An error occurred: {error_message}"
+
+        try:
+            await websocket.send_json({"type": "error", "message": friendly_message})
+        except:
+            pass  # WebSocket might already be closed
+
+        try:
+            await websocket.close()
+        except:
+            pass
+
+
+@app.get("/api/discovery/{session_id}/schema")
+async def get_discovery_schema(session_id: str):
+    """Get current discovery schema for debugging."""
+    session_data = session_manager.get_session(session_id)
+
+    if not session_data:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    # Get schema from discovery session
+    schema = session_data.discovery_session.get_schema()
+    return schema
+
+
+@app.post("/api/learning/start", response_model=LearningStartResponse)
+async def start_learning(request: LearningStartRequest):
+    """Start the learning phase for a session."""
+    session_data = session_manager.get_session(request.session_id)
+
+    if not session_data:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    if not session_data.final_topic:
+        raise HTTPException(status_code=400, detail="No topic identified yet")
+
+    # Import learning engine (will be created next)
+    from backend.services.learning_engine import LearningEngine
+    from src.llm_client import LLMClient
+
+    # Create learning engine
+    llm_client = LLMClient()
+    learning_engine = LearningEngine(llm_client)
+
+    # Start learning phase
+    opening_message = learning_engine.start_learning(session_data.final_topic)
+
+    # Store learning engine in session (we'll add this to SessionData)
+    if not hasattr(session_data, 'learning_engine'):
+        session_data.learning_engine = learning_engine
+
+    session_data.learning_state = "assess"
+
+    # Audio generation disabled by default
+    audio_url = None
+
+    return LearningStartResponse(
+        opening_message=opening_message,
+        audio_url=audio_url,
+        state="assess"
+    )
+
+
+@app.websocket("/ws/learning/{session_id}")
+async def learning_websocket(websocket: WebSocket, session_id: str):
+    """WebSocket endpoint for learning phase conversation."""
+    await websocket.accept()
+
+    session_data = session_manager.get_session(session_id)
+    if not session_data or not hasattr(session_data, 'learning_engine'):
+        await websocket.send_json({"type": "error", "message": "Learning session not found"})
+        await websocket.close()
+        return
+
+    learning_engine = session_data.learning_engine
+
+    try:
+        while True:
+            # Receive message
+            data = await websocket.receive_json()
+            user_message = data.get("content", "")
+
+            if not user_message:
+                continue
+
+            # Add to conversation history
+            session_data.learning_conversation.append({
+                "role": "user",
+                "content": user_message
+            })
+
+            # Process through learning engine
+            result = learning_engine.process_message(
+                user_message,
+                session_data.learning_conversation
+            )
+
+            # Add assistant response to history
+            session_data.learning_conversation.append({
+                "role": "assistant",
+                "content": result["response"]
+            })
+
+            # Update state
+            session_data.learning_state = result["state"]
+
+            # Audio generation disabled by default
+            audio_url = None
+
+            # Send response
+            await websocket.send_json({
+                "type": "learning_message",
+                "content": result["response"],
+                "audio_url": audio_url,
+                "state": result["state"],
+                "confusion_identified": result.get("confusion_identified"),
+                "explanation_complete": result.get("explanation_complete", False)
+            })
+
+    except WebSocketDisconnect:
+        print(f"WebSocket disconnected for learning session {session_id}")
+    except Exception as e:
+        print(f"Error in learning websocket: {e}")
+        await websocket.send_json({"type": "error", "message": str(e)})
+        await websocket.close()
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

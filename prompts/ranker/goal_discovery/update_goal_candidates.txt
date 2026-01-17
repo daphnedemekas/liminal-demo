@@ -1,0 +1,215 @@
+You are identifying GOAL CANDIDATES from conversation during exploratory discovery.
+
+CRITICAL DISTINCTION:
+- Goal candidates are HIGH-LEVEL LEARNING OUTCOMES that would take multiple lessons to accomplish
+- They are outcome-oriented, break-apartable into teachable sub-goals
+- Teaching candidates (which come later) are specific 5-15 minute gaps
+
+CURRENT GOAL CANDIDATES:
+{goal_candidates}
+
+CURRENT CONVERSATIONAL THEMES (for context):
+{conversational_themes}
+
+CONVERSATION:
+{conversation}
+
+TASK: Identify NEW goal candidates or update existing ones.
+
+WHAT IS A GOAL CANDIDATE?
+
+A goal candidate is a concrete learning outcome that:
+1. Would take MULTIPLE LESSONS to accomplish (not a single 15-minute explanation)
+2. Is outcome-oriented ("be able to X", "understand Y intuitively", "build Z")
+3. Is break-apartable into smaller teachable sub-goals
+4. Represents what the user actually wants to achieve
+
+EXAMPLES OF VALID GOAL CANDIDATES:
+
+✅ "Become conversational in Spanish"
+   - Outcome: able to have basic conversations
+   - Multi-lesson: grammar, vocabulary, listening, speaking practice
+   - Break-apart: verb conjugations, common phrases, pronunciation, etc.
+
+✅ "Understand quantum mechanics intuitively"
+   - Outcome: intuitive grasp of core concepts
+   - Multi-lesson: superposition, measurement, entanglement, wave functions
+   - Break-apart: each concept is a teaching target
+
+✅ "Build a full-stack web application"
+   - Outcome: working deployed app
+   - Multi-lesson: frontend, backend, database, deployment
+   - Break-apart: React components, API design, SQL queries, etc.
+
+✅ "Develop geometric intuition for linear algebra"
+   - Outcome: visual/spatial understanding
+   - Multi-lesson: vectors, matrices, transformations, eigenvalues
+   - Break-apart: each geometric concept is teachable
+
+✅ "Master chess endgames"
+   - Outcome: competence in endgame positions
+   - Multi-lesson: king+rook, king+queen, pawn endgames, opposition
+   - Break-apart: each endgame type is a lesson
+
+✅ "Understand how neural networks work"
+   - Outcome: mental model of neural network functioning
+   - Multi-lesson: architecture, forward pass, backprop, training, optimization
+   - Break-apart: each component is teachable
+
+EXAMPLES OF INVALID GOAL CANDIDATES:
+
+❌ "How does backpropagation work?"
+   - This is a TEACHING CANDIDATE (single lesson, specific mechanism)
+   - Not a multi-lesson outcome
+
+❌ "Learn programming"
+   - Too vague, not concrete enough
+   - Need more specificity: programming what? for what purpose?
+
+❌ "Understand everything about physics"
+   - Too broad, not break-apartable into achievable scope
+   - Need to narrow to specific domain
+
+❌ "Be less confused"
+   - Abstract feeling, not a concrete learning outcome
+   - This is a conversational theme, not a goal
+
+❌ "Start an AI company" / "Start a business" / "Get a job"
+   - This is too vague, we want to know what kind of AI company. 
+   - We care about what they want to LEARN via their goal 
+   - Ask: what do they need to UNDERSTAND to accomplish this? THAT is the learning goal.
+
+❌ "Be successful" / "Make money" / "Get promoted"
+   - Too vague, we need to understand motivations, and get more finegrained on what the goal for learning is. 
+   - These might motivate learning, but they are not the goal itself
+
+CRITICAL: A learning goal answers "What do you want to UNDERSTAND/KNOW/MASTER?"
+         NOT "What do you want to DO/ACHIEVE/BECOME?"
+
+EXTRACTION LOGIC:
+
+Listen for signals like:
+- "I want to be able to [X]" → outcome-oriented
+- "I'm trying to learn [domain]" → check if it's concrete and break-apartable
+- "I want to understand [topic] better" → check if it's multi-lesson scope
+- "I'm working on [project]" → project completion could be a goal
+- "I need to [accomplish X]" → check if it requires multiple lessons
+
+RED FLAGS (probably NOT a goal candidate):
+- Single "how does X work?" questions → teaching candidate territory
+- Abstract preferences ("I like visual learning") → conversational theme
+- Vague curiosity ("I'm interested in space") → need more specificity
+- Feelings/states ("I want to feel confident") → not a concrete learning outcome
+
+GOAL CANDIDATE ASSESSMENT:
+
+For each potential goal candidate, evaluate:
+
+1. CONCRETENESS (0.0-1.0)
+   - Can you state a clear outcome?
+   - Is the goal specific enough to plan lessons around?
+   - Example: "learn Spanish" (0.4) vs "become conversational in Spanish" (0.9)
+
+2. BREAK-APARTABILITY (0.0-1.0)
+   - Can you identify 3+ distinct teachable sub-goals?
+   - Are the sub-goals clear and actionable?
+   - Example: "understand math" (0.2) vs "develop calculus intuition" (0.8)
+
+3. SCOPE APPROPRIATENESS (0.0-1.0)
+   - Is it multi-lesson but achievable? (not too narrow, not too broad)
+   - Would it take weeks/months, not hours/years?
+   - Example: "all of physics" (0.1) vs "classical mechanics foundations" (0.8)
+
+4. USER COMMITMENT (0.0-1.0)
+   - Has the user expressed genuine interest/need?
+   - Is there stakes/motivation mentioned?
+   - Example: vague mention (0.3) vs "I'm building X and need to understand Y" (0.9)
+
+5. READINESS SCORE (0.0-1.0)
+   - Overall: Is this clearly the learning goal they're after?
+   - High readiness (>0.7) means we should confirm this as their goal
+   - Formula: average of above 4 dimensions
+
+READINESS THRESHOLD:
+
+When a goal candidate reaches readiness_score >= 0.7:
+- This is likely their learning goal
+- We should confirm with them ("So you want to [goal]?")
+- If confirmed, transition from goal discovery to teaching discovery
+
+UPDATING EXISTING GOAL CANDIDATES:
+
+As conversation progresses, update:
+- specificity: gets more concrete as they clarify
+- breakdown_clarity: can we see the sub-goals?
+- user_motivation: why this matters to them
+- scope_refinement: has it been narrowed/adjusted?
+- readiness_score: recalculate based on new information
+
+OUTPUT FORMAT:
+
+Return a JSON array of goal candidates:
+
+[
+  {{
+    "id": 1,
+    "goal": "Become conversational in Spanish",
+    "goal_type": "skill_acquisition",  // Valid: "skill_acquisition", "conceptual_understanding", "project_completion", "intuition_building"
+    "outcome_description": "Be able to have basic conversations with native speakers about everyday topics",
+    "example_sub_goals": [
+      "Master present tense conjugation",
+      "Build vocabulary for common situations (food, directions, greetings)",
+      "Understand basic sentence structure",
+      "Practice listening comprehension"
+    ],
+    "estimated_lessons": "15-20",  // rough estimate: "5-10", "10-20", "20-30", "30+"
+    "concreteness": 0.9,
+    "break_apartability": 0.85,
+    "scope_appropriateness": 0.8,
+    "user_commitment": 0.7,
+    "readiness_score": 0.81,
+    "user_motivation_summary": "Planning trip to Mexico in 3 months",
+    "stakes_clarified": true,
+    "turns_discussed": 3,
+    "last_mentioned_turn": 5
+  }}
+]
+
+FIELD REQUIREMENTS:
+- goal: Clear statement of learning outcome (string)
+- goal_type: Must be one of: "skill_acquisition", "conceptual_understanding", "project_completion", "intuition_building"
+- outcome_description: What success looks like (string)
+- example_sub_goals: List of 3-5 teachable sub-goals (array of strings)
+- estimated_lessons: Rough scope estimate (string)
+- concreteness: 0.0-1.0 (float)
+- break_apartability: 0.0-1.0 (float)
+- scope_appropriateness: 0.0-1.0 (float)
+- user_commitment: 0.0-1.0 (float)
+- readiness_score: 0.0-1.0, average of above 4 (float)
+- user_motivation_summary: Why they want this (string or null)
+- stakes_clarified: Have they explained why this matters? (boolean)
+- turns_discussed: Number of turns discussing this goal (integer)
+- last_mentioned_turn: Most recent turn number (integer)
+
+PRESERVATION REQUIREMENT:
+- Include ALL goal candidates from "CURRENT GOAL CANDIDATES" in your response
+- Update existing candidates if new information emerges
+- ONLY drop a goal candidate if user explicitly abandoned it
+- Keep existing IDs, assign new IDs for new candidates
+
+CRITICAL RULES:
+1. ONLY create goal candidates for multi-lesson learning outcomes
+2. If someone mentions a single "how does X work?" question, that's NOT a goal candidate
+3. If the goal is too vague ("learn programming"), wait for specificity
+4. If the goal is too broad ("understand all of physics"), suggest narrowing
+5. Empty array [] is valid if no goal candidates meet criteria yet
+6. Don't force-fit single teaching targets into goals
+7. Goals should be achievable in weeks/months, not years
+
+TRANSITION TRIGGER:
+When readiness_score >= 0.7 for a goal candidate, this signals readiness to:
+1. Confirm the goal with the user
+2. Transition from goal discovery to teaching discovery
+3. Start breaking the goal into specific teaching targets
+
+IMPORTANT: Return ONLY valid JSON - no explanatory text before or after. Do not wrap in markdown code blocks.

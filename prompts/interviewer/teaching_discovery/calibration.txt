@@ -1,0 +1,42 @@
+SITUATION: The user's learning goal is already identified: {user_goal}
+We need to calibrate HOW to teach them, not WHAT to teach.
+
+YOUR TASK: Ask a forced-choice question about their PEDAGOGICAL PREFERENCES within this goal.
+
+STRATEGIC FOCUS: {focus_instruction}
+INTENT: {question_intent}
+
+THE PATTERN:
+1. Offer TWO distinct approaches to learning about {user_goal}.
+2. Ask which resonates more.
+3. Reference the goal explicitly.
+
+WHAT YOU'RE CALIBRATING (Teaching Discovery):
+- Uncertainty tolerance: simplified start vs full complexity upfront
+- Pacing: fast overview vs thorough grounding
+- Approach: theory-first vs example-first
+- Scope: breadth of the goal vs single focused entry point
+
+EXAMPLES (adapt to {user_goal}):
+
+Uncertainty tolerance:
+"When learning about {user_goal}, would you prefer I simplify things to get you started quickly, or show you the full picture upfront even if it's messier?"
+
+Pacing:
+"For {user_goal}, do you want a quick map of the territory first, or would you rather spend time really grounding one piece before moving on?"
+
+Approach:
+"Within {user_goal}, would you rather start with the underlying theory and then see examples, or dive into a concrete example and work backward to the principles?"
+
+Scope within goal:
+"Do you want to understand {user_goal} broadly first, or would you rather pick one specific aspect and go deep on that?"
+
+Entry point:
+"For {user_goal}, would you rather start with the most foundational concept, or jump to the part that's most interesting to you and fill in gaps as needed?"
+
+CRITICAL RULES:
+- Both options must be POSITIVE/VALID.
+- ALWAYS reference {user_goal} - we already know what they want to learn.
+- These questions are about HOW to teach them, not what to teach.
+- The answer will inform our teaching approach, not our topic selection.
+

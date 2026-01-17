@@ -1,0 +1,172 @@
+You are generating the controller state for the next conversational move in GOAL DISCOVERY phase.
+
+CURRENT SCHEMA:
+{schema}
+
+BRANCH CONDITION (from user's last response):
+{branch_condition}
+
+TASK: Determine next_action, determine strategic focus, and set appropriate branch_condition for next turn.
+
+=== PHASE 1: GOAL DISCOVERY ===
+Your objective is to help the user identify a LEARNING GOAL - a multi-lesson outcome they want to achieve.
+
+IMPORTANT:
+- The schema contains `goal_candidates` - these are potential learning goals being tracked
+- `derived.urgency` (between 0 and 1) indicates how strongly to steer toward identifying a clear goal within the next turn 
+- You are providing STRATEGIC DIRECTION to the Interviewer, not writing the final script.
+
+WHAT IS A LEARNING GOAL (GoalCandidate)?
+- Multi-lesson outcomes: "Become conversational in Spanish", "Understand quantum mechanics intuitively"
+- NOT single-lesson topics (those are TeachingCandidates for Phase 2)
+- Should be break-apartable into 3+ teachable sub-goals
+- Scope: weeks/months of learning, not hours or years
+
+GOAL CANDIDATE READINESS CRITERIA:
+A goal is ready when these are HIGH (>= 0.7):
+- concreteness: Is the outcome clear and specific?
+- break_apartability: Can we identify distinct sub-goals/lessons?
+- scope_appropriateness: Multi-lesson but achievable (not too big/small)?
+- user_commitment: Is the user motivated and interested?
+
+QUESTION HISTORY (DO NOT REPEAT):
+Recent question intents asked: {recent_question_intents}
+Recent questions asked: {recent_question_summaries}
+
+CRITICAL REPETITION RULES:
+1. If the SAME intent appears 2+ times in recent_question_intents, use a COMPLETELY DIFFERENT strategy
+2. NEVER ask the same type of question twice (e.g., don't ask "theory vs practice" more than once)
+3. If probing a dimension 2+ times with no progress, move to a different approach
+
+DIMENSION GATING (Phase 1 priorities):
+DIMENSIONS STILL UNCERTAIN (can ask about): {gatable_dimensions}
+DIMENSIONS ALREADY KNOWN (DO NOT re-ask): {exhausted_dimensions}
+DIMENSION URGENCY MULTIPLIERS: {dimension_urgencies}
+
+PHASE 1 DIMENSION PRIORITIES:
+- HIGH: curiosity_type (what kind of learning excites them), entry_mode (how they frame interests), motivation_profile (why learning matters)
+- LOW: uncertainty_tolerance, pacing_preference (these matter more in Phase 2 for teaching calibration)
+
+CRITICAL DIMENSION RULES:
+- NEVER ask about exhausted dimensions
+- Only ask dimension questions if they help surface a potential goal
+- Dimension questions are a MEANS to discover goals, not the END GOAL
+
+=== ORDERED DECISION TREE (GOAL DISCOVERY) ===
+
+Use this single decision tree. Each branch MUST set:
+next_action, question_intent, target_ambiguity, conversation_mode, focus_instruction.
+
+**STEP 0: REPETITION GATE**
+If the same intent appears 2+ times in recent_question_intents, choose a DIFFERENT branch.
+
+1) IF GOAL_CANDIDATES CONTAIN PROMISING CANDIDATES (readiness >= 0.4):
+   - next_action: "probe_goal"
+   - question_intent: "clarify_goal_scope" or "verify_commitment"
+   - target_ambiguity: "G3_outcome" or "G4_scope" or "G5_commitment"
+   - conversation_mode: "hypothesis_correct"
+   - focus_instruction: "Probe the strongest candidate; clarify outcome and scope. Identify the gap between their current state and the goal."
+
+2) IF MULTIPLE PROMISING GOALS (readiness >= 0.5):
+   - next_action: "prioritize_goals"
+   - question_intent: "choose_direction"
+   - target_ambiguity: "G3_outcome" or "G5_commitment"
+   - conversation_mode: "calibration"
+   - focus_instruction: "Ask them to prioritize between Goal A and Goal B with a forced-choice frame."
+
+3) IF NO GOAL_CANDIDATES YET (or all < 0.3):
+   - next_action: "explore_interests"
+   - question_intent: "surface_direction"
+   - target_ambiguity: "G0_domain" or "G1_type"
+   - conversation_mode: "calibration" if turns_elapsed < 3 else "grounded_offer"
+   - focus_instruction: "Use recognition over recall; offer a frame or contrast to reveal direction."
+   - urgency ramp: if derived.urgency >= 0.5, prefer "grounded_offer".
+
+4) IF CONVERSATIONAL_THEMES EXIST (topics or abstract goals) BUT NO GOAL_CANDIDATES:
+   - next_action: "explore_interests"
+   - question_intent: "surface_direction"
+   - target_ambiguity: "G0_domain" or "G3_outcome"
+   - conversation_mode: "grounded_offer"
+   - focus_instruction: "Use existing themes to test if there is a larger learning goal behind them."
+
+5) IF USER DEFLECTING OR SAYING "I DON'T KNOW":
+   - next_action: "provide_scaffolding"
+   - question_intent: "reduce_cost"
+   - target_ambiguity: "G0_domain" or "G1_type"
+   - conversation_mode: "grounded_offer"
+   - focus_instruction: "Lower barriers with concrete frames or choices."
+
+6) IF USER ASKED A QUESTION:
+   - next_action: "answer_question"
+   - question_intent: "clarify_and_surface"
+   - target_ambiguity: "G2_relationship" or "G3_outcome"
+   - conversation_mode: "direct_probe"
+   - focus_instruction: "Answer briefly and use their question to surface their learning direction."
+
+7) IF USER SHARED SOMETHING PERSONAL:
+   - next_action: "bridge_to_goal"
+   - question_intent: "connect_personal_to_learning"
+   - target_ambiguity: "G3_outcome" or "G5_commitment"
+   - conversation_mode: "grounded_offer"
+   - focus_instruction: "Link their context to a potential learning goal."
+
+8) IF GOAL CANDIDATE READINESS >= 0.7 AND user_commitment >= 0.7:
+   - next_action: "confirm_goal"
+   - question_intent: "validate_direction"
+   - target_ambiguity: null (goal identified)
+   - conversation_mode: "direct_probe"
+   - focus_instruction: "Confirm the goal before transitioning to Phase 2."
+
+=== AMBIGUITY TARGETING (Goal Discovery) ===
+
+Set target_ambiguity to track what this turn is resolving:
+- "G0_domain": What broad area interests them?
+- "G1_type": What type of goal? (skill, understanding, project, intuition-building)
+- "G2_relationship": What's their current relationship to this domain?
+- "G3_outcome": What outcome would feel meaningful?
+- "G4_scope": Is the scope appropriate (multi-lesson, achievable)?
+- "G5_commitment": Why does this goal matter to them? What's their motivation?
+- "profile_dimension": Learning about their learning style/preferences
+
+=== CONVERSATION MODE SELECTION ===
+
+1. "calibration" - Use when:
+   - turns_elapsed < 3 AND no goal candidates (early narrowing), OR
+   - branch_condition == "deflection" and turns_elapsed > 4 (stuck/stalling)
+   - Pattern: "A or B?" forced-choice questions
+   - Focus: Rapidly constrain the search space with low cognitive load.
+
+2. "grounded_offer" - Use when:
+   - urgency >= 0.4 AND no goal candidates with readiness >= 0.5
+   - Pattern: 1-2 sentences offering a frame + reaction question
+   - Focus: Offer a distinction or model to react to.
+
+3. "hypothesis_correct" - Use when:
+   - Have a promising goal candidate but need to verify/refine
+   - Pattern: Tentative guess about their goal + ask what's wrong
+   - Focus: Validate a specific hypothesis about their goal.
+
+4. "direct_probe" - Use when:
+   - High-momentum exchange where grounding would slow things down
+   - Clear signal about direction, just need specifics
+
+=== OUTPUT FORMAT (JSON) ===
+{{
+  "next_action": "explore_interests" | "probe_goal" | "confirm_goal" | "provide_scaffolding" | "prioritize_goals" | etc.,
+  "focus_instruction": "Specific instruction on WHAT to probe (e.g., 'Probe the tension between X and Y', 'Check if they want outcome A or B')",
+  "question_intent": "surface_direction" | "clarify_goal_scope" | "verify_commitment" | "choose_direction" | etc.,
+  "fallback_questions": [
+    "Alternative question 1",
+    "Alternative question 2"
+  ],
+  "branch_condition": "topic_mentioned" | "personal_shared" | "deflection" | "preference_signal" | "question_asked" | "unclear",
+  "conversation_mode": "calibration" | "grounded_offer" | "hypothesis_correct" | "direct_probe" | null,
+  "target_ambiguity": "G0_domain" | "G1_type" | "G2_relationship" | "G3_outcome" | "G4_scope" | "G5_commitment" | "profile_dimension" | null,
+  "target_goal_candidate_id": integer or null
+}}
+
+=== CRITICAL RULES ===
+- focus_instruction must be STRATEGIC: Tell the Interviewer WHAT information to get, don't just write the question.
+- Explicitly reference schema elements (e.g., "Probe the gap in GoalCandidate #2").
+
+IMPORTANT: Return ONLY valid JSON - no explanatory text before or after. Do not wrap in markdown code blocks.

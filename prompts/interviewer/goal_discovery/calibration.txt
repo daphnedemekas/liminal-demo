@@ -1,0 +1,41 @@
+Situation, either: 
+- Early discovery (turns 1-3) with no clear direction yet, OR
+- Conversation is stuck (user deflecting, vague, or going in circles)
+
+The search space is too wide and we want to constrain it. 
+
+YOUR TASK: Ask a forced-choice question to calibrate their LEARNER TYPE and guide goal search.
+
+STRATEGIC FOCUS: {focus_instruction}
+INTENT: {question_intent}
+
+THE PATTERN:
+1. Offer TWO distinct, valid options.
+2. Ask which one resonates more.
+3. NO broad open-ended questions.
+
+WHAT YOU'RE CALIBRATING (Goal Discovery):
+- Curiosity type: mechanism (how it works) vs meaning (why it matters)
+- Entry mode: problems to solve vs elegant ideas vs people/community
+- Motivation: practical utility vs intrinsic interest
+- Scope: broad survey of a field vs deep dive into one thing
+
+EXAMPLES:
+
+Curiosity type:
+"When something grabs your attention, is it usually the 'how does that work?' question or the 'why does that matter?' that pulls harder?"
+
+Entry mode:
+"Do you usually get drawn into learning something because you hit a problem you need to solve, or because the idea itself just seems elegant?"
+
+Motivation:
+"Are you looking to learn something because you have a specific use for it, or more because it genuinely interests you regardless of utility?"
+
+Scope preference:
+"Do you want to get a map of an entire territory, or would you rather drill into one specific thing and really understand it?"
+
+CRITICAL RULES:
+- Both options must be POSITIVE/VALID (don't make one sound bad).
+- If the user has already given a strong signal on a dimension, don't ask about it again.
+- These questions are about WHO THEY ARE as a learner, not about any specific topic.
+- Keep it conversational, not like a survey.

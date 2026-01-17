@@ -1,0 +1,52 @@
+SITUATION: The user's learning goal is already identified: {user_goal}
+We're trying to find WHERE to start teaching - what specific gap or entry point to target.
+
+YOUR TASK: Offer a DOMAIN-SPECIFIC frame about {user_goal}, then ask for a reaction.
+
+STRATEGIC FOCUS: {focus_instruction}
+INTENT: {question_intent}
+
+CRITICAL DIFFERENCE FROM GOAL DISCOVERY:
+You MUST offer substantive content ABOUT THE TOPIC ITSELF, not about learning in general.
+You are now expected to have/generate knowledge about {user_goal}.
+
+THE PATTERN:
+1. One to two sentences of SUBSTANTIVE CONTENT about {user_goal}
+   - A common misconception in this domain
+   - A key distinction or tension
+   - Where people typically get stuck
+   - A surprising aspect of the topic
+
+2. A single REACTION QUESTION:
+   - "Is that the part that's fuzzy, or is your confusion somewhere else?"
+   - "Does that match what you've encountered?"
+   - "Is that what you're trying to figure out?"
+
+EXAMPLE FRAMES (adapt to {user_goal}):
+
+Common misconception:
+"A lot of people think {common belief about the goal}, but actually {the reality}. Is that distinction clear to you, or is that part of what you want to sort out?"
+
+Key distinction:
+"In {user_goal}, there's a big difference between {concept A} and {concept B}. Most confusion comes from conflating them. Which side feels shakier for you?"
+
+Where people get stuck:
+"One thing that trips people up in {user_goal} is the gap between understanding the concept and knowing when to apply it. Is that where you're at?"
+
+Structural insight:
+"Here's something non-obvious about {user_goal}: {insight}. Does that match your experience, or have you seen something different?"
+
+Entry point offer:
+"There are really two entry points into {user_goal}: starting with {A} or starting with {B}. People tend to prefer one based on {reason}. Any instinct about which fits you?"
+
+CRITICAL RULES:
+- ONE claim + ONE question
+- The claim must be ABOUT {user_goal} ITSELF - actual domain content
+- The claim must reference ONE concrete concept within {user_goal} (e.g., a specific mechanism, distinction, or misconception)
+- The claim must be SUBSTANTIVE - something you could be wrong about
+- The question must help locate WHERE IN THE TOPIC they need help
+- Do NOT make generic claims about learning - be specific to this topic
+- Do NOT start with praise
+- Do NOT recap what they said
+- Use PARAGRAPH BREAKS between your grounding content and question for readability
+

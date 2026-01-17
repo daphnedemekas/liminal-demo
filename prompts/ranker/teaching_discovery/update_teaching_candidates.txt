@@ -1,0 +1,234 @@
+You are identifying TEACHING CANDIDATES from conversation for a user with a stated learning goal.
+
+USER LEARNING GOAL: {user_goal}
+
+GOAL-DIRECTED FILTERING:
+When the user has provided a learning goal, prioritize teaching candidates that are:
+1. STEPPING STONES toward the goal (prerequisite concepts, foundational understanding)
+2. DIRECTLY RELEVANT to achieving the goal (core concepts they'll need)
+3. BEST FIRST STEPS (right entry point given their current understanding)
+
+Examples:
+- Goal: "Learn jazz harmony" → Prioritize: chord theory foundations, progression patterns, voice leading
+- Goal: "Master chess endgames" → Prioritize: basic endgame principles, key piece relationships, calculation methods
+- Goal: "Understand vector calculus" → Prioritize: geometric intuition, gradient concepts, directional derivatives
+
+Lower priority for tangential topics that don't connect to the goal, even if the user mentions interest.
+
+CRITICAL DISTINCTION:
+- Conversational themes track EVERYTHING that emerges (abstract goals, preferences, metacognitive patterns, broad topics)
+- Teaching candidates track ONLY concrete conceptual topics that can actually be taught from a book/article
+
+CURRENT TEACHING CANDIDATES:
+{teaching_candidates}
+
+CURRENT CONVERSATIONAL THEMES (for context):
+{conversational_themes}
+
+CONVERSATION:
+{conversation}
+
+TASK: Identify NEW teaching candidates or update existing ones, PRIORITIZING goal-relevant topics.
+
+CRITICAL: Scan the CONVERSATION directly for concrete topics with specific gaps.
+Don't only rely on conversational_themes - the user may have mentioned specific topics that weren't tracked yet.
+
+Look for patterns like:
+- "I don't understand [X]"
+- "[X] doesn't make sense to me"
+- "How does [X] work?"
+- "I get [Y] but not [Z]"
+
+Example: "But backpropagation doesn't make sense to me. How does the error actually propagate backward?"
+→ This should create teaching candidate: "how backpropagation propagates errors backward"
+
+=== STRICT CRITERIA FOR TEACHING CANDIDATES ===
+
+A teaching candidate MUST pass ALL of these tests:
+
+1. CONCRETENESS TEST:
+   - Could you find a chapter or article specifically about this?
+   - Is it a specific conceptual topic, not an abstract goal or preference?
+
+   ✅ VALID: "how backpropagation calculates gradients"
+   ✅ VALID: "why TCP uses a three-way handshake"
+   ✅ VALID: "what eigenvalues represent geometrically"
+   ✅ VALID: "how CRISPR edits DNA sequences"
+
+   ❌ INVALID: "wants to feel less overwhelmed" (abstract goal → conversational theme)
+   ❌ INVALID: "prefers visual explanations" (preference → conversational theme)
+   ❌ INVALID: "neural networks" (too broad, no specific question)
+   ❌ INVALID: "struggles with abstraction" (metacognitive pattern → conversational theme)
+
+2. SCOPE TEST:
+   - Can this be explained in 5-15 minutes?
+   - Is there a specific question or gap to address?
+   - Is it narrow enough to have a clear pedagogical target?
+
+   ✅ VALID: "how does gradient descent find the minimum"
+   ❌ INVALID: "how do neural networks work" (too broad)
+
+3. QUESTION TEST:
+   - Can you phrase it as a specific question: "How does X work?", "Why does Y happen?", "What is Z?"
+   - Does the user have a specific gap or confusion about this concept?
+
+   ✅ VALID: "How does backpropagation calculate gradients?" + gap: "understands forward pass but not how errors propagate backward"
+   ❌ INVALID: Just mentioning "backpropagation" without a specific gap
+
+4. GOAL-RELEVANCE TEST (Goal-Directed Mode):
+   - Is this topic a stepping stone toward the user's goal?
+   - Would understanding this help them progress toward their goal?
+   - Is this the right entry point given their current understanding?
+
+   ✅ HIGH PRIORITY: Goal "learn jazz harmony" + topic "how chord progressions create tension and resolution"
+   ✅ HIGH PRIORITY: Goal "master chess endgames" + topic "how king and rook checkmate a lone king"
+   ⚠️ LOWER PRIORITY: Goal "learn jazz harmony" + topic "history of blues music" (tangential)
+
+=== DECISION PROCESS ===
+
+For each topic mentioned in conversation:
+
+1. Is it an ABSTRACT GOAL or PREFERENCE?
+   → NO teaching candidate, track in conversational_themes only
+   Examples: "wants to understand deeply", "likes visual explanations", "feels overwhelmed"
+
+2. Is it a BROAD TOPIC without a specific question?
+   → NO teaching candidate yet
+   Examples: "machine learning", "physics", "history"
+   Note: May become a teaching candidate once narrowed down
+
+3. Is it a SPECIFIC CONCEPTUAL TOPIC with a clear question/gap?
+   → YES, create teaching candidate!
+   Examples: "how backpropagation calculates gradients", "why the sky is blue"
+
+4. Is it RELEVANT to the user's stated goal?
+   → Boost readiness_score and priority if goal-relevant
+   → Lower priority if tangential to goal
+
+=== EXTRACTION LOGIC ===
+
+IF user mentions a concrete topic with a specific gap:
+1. Extract the specific question they want answered
+2. Identify their current understanding (if shared)
+3. Identify the specific gap or confusion
+4. Validate concreteness: Could you find a chapter about this exact thing?
+5. Assess scope: 5min, 10min, 15min, or too_broad?
+6. Assess goal-relevance: Is this a stepping stone toward {user_goal}?
+7. If passes all tests → create teaching candidate with goal_relevance field
+
+IF topic is too broad or abstract:
+1. Do NOT create teaching candidate yet
+2. It will be tracked in conversational_themes
+3. Through probing, it may spawn a teaching candidate later
+
+=== RELATIONSHIP TO CONVERSATIONAL THEMES ===
+
+- A conversational theme can SPAWN a teaching candidate
+- When creating a teaching candidate, reference source_theme_id
+- Example:
+  - Theme: "neural networks" (broad)
+  - After probing: Teaching candidate "how backpropagation calculates gradients" (specific)
+
+=== UPDATING EXISTING TEACHING CANDIDATES ===
+
+Update these fields as conversation progresses:
+- current_model_summary: What they currently understand
+- identified_gap: Specific confusion or missing piece
+- focus_question: The exact question to answer
+- disambiguated_hook: mechanism, meaning, application, beauty
+- angle: How to approach teaching (mechanism, intuitive, geometric, etc.)
+- estimated_RPL_fit: Is this in their ZPD?
+- pedagogical_scope: 5min, 10min, 15min, or too_broad
+- goal_relevance: "high" | "medium" | "low" (how relevant to user's goal)
+- readiness_score: 0.0-1.0 (convenience metric for ranking - higher means more promising)
+  NOTE: Readiness is determined by the system from attributes, not this score.
+  Output attributes accurately - the system will determine if candidate is ready.
+
+=== STAKES CLARIFICATION (U5) ===
+
+For each teaching candidate, track WHY this matters to the user:
+
+stakes_clarified: true/false
+  - Has the user explained WHY they want to understand this?
+  - ONLY set to true if they explicitly mentioned motivation (not just interest)
+  - In goal-directed mode, the goal itself provides partial stakes context
+
+stakes_summary: "their actual words about motivation"
+  Examples:
+  - "need it for a job interview"
+  - "building a product that needs this"
+  - "pure curiosity - just bugs me not knowing"
+  - "keep running into this at work"
+  - "want to achieve [goal]" (from goal-directed context)
+
+stakes_type: "intrinsic" | "utility" | "identity" | "urgency"
+  - "intrinsic": Pure curiosity, intellectual satisfaction, the itch to know
+  - "utility": Solve a problem, build something, pass a test, practical application
+  - "identity": Who they are/want to be, professional development, becoming that person
+  - "urgency": Time pressure, immediate deadline, need to know now
+
+CRITICAL RULES FOR STAKES:
+- Don't GUESS stakes - only mark clarified if user explicitly mentioned motivation
+- "I'm curious about X" alone does NOT clarify stakes (too vague)
+- "I need to understand X for my project" DOES clarify stakes (clear utility)
+- "This has been bugging me for years" DOES clarify stakes (clear intrinsic)
+- In goal-directed mode, the stated goal provides DIRECTION but not necessarily full stakes
+- Default stakes_clarified to false until you have clear evidence
+
+=== OUTPUT FORMAT ===
+
+Return a JSON array of teaching candidates:
+
+[
+  {{
+    "id": 1,
+    "topic": "how backpropagation calculates gradients",
+    "source_theme_id": 3,
+    "focus_question": "How does backpropagation calculate gradients for each weight?",
+    "identified_gap": "Understands forward pass but confused about how errors propagate backward through layers",
+    "current_model_summary": "Knows that weights are adjusted based on error, but doesn't understand the chain rule mechanism",
+    "is_concrete": true,
+    "book_chapter_test": "Yes - Chapter 6 'Backpropagation' in most deep learning textbooks",
+    "pedagogical_scope": "15min",  // Valid: "5min", "10min", "15min", "too_broad"
+    "disambiguated_hook": "mechanism",  // Valid: "mechanism", "meaning", "usefulness", "beauty", "weirdness"
+    "angle": "geometric",  // Valid: "mechanism", "meaning", "application", "historical", "geometric", "intuitive"
+    "estimated_RPL_fit": "proximal",  // Valid: "too_easy", "proximal", "too_hard", "unknown"
+    "specificity": "specific",  // Valid: "broad", "medium", "specific"
+    "goal_relevance": "high",  // NEW FIELD: "high", "medium", "low"
+    "stakes_clarified": true,  // Has user explained WHY they want to know this?
+    "stakes_summary": "Building an ML system and need to debug training issues",  // Their actual words
+    "stakes_type": "utility",  // Valid: "intrinsic", "utility", "identity", "urgency"
+    "readiness_score": 0.8,  // Convenience metric for ranking
+    "turns_discussed": 2,
+    "last_mentioned_turn": 3
+  }}
+]
+
+PRESERVATION REQUIREMENT:
+- You MUST include ALL teaching candidates from "CURRENT TEACHING CANDIDATES" in your response
+- Update existing teaching candidates if new information emerges
+- ONLY drop a teaching candidate if user explicitly abandoned it
+- Keep existing IDs, assign new IDs for new candidates
+
+FIELD REQUIREMENTS:
+- angle: MUST be one of: "mechanism", "meaning", "application", "historical", "geometric", "intuitive"
+- specificity: MUST be "broad", "medium", or "specific" (NOT "too_broad" - use "broad" instead)
+- disambiguated_hook: String describing the hook (mechanism, meaning, etc.)
+- pedagogical_scope: "5min", "10min", "15min", or "too_broad"
+- goal_relevance: MUST be "high", "medium", or "low" (NEW FIELD for goal-directed mode)
+- If unsure about angle, use "mechanism" as default
+- If unsure about specificity, use "medium" as default
+- If unsure about goal_relevance, use "medium" as default
+
+CRITICAL RULES:
+- ONLY include topics that pass ALL tests (concreteness, scope, question, goal-relevance)
+- PRIORITIZE goal-relevant topics - boost their readiness_scores
+- If a topic is mentioned but doesn't have a specific gap yet → wait, don't create teaching candidate
+- If a topic is too broad → track in conversational_themes, not here
+- If topic is abstract/metacognitive → definitely NOT a teaching candidate
+- Empty array [] is valid if no teaching candidates meet criteria yet
+- Do NOT lower the bar just to create a teaching candidate
+- Preserve all existing teaching candidates unless explicitly abandoned
+- Lower readiness threshold for goal-relevant candidates (0.65 vs 0.7)
+
+IMPORTANT: Return ONLY valid JSON - no explanatory text before or after. Do not wrap in markdown code blocks.

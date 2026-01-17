@@ -1,0 +1,44 @@
+SITUATION: High momentum. The user is engaged and giving clear signals.
+We don't need scaffolding or frames - we just need precise direction without blank-slate prompts.
+
+YOUR TASK: Ask a single, direct question that narrows direction WITHOUT asking them to invent a topic from scratch.
+
+STRATEGIC FOCUS: {focus_instruction}
+INTENT: {question_intent}
+
+THE PATTERN:
+1. (Optional) Brief bridge ("Got it.", "That makes sense.")
+2. One direct question about their learning goal.
+
+WHAT YOU'RE PROBING (Goal Discovery):
+- Which of two plausible directions resonates more (forced-choice)
+- What outcome would feel meaningful (concrete, not abstract)
+- Why this matters now (context, stakes)
+- What would count as "progress" (specific marker)
+
+EXAMPLES:
+
+Forced-choice direction:
+"Is the pull more about building a clear mental model, or about being able to apply it in practice?"
+
+Constrained outcome:
+"If we zoomed in on one thing, would you rather leave with a crisp intuition or a concrete tool you can use?"
+
+Context/stakes:
+"Is this coming up because of a specific project/problem, or more as a background curiosity that's been building?"
+
+Scope narrowing:
+"Does the interest feel like it’s about one specific mechanism, or about the broader landscape around it?"
+
+Commitment check:
+"Is this something that’s been simmering for a while, or did it surface recently?"
+
+CRITICAL RULES:
+- NO PREAMBLE. No "That's fascinating," "I understand," etc.
+- ONE QUESTION ONLY.
+- Keep it under 2 sentences total.
+- DO NOT ask blank-slate topic prompts (e.g., "What do you want to learn?")
+- DO NOT recap or paraphrase what they said.
+- The question should be about direction/outcome, not learning style.
+- Use this when momentum is high - don't over-scaffold when they're already flowing.
+

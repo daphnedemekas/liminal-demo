@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
-import { api } from '../services/api'
+import { api, TeachingSchema, UnderstandingMarker } from '../services/api'
 
 interface ProfilePanelProps {
   sessionId: string | null
   isConnected: boolean
   initialSummary?: string
+  isTeachingSession?: boolean
+  onGoalSelected?: (goalText: string) => void
 }
 
 // Helper functions to convert numeric values to descriptive labels
@@ -36,25 +38,34 @@ const getConfidenceLabel = (confidence: number | undefined): string => {
 const formatTraitValue = (trait: any): { value: string; confidence: string } => {
   if (!trait) return { value: '—', confidence: '' }
   
-  // Handle object with value/confidence structure (like CuriosityTypeField, PacingPreferenceField, etc.)
   if (typeof trait === 'object') {
-    // Check if it has the expected structure (value can be null)
     if ('value' in trait) {
       return { 
         value: trait.value || '—', 
         confidence: getConfidenceLabel(trait.confidence) 
       }
     }
-    // Unknown object structure - show placeholder instead of [object Object]
     return { value: '—', confidence: '' }
   }
   
-  // Simple string value
   return { value: String(trait), confidence: '' }
 }
 
-export default function ProfilePanel({ sessionId, isConnected, initialSummary }: ProfilePanelProps) {
+// Understanding marker level badge helper
+const getMarkerLevelBadge = (level: string): { label: string; className: string } => {
+  switch (level) {
+    case 'strong':
+      return { label: 'Strong', className: 'marker-strong' }
+    case 'developing':
+      return { label: 'Developing', className: 'marker-developing' }
+    default:
+      return { label: 'Not Yet', className: 'marker-not-yet' }
+  }
+}
+
+export default function ProfilePanel({ sessionId, isConnected, initialSummary, isTeachingSession = false, onGoalSelected }: ProfilePanelProps) {
   const [schema, setSchema] = useState<any>(null)
+  const [teachingSchema, setTeachingSchema] = useState<TeachingSchema | null>(null)
   const [summary, setSummary] = useState<string>(initialSummary || '')
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false)
   const [lastSummaryTurn, setLastSummaryTurn] = useState(initialSummary ? 0 : -1)
@@ -71,8 +82,19 @@ export default function ProfilePanel({ sessionId, isConnected, initialSummary }:
 
     const fetchSchema = async () => {
       try {
-        const data = await api.getDiscoverySchema(sessionId)
-        setSchema(data)
+        if (isTeachingSession) {
+          // Fetch teaching state
+          const data = await api.getTeachingState(sessionId)
+          setTeachingSchema(data)
+          // Use narrative_summary from teaching schema
+          if (data.narrative_summary) {
+            setSummary(data.narrative_summary)
+          }
+        } else {
+          // Fetch discovery schema
+          const data = await api.getDiscoverySchema(sessionId)
+          setSchema(data)
+        }
       } catch (error) {
         console.error('Failed to fetch schema:', error)
       }
@@ -81,17 +103,24 @@ export default function ProfilePanel({ sessionId, isConnected, initialSummary }:
     fetchSchema()
     const interval = setInterval(fetchSchema, 3000)
     return () => clearInterval(interval)
-  }, [sessionId, isConnected])
+  }, [sessionId, isConnected, isTeachingSession])
 
-  const generateSummary = useCallback(async () => {
+  const generateSummary = useCallback(async (forceRefresh = false) => {
+    if (isTeachingSession) {
+      // For teaching sessions, we use the narrative_summary from the schema
+      return
+    }
+    
     if (!schema || !sessionId || isGeneratingSummary) return
     
     const currentTurn = schema.interview_state?.turns_elapsed || 0
-    if (summary && currentTurn - lastSummaryTurn < 2) return
+    // Only skip if not forcing refresh and summary exists and not enough turns
+    if (!forceRefresh && summary && currentTurn - lastSummaryTurn < 2) return
     
     setIsGeneratingSummary(true)
     try {
-      const response = await fetch('http://localhost:8000/api/profile/summary', {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const response = await fetch(`${apiUrl}/api/profile/summary`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ schema })
@@ -111,14 +140,178 @@ export default function ProfilePanel({ sessionId, isConnected, initialSummary }:
     } finally {
       setIsGeneratingSummary(false)
     }
-  }, [schema, sessionId, summary, lastSummaryTurn, isGeneratingSummary])
+  }, [schema, sessionId, summary, lastSummaryTurn, isGeneratingSummary, isTeachingSession])
 
+  // Auto-generate summary on first load and every 2 turns
   useEffect(() => {
-    if (schema && !summary) {
-      generateSummary()
+    if (schema && !isTeachingSession) {
+      const currentTurn = schema.interview_state?.turns_elapsed || 0
+      // Generate if no summary OR if enough turns have passed
+      if (!summary || currentTurn - lastSummaryTurn >= 2) {
+        generateSummary()
+      }
     }
-  }, [schema, summary, generateSummary])
+  }, [schema, isTeachingSession]) // Intentionally exclude summary and lastSummaryTurn to allow re-generation
 
+  // Render teaching session panel
+  if (isTeachingSession) {
+    if (!teachingSchema) {
+      return (
+        <div className="profile-panel">
+          <div className="profile-panel-header">
+            <h2>Learning Progress</h2>
+          </div>
+          <div className="profile-panel-content">
+            <div className="profile-card empty-state">
+              <p>Loading teaching session...</p>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    const curriculum = teachingSchema.curriculum_plan
+    const markers = teachingSchema.understanding_markers || []
+    const activeMarkers = markers.filter((m: UnderstandingMarker) => m.level !== 'not_yet')
+    const currentStep = curriculum?.steps?.[teachingSchema.current_step_index]
+
+    return (
+      <div className="profile-panel">
+        <div className="profile-panel-header">
+          <h2>Learning Progress</h2>
+          <span className="turn-counter">Turn {teachingSchema.turns_elapsed || 0}</span>
+        </div>
+
+        <div className="profile-panel-content">
+          {/* Narrative Summary */}
+          <div className="profile-card summary-card">
+            <div className="card-header">
+              <span className="card-title">Understanding</span>
+            </div>
+            <p className="summary-text">
+              {teachingSchema.narrative_summary || 'Building understanding...'}
+            </p>
+          </div>
+
+          {/* Curriculum Progress */}
+          {curriculum && curriculum.steps && curriculum.steps.length > 0 && (
+            <div className="profile-card">
+              <div className="card-header">
+                <span className="card-title">Learning Path</span>
+                <span className="item-count">
+                  {curriculum.completed_step_ids?.length || 0}/{curriculum.steps.length}
+                </span>
+              </div>
+              <div className="curriculum-steps">
+                {curriculum.steps.map((step, idx) => {
+                  const isCompleted = curriculum.completed_step_ids?.includes(step.id)
+                  const isCurrent = idx === teachingSchema.current_step_index
+                  return (
+                    <div 
+                      key={step.id} 
+                      className={`curriculum-step ${isCompleted ? 'completed' : ''} ${isCurrent ? 'current' : ''}`}
+                    >
+                      <span className="step-number">{idx + 1}</span>
+                      <span className="step-objective">{step.objective}</span>
+                      {isCompleted && <span className="step-check">✓</span>}
+                      {isCurrent && <span className="step-arrow">→</span>}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Current Step Details */}
+          {currentStep && (
+            <div className="profile-card focus-card">
+              <div className="card-header">
+                <span className="card-title">Current Focus</span>
+              </div>
+              <div className="focus-details">
+                <p className="current-objective">{currentStep.objective}</p>
+                <div className="focus-item">
+                  <span className="focus-label">Approach</span>
+                  <span className="focus-value">{currentStep.explanation_approach}</span>
+                </div>
+                {currentStep.marker_targets && currentStep.marker_targets.length > 0 && (
+                  <div className="focus-item">
+                    <span className="focus-label">Building</span>
+                    <span className="focus-value">{currentStep.marker_targets.join(', ')}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Understanding Markers */}
+          <div className="profile-card">
+            <div className="card-header">
+              <span className="card-title">Understanding Markers</span>
+              <span className="item-count">{activeMarkers.length} active</span>
+            </div>
+            <div className="markers-grid">
+              {markers.map((marker: UnderstandingMarker) => {
+                const badge = getMarkerLevelBadge(marker.level)
+                const hasEvidence = marker.evidence && marker.evidence.length > 0
+                
+                if (marker.level === 'not_yet' && !hasEvidence) {
+                  return null // Hide markers with no activity
+                }
+                
+                return (
+                  <div key={marker.id} className={`marker-item ${badge.className}`}>
+                    <div className="marker-header">
+                      <span className="marker-name">{marker.name}</span>
+                      <span className={`marker-badge ${badge.className}`}>{badge.label}</span>
+                    </div>
+                    {hasEvidence && (
+                      <p className="marker-evidence">
+                        "{marker.evidence[marker.evidence.length - 1]}"
+                      </p>
+                    )}
+                  </div>
+                )
+              })}
+              {activeMarkers.length === 0 && (
+                <p className="markers-empty">Markers will appear as you demonstrate understanding.</p>
+              )}
+            </div>
+          </div>
+
+          {/* Open Questions */}
+          {teachingSchema.open_questions && teachingSchema.open_questions.length > 0 && (
+            <div className="profile-card">
+              <div className="card-header">
+                <span className="card-title">Open Questions</span>
+              </div>
+              <ul className="open-questions-list">
+                {teachingSchema.open_questions.map((q, idx) => (
+                  <li key={idx} className="open-question">{q}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Prerequisite Gaps */}
+          {teachingSchema.prerequisite_gaps && teachingSchema.prerequisite_gaps.length > 0 && (
+            <div className="profile-card warning-card">
+              <div className="card-header">
+                <span className="card-title">⚠️ Foundation Gaps</span>
+              </div>
+              <ul className="gaps-list">
+                {teachingSchema.prerequisite_gaps.map((gap, idx) => (
+                  <li key={idx} className="gap-item">{gap}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // Render discovery session panel (existing code)
   if (!schema) {
     return (
       <div className="profile-panel">
@@ -161,7 +354,7 @@ export default function ProfilePanel({ sessionId, isConnected, initialSummary }:
             <span className="card-title">Current Understanding</span>
             <button 
               className="refresh-btn"
-              onClick={generateSummary}
+              onClick={() => generateSummary(true)}
               disabled={isGeneratingSummary}
               title="Refresh summary"
             >
@@ -215,25 +408,38 @@ export default function ProfilePanel({ sessionId, isConnected, initialSummary }:
           <div className="profile-card">
             <div className="card-header">
               <span className="card-title">Emerging Goals</span>
-              <span className="item-count">{goalCandidates.length}</span>
+              <span className="item-count">{Math.min(goalCandidates.length, 5)}{goalCandidates.length > 5 ? '+' : ''}</span>
             </div>
             <div className="goal-list">
-              {goalCandidates.map((goal: any, idx: number) => {
-                const avgScore = (
-                  (goal.concreteness || 0) + 
-                  (goal.scope_appropriateness || 0) + 
-                  (goal.user_commitment || 0)
-                ) / 3
-                const readiness = getReadinessLabel(avgScore)
-                return (
-                  <div key={idx} className="goal-item">
-                    <p className="goal-text">{goal.goal}</p>
-                    <span className={`readiness-badge ${readiness.level}`}>
-                      {readiness.label}
-                    </span>
-                  </div>
-                )
-              })}
+              {/* Sort by readiness score (descending) and limit to top 5 */}
+              {[...goalCandidates]
+                .map((goal: any) => ({
+                  ...goal,
+                  avgScore: (
+                    (goal.concreteness || 0) + 
+                    (goal.scope_appropriateness || 0) + 
+                    (goal.user_commitment || 0)
+                  ) / 3
+                }))
+                .sort((a, b) => b.avgScore - a.avgScore)
+                .slice(0, 5)
+                .map((goal: any, idx: number) => {
+                  const readiness = getReadinessLabel(goal.avgScore)
+                  const isClickable = onGoalSelected && readiness.level !== 'low'
+                  return (
+                    <div 
+                      key={idx} 
+                      className={`goal-item ${isClickable ? 'clickable' : ''}`}
+                      onClick={isClickable ? () => onGoalSelected(goal.goal) : undefined}
+                      title={isClickable ? 'Click to start learning this goal' : 'Continue chatting to develop this goal'}
+                    >
+                      <p className="goal-text">{goal.goal}</p>
+                      <span className={`readiness-badge ${readiness.level}`}>
+                        {readiness.label}
+                      </span>
+                    </div>
+                  )
+                })}
             </div>
           </div>
         )}

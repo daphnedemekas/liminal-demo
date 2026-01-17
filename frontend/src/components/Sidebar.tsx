@@ -60,7 +60,7 @@ export default function Sidebar({
     <div className={`sidebar ${isCollapsed ? 'collapsed' : ''}`}>
       <div className="sidebar-header">
         <h2 className="sidebar-title">
-          {isCollapsed ? 'L' : 'Learning Goals'}
+          {isCollapsed ? 'L' : 'Liminal'}
         </h2>
         <button 
           className="sidebar-toggle"

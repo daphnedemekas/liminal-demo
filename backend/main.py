@@ -1,6 +1,11 @@
 """FastAPI application for Liminal Discovery System."""
 import sys
 from pathlib import Path
+
+# Load environment variables from .env file FIRST
+from dotenv import load_dotenv
+load_dotenv(Path(__file__).parent.parent / ".env")
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -16,9 +21,7 @@ from backend.services.audio_service import get_audio_service
 from backend.models.api_models import (
     SessionCreateRequest,
     SessionCreateResponse,
-    TopicFoundResponse,
-    LearningStartRequest,
-    LearningStartResponse
+    TopicFoundResponse
 )
 
 app = FastAPI(title="Liminal Discovery API")
@@ -70,6 +73,7 @@ class GoalResponse(BaseModel):
     created_at: Optional[str]
     status: str
     has_teaching_candidate: bool
+    teaching_candidate: Optional[dict] = None  # The accepted teaching candidate
 
 class UserDataResponse(BaseModel):
     user_id: str
@@ -284,16 +288,26 @@ async def generate_profile_summary(request: ProfileSummaryRequest):
         
         # Generate summary with LLM
         llm = LLMClient()
-        prompt = f"""Based on this learner profile data, write a 1-2 sentence summary of this person as a learner. Be warm and insightful, not clinical. Focus on what makes them unique.
+        prompt = f"""Based on this learner profile data, write a concise 1-2 sentence factual summary of what we've identified about this learner's preferences and interests.
+
+DO NOT:
+- Use sycophantic language (no "passionate", "unique", "impressive", "driven", "thrives")
+- Praise the learner or their qualities
+- Use flowery or enthusiastic language
+
+DO:
+- State factual observations about their learning style and interests
+- Use neutral, informative language
+- Focus on what we've learned from the conversation
 
 Profile data:
 {chr(10).join(f"- {p}" for p in context_parts)}
 
-Write only the summary, no intro or outro. Be specific to THIS person."""
+Write only the factual summary. Example good output: "Prefers problem-solving approaches and has shown interest in distributed systems, particularly consensus algorithms. Learning style appears exploratory with moderate tolerance for uncertainty." """
 
         summary = llm.chat(
             messages=[{"role": "user", "content": prompt}],
-            model_name="openai:gpt-4o-mini"
+            model="openai:gpt-4o-mini"
         )
         
         return {"summary": summary.strip()}
@@ -470,8 +484,14 @@ async def clear_feed(user_id: str, context_type: str, goal_id: Optional[int] = N
 
 
 # ============================================
-# Teaching Chat Endpoint (Simple conversation, no discovery)
+# Teaching Curriculum Endpoints (Phase 3)
 # ============================================
+
+from src.agents.teaching_orchestrator import TeachingOrchestrator
+
+# Store teaching sessions in memory (parallel to discovery sessions)
+teaching_sessions: dict = {}
+
 
 class TeachingStartRequest(BaseModel):
     user_id: str
@@ -483,96 +503,112 @@ class TeachingStartRequest(BaseModel):
     focus_question: str
     goal_conversation_history: list = []  # Context from goal chat
     user_background: str = ""
+    current_model_summary: Optional[str] = None
+    stakes_summary: Optional[str] = None
+
 
 class TeachingStartResponse(BaseModel):
     session_id: str
     opening_message: str
+    conversation_history: list = []
+    is_resumed: bool = False
+    curriculum_plan: Optional[dict] = None
+
 
 @app.post("/api/teaching/start", response_model=TeachingStartResponse)
 async def start_teaching(request: TeachingStartRequest):
     """
-    Initialize a teaching session with a structured opening that references the goal conversation.
-    Summarizes what was discussed, proposes a learning path, and asks for confirmation.
+    Initialize or resume a teaching session with curriculum-based learning.
     """
     try:
-        from src.llm_client import LLMClient
-        from src.utils.config import get_model_name
-        import uuid
+        # Check if existing session for this goal + teaching candidate
+        existing = db.get_session_for_teaching(request.goal_id, request.teaching_candidate_id)
         
-        llm = LLMClient()
-        session_id = str(uuid.uuid4())
+        if existing and existing.get("session_id"):
+            # Resume existing teaching session
+            session_id = existing["session_id"]
+            conversation_history = existing.get("conversation_history", [])
+            schema_state = existing.get("schema_state")
+            
+            print(f"[Teaching] Resuming session: {session_id[:8]}... ({len(conversation_history)} messages)")
+            
+            # Create orchestrator with restored state
+            teaching_candidate = {
+                "topic": request.topic,
+                "focus_question": request.focus_question,
+                "identified_gap": request.identified_gap,
+                "current_model_summary": request.current_model_summary,
+                "stakes_summary": request.stakes_summary
+            }
+            
+            orchestrator = TeachingOrchestrator(
+                user_id=request.user_id,
+                goal_id=request.goal_id,
+                teaching_candidate_id=request.teaching_candidate_id,
+                teaching_candidate=teaching_candidate,
+                goal_text=request.goal_text,
+                user_background=request.user_background,
+                goal_conversation_history=request.goal_conversation_history,
+                session_id=session_id,
+                conversation_history=conversation_history,
+                schema_state=schema_state
+            )
+            
+            # Store in memory
+            teaching_sessions[session_id] = orchestrator
+            
+            return TeachingStartResponse(
+                session_id=session_id,
+                opening_message="",  # No opening for resumed sessions
+                conversation_history=conversation_history,
+                is_resumed=True,
+                curriculum_plan=orchestrator.schema.curriculum_plan.model_dump() if orchestrator.schema.curriculum_plan else None
+            )
         
-        # Format the goal conversation for context
-        goal_context = ""
-        if request.goal_conversation_history:
-            goal_context = "\n".join([
-                f"{'User' if msg['role'] == 'user' else 'Assistant'}: {msg['content']}"
-                for msg in request.goal_conversation_history[-10:]  # Last 10 messages for context
-            ])
+        # Create new teaching session
+        teaching_candidate = {
+            "topic": request.topic,
+            "focus_question": request.focus_question,
+            "identified_gap": request.identified_gap,
+            "current_model_summary": request.current_model_summary,
+            "stakes_summary": request.stakes_summary
+        }
         
-        # Build prompt for structured opening
-        system_prompt = f"""You are an expert learning coach helping someone learn about: {request.topic}
-
-BROADER LEARNING GOAL: {request.goal_text}
-IDENTIFIED KNOWLEDGE GAP: {request.identified_gap}
-
-CONTEXT FROM PREVIOUS CONVERSATION:
-The user just had a discovery conversation exploring this goal. Here's what was discussed:
-
-{goal_context if goal_context else "No prior conversation available."}
-
-USER BACKGROUND: {request.user_background}
-
-YOUR TASK:
-Generate a structured opening message that:
-
-1. BRIEFLY SUMMARIZE (2-3 sentences) what you discussed in the goal conversation - reference specific topics, methods, or concepts they mentioned being interested in
-
-2. PROPOSE A LEARNING PATH - Based on what they expressed interest in, propose a structured approach:
-   - What you'll cover first
-   - What builds on that
-   - What you'll explore after
-   
-3. ASK FOR CONFIRMATION - End by asking if this structure works for them or if they'd like to adjust the focus or order
-
-FORMAT:
-- Use markdown for structure (bold headers, bullet points)
-- Be specific - reference actual topics from the conversation (like RAG, RLHF, fact-checking modules, etc. if discussed)
-- Keep it concise but informative
-- Sound like a knowledgeable guide, not a generic assistant
-- NO sycophancy or filler phrases
-
-Example structure:
-**What we've explored so far:**
-[Brief summary of key topics/methods discussed]
-
-**Proposed learning path:**
-1. [First topic] - [why it makes sense to start here]
-2. [Second topic] - [how it builds on #1]
-3. [Third topic] - [where this leads]
-
-Does this structure work for you, or would you like to adjust the focus or order?
-"""
-
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": "Please generate the structured opening for our teaching session."}
-        ]
-        
-        model_name = get_model_name("interviewer", default="openai:gpt-4o")
-        
-        opening = llm.chat(
-            messages=messages,
-            model=model_name,
-            temperature=0.7,
-            max_tokens=800
+        orchestrator = TeachingOrchestrator(
+            user_id=request.user_id,
+            goal_id=request.goal_id,
+            teaching_candidate_id=request.teaching_candidate_id,
+            teaching_candidate=teaching_candidate,
+            goal_text=request.goal_text,
+            user_background=request.user_background,
+            goal_conversation_history=request.goal_conversation_history
         )
         
-        print(f"[Teaching Start] Generated structured opening for topic: {request.topic}")
+        session_id = orchestrator.session_id
+        
+        # Create DB session entry
+        db.create_session_with_type(
+            session_id, 
+            request.user_id, 
+            'teaching', 
+            request.goal_id,
+            request.teaching_candidate_id
+        )
+        
+        # Generate opening (includes curriculum plan generation)
+        opening_message = orchestrator.start()
+        
+        # Store in memory
+        teaching_sessions[session_id] = orchestrator
+        
+        print(f"[Teaching] Created new session: {session_id[:8]}... for topic: {request.topic}")
         
         return TeachingStartResponse(
             session_id=session_id,
-            opening_message=opening
+            opening_message=opening_message,
+            conversation_history=orchestrator.conversation_history,
+            is_resumed=False,
+            curriculum_plan=orchestrator.schema.curriculum_plan.model_dump() if orchestrator.schema.curriculum_plan else None
         )
         
     except Exception as e:
@@ -582,96 +618,176 @@ Does this structure work for you, or would you like to adjust the focus or order
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/teaching/{session_id}/state")
+async def get_teaching_state(session_id: str):
+    """Get current teaching state for ProfilePanel display."""
+    try:
+        # Check in-memory first
+        if session_id in teaching_sessions:
+            orchestrator = teaching_sessions[session_id]
+            return orchestrator.get_schema()
+        
+        # Try to load from database
+        session_data = db.get_session_by_id(session_id)
+        if session_data and session_data.get("schema_state"):
+            return session_data["schema_state"]
+        
+        raise HTTPException(status_code=404, detail="Teaching session not found")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[Teaching State] Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.websocket("/ws/teaching/{session_id}")
+async def teaching_websocket(websocket: WebSocket, session_id: str):
+    """WebSocket endpoint for teaching curriculum conversation."""
+    await websocket.accept()
+    
+    # Get orchestrator
+    orchestrator = teaching_sessions.get(session_id)
+    
+    if not orchestrator:
+        # Try to restore from database
+        session_data = db.get_session_by_id(session_id)
+        if session_data and session_data.get("schema_state"):
+            # Would need to reconstruct orchestrator - for now, error
+            await websocket.send_json({
+                "type": "error",
+                "message": "Teaching session expired. Please restart from the teaching panel."
+            })
+            await websocket.close()
+            return
+        else:
+            await websocket.send_json({
+                "type": "error", 
+                "message": "Teaching session not found"
+            })
+            await websocket.close()
+            return
+    
+    try:
+        while True:
+            # Receive message from frontend
+            data = await websocket.receive_json()
+            user_message = data.get("content", "")
+            
+            if not user_message:
+                continue
+            
+            # Send status
+            await websocket.send_json({
+                "type": "status",
+                "status": "Processing..."
+            })
+            
+            try:
+                # Process message through teaching orchestrator
+                import asyncio
+                loop = asyncio.get_event_loop()
+                response = await loop.run_in_executor(
+                    None,
+                    orchestrator.process_user_message,
+                    user_message
+                )
+                
+                # Get current state for markers/progress
+                schema = orchestrator.get_schema()
+                
+                # Check if teaching phase is complete
+                if orchestrator.is_complete():
+                    await websocket.send_json({
+                        "type": "teaching_complete",
+                        "content": response,
+                        "message": "You've demonstrated strong understanding of this topic!",
+                        "final_markers": schema.get("understanding_markers", [])
+                    })
+                else:
+                    # Send regular teaching message with state updates
+                    await websocket.send_json({
+                        "type": "teaching_message",
+                        "content": response,
+                        "curriculum_progress": {
+                            "current_step": schema.get("current_step_index", 0),
+                            "total_steps": len(schema.get("curriculum_plan", {}).get("steps", [])),
+                            "completed_steps": len(schema.get("curriculum_plan", {}).get("completed_step_ids", []))
+                        },
+                        "narrative_summary": schema.get("narrative_summary", ""),
+                        "understanding_markers": [
+                            {
+                                "id": m.get("id"),
+                                "name": m.get("name"),
+                                "level": m.get("level"),
+                                "evidence": m.get("evidence", [])[-1] if m.get("evidence") else None
+                            }
+                            for m in schema.get("understanding_markers", [])
+                            if m.get("level") != "not_yet"  # Only send markers with evidence
+                        ]
+                    })
+                    
+            except Exception as e:
+                print(f"[Teaching WS] Error processing message: {e}")
+                import traceback
+                traceback.print_exc()
+                await websocket.send_json({
+                    "type": "error",
+                    "message": "An error occurred. Please try again."
+                })
+                continue
+                
+    except WebSocketDisconnect:
+        print(f"[Teaching WS] Disconnected: {session_id[:8]}...")
+    except Exception as e:
+        print(f"[Teaching WS] Error: {e}")
+        try:
+            await websocket.send_json({"type": "error", "message": str(e)})
+            await websocket.close()
+        except:
+            pass
+
+
 class TeachingChatRequest(BaseModel):
-    user_id: str
-    goal_id: int
-    teaching_candidate_id: int
-    topic: str
-    identified_gap: str
-    focus_question: str
+    """Legacy teaching chat request - kept for backwards compatibility."""
+    session_id: str
     message: str
-    conversation_history: list = []
-    user_background: str = ""
-    goal_conversation_history: list = []  # Context from goal chat
 
 class TeachingChatResponse(BaseModel):
     response: str
+    curriculum_progress: Optional[dict] = None
+    narrative_summary: Optional[str] = None
 
 @app.post("/api/teaching/chat", response_model=TeachingChatResponse)
 async def teaching_chat(request: TeachingChatRequest):
     """
-    Teaching conversation that builds on the context from the goal discovery phase.
+    Process a message in a teaching session via REST (alternative to WebSocket).
+    Primarily for backwards compatibility - WebSocket is preferred.
     """
     try:
-        from src.llm_client import LLMClient
-        from src.utils.config import get_model_name
+        orchestrator = teaching_sessions.get(request.session_id)
         
-        llm = LLMClient()
+        if not orchestrator:
+            raise HTTPException(status_code=404, detail="Teaching session not found. Use /api/teaching/start first.")
         
-        # Format goal conversation context for reference
-        goal_context_summary = ""
-        if request.goal_conversation_history:
-            # Extract key topics mentioned in goal conversation
-            goal_context_summary = "\n".join([
-                f"- {msg['content'][:200]}..." if len(msg['content']) > 200 else f"- {msg['content']}"
-                for msg in request.goal_conversation_history[-6:]
-                if msg['role'] == 'user'
-            ])
+        # Process message
+        response = orchestrator.process_user_message(request.message)
         
-        # Build a teaching prompt with goal context
-        system_prompt = f"""You are a knowledgeable and patient teacher helping a user learn about: {request.topic}
-
-CONTEXT:
-- Their broader learning goal: They want to understand this topic as part of their learning journey
-- Their identified knowledge gap: {request.identified_gap}
-- User background: {request.user_background}
-
-WHAT THEY DISCUSSED BEFORE STARTING THIS LESSON:
-{goal_context_summary if goal_context_summary else "No prior context available."}
-
-YOUR ROLE:
-- Explain concepts clearly and concisely
-- Use analogies and examples when helpful
-- Answer their questions directly
-- Reference connections to topics they mentioned being interested in (from the goal conversation)
-- If they seem confused, break things down further
-- Provide interesting context and real-world applications
-- Be engaging but not overwhelming
-- Keep responses focused (2-3 paragraphs unless they ask for more detail)
-
-STYLE:
-- Conversational and friendly
-- No excessive praise, filler, or sycophancy
-- Concrete and specific - use real examples
-- If you don't know something, say so
-- If they ask to adjust the learning path, accommodate their request
-"""
-
-        # Build messages
-        messages = [{"role": "system", "content": system_prompt}]
+        # Get current state
+        schema = orchestrator.get_schema()
         
-        # Add teaching conversation history
-        for msg in request.conversation_history:
-            messages.append({
-                "role": msg["role"],
-                "content": msg["content"]
-            })
-        
-        # Add current message
-        messages.append({"role": "user", "content": request.message})
-        
-        # Generate response using interviewer model (good at conversation)
-        model_name = get_model_name("interviewer", default="openai:gpt-4o")
-        
-        response = llm.chat(
-            messages=messages,
-            model=model_name,
-            temperature=0.7,
-            max_tokens=1000
+        return TeachingChatResponse(
+            response=response,
+            curriculum_progress={
+                "current_step": schema.get("current_step_index", 0),
+                "total_steps": len(schema.get("curriculum_plan", {}).get("steps", [])),
+                "completed_steps": len(schema.get("curriculum_plan", {}).get("completed_step_ids", []))
+            },
+            narrative_summary=schema.get("narrative_summary")
         )
         
-        return TeachingChatResponse(response=response)
-        
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"[Teaching Chat] Error: {e}")
         import traceback
@@ -723,7 +839,7 @@ async def start_discovery(request: SessionCreateRequest = SessionCreateRequest()
                 db.create_session_with_type(session_id, request.user_id, 'exploration')
 
         # Create/resume session in memory
-        session_data = session_manager.create_session(
+        session_data = await session_manager.create_session(
             session_id,
             debug=False,
             model_config=request.models,
@@ -735,13 +851,22 @@ async def start_discovery(request: SessionCreateRequest = SessionCreateRequest()
 
         # Get opening question only for new sessions
         opening_message = ""
+        audio_url = None
         if not is_resumed:
             opening_message = session_data.discovery_session.start()
+            # Generate audio for opening message
+            try:
+                if opening_message and opening_message.strip():
+                    audio_path = audio_service.text_to_speech(opening_message)
+                    audio_url = f"/audio/{audio_path.name}"
+            except Exception as e:
+                print(f"[Audio] TTS generation failed for opening message: {e}")
+                audio_url = None
 
         return SessionCreateResponse(
             session_id=session_id,
             opening_message=opening_message,
-            audio_url=None,
+            audio_url=audio_url,
             conversation_history=conversation_history,
             is_resumed=is_resumed,
             profile_summary=profile_summary
@@ -759,7 +884,7 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
     await websocket.accept()
 
     # Get or create session
-    session_data = session_manager.get_session(session_id)
+    session_data = await session_manager.get_session(session_id)
     if not session_data:
         await websocket.send_json({"type": "error", "message": "Session not found"})
         await websocket.close()
@@ -768,16 +893,11 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
     try:
         while True:
             # Receive message from frontend
-            print(f"[WS DEBUG] Waiting for message...")
             data = await websocket.receive_json()
-            print(f"[WS DEBUG] Received data: {str(data)[:200]}")
             user_message = data.get("content", "")
 
             if not user_message:
-                print(f"[WS DEBUG] Empty message, skipping")
                 continue
-
-            print(f"[WS DEBUG] Processing message: {user_message[:100]}...")
 
             # Send status: analyzing
             await websocket.send_json({
@@ -787,9 +907,40 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
 
             # Wrap all command processing in try-except for safety
             try:
+                # Voice command detection for goal/teaching accept/reject
+                lower_msg = user_message.lower().strip()
+                
+                # Check if there's a pending goal proposal
+                has_pending_goal = session_data.discovery_session.schema.interview_state.proposed_goal is not None
+                
+                # Check if there's a pending teaching proposal
+                has_pending_teaching = session_data.discovery_session.schema.interview_state.proposed_teaching_id is not None
+                
+                # Detect voice commands for acceptance
+                accept_phrases = ['yes', 'yeah', 'yep', 'sounds good', 'sounds great', 'accept', 'let\'s do it', 
+                                 'perfect', 'that works', 'i like it', 'go for it', 'absolutely', 'sure', 'ok', 'okay']
+                reject_phrases = ['no', 'nope', 'not quite', 'not really', 'something else', 'different', 
+                                 'reject', 'pass', 'skip', 'change', 'try again']
+                
+                is_accept = any(phrase in lower_msg for phrase in accept_phrases) and len(lower_msg) < 50
+                is_reject = any(phrase in lower_msg for phrase in reject_phrases) and len(lower_msg) < 50
+                
+                # Convert voice accept/reject to commands
+                if has_pending_goal and is_accept:
+                    print(f"[Voice] Detected goal acceptance: '{user_message}'")
+                    user_message = "__ACCEPT_GOAL__"
+                elif has_pending_goal and is_reject:
+                    print(f"[Voice] Detected goal rejection: '{user_message}'")
+                    user_message = "__REJECT_GOAL__"
+                elif has_pending_teaching and is_accept:
+                    print(f"[Voice] Detected teaching acceptance: '{user_message}'")
+                    user_message = "__ACCEPT_TEACHING__"
+                elif has_pending_teaching and is_reject:
+                    print(f"[Voice] Detected teaching rejection: '{user_message}'")
+                    user_message = "__REJECT_TEACHING__"
+                
                 # Check for special commands (goal accept/reject)
                 if user_message == "__ACCEPT_GOAL__":
-                    print(f"[WS DEBUG] User accepted proposed goal")
                     result = session_data.discovery_session.accept_proposed_goal()
 
                     # Check for error
@@ -800,17 +951,24 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
                         })
                         continue
 
+                    # Check for error
+                    if "error" in result or not result.get("success"):
+                        await websocket.send_json({
+                            "type": "error",
+                            "message": result.get("error") or result.get("message", "Failed to accept goal")
+                        })
+                        continue
+
                     # Send data for frontend to create new goal panel
                     await websocket.send_json({
                         "type": "create_goal_panel",
-                        "goal": result["goal"],
-                        "goal_id": result["goal_id"],
-                        "message": result["message"]
+                        "goal": result.get("goal", ""),
+                        "goal_id": result.get("goal_id", 0),
+                        "message": result.get("message", "Goal accepted")
                     })
                     continue
 
                 if user_message == "__REJECT_GOAL__":
-                    print(f"[WS DEBUG] User rejected proposed goal")
                     import asyncio
                     loop = asyncio.get_event_loop()
                     response = await loop.run_in_executor(
@@ -826,7 +984,6 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
 
                 # Check for teaching candidate accept/reject commands
                 if user_message == "__ACCEPT_TEACHING__":
-                    print(f"[WS DEBUG] User accepted proposed teaching candidate")
                     result = session_data.discovery_session.accept_proposed_teaching()
 
                     # Check for error
@@ -837,16 +994,27 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
                         })
                         continue
 
+                    # Save teaching candidate to the goal in database
+                    try:
+                        session_info = db.get_session_by_id(session_id)
+                        if session_info and session_info.get("goal_id"):
+                            db.update_goal_teaching_candidate(
+                                session_info["goal_id"],
+                                result.get("candidate", {})
+                            )
+                            print(f"[Teaching] Saved teaching candidate to goal {session_info['goal_id']}")
+                    except Exception as e:
+                        print(f"[Teaching] Failed to save teaching candidate to DB: {e}")
+
                     # Send data for frontend to create new teaching panel
                     await websocket.send_json({
                         "type": "create_teaching_panel",
-                        "candidate": result["candidate"],
-                        "message": result["message"]
+                        "candidate": result.get("candidate", {}),
+                        "message": result.get("message", "Teaching candidate accepted")
                     })
                     continue
 
                 if user_message == "__REJECT_TEACHING__":
-                    print(f"[WS DEBUG] User rejected proposed teaching candidate")
                     import asyncio
                     loop = asyncio.get_event_loop()
                     response = await loop.run_in_executor(
@@ -862,7 +1030,6 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
 
                 # Process message in thread pool to avoid blocking the event loop
                 # (blocking calls can cause WebSocket timeouts)
-                print(f"[WS DEBUG] Processing message...")
                 import asyncio
                 loop = asyncio.get_event_loop()
                 response = await loop.run_in_executor(
@@ -870,15 +1037,25 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
                     session_data.discovery_session.process_user_message,
                     user_message
                 )
-                print(f"[WS DEBUG] Got response: {response[:50]}...")
 
                 # Check if a goal was proposed (needs user confirmation)
                 if response.startswith("__GOAL_PROPOSED__:"):
                     proposed_goal = response.split(":", 1)[1]
-                    print(f"[WS DEBUG] Goal proposed: {proposed_goal}")
+                    goal_message = f"I think I've identified a learning goal for you: {proposed_goal}. Does this sound right?"
+                    
+                    # Generate TTS for goal proposal
+                    goal_audio_url = None
+                    try:
+                        audio_path = audio_service.text_to_speech(goal_message)
+                        goal_audio_url = f"/audio/{audio_path.name}"
+                    except Exception as e:
+                        print(f"[Audio] TTS for goal proposal failed: {e}")
+                    
                     await websocket.send_json({
                         "type": "goal_proposed",
                         "goal": proposed_goal,
+                        "content": goal_message,
+                        "audio_url": goal_audio_url,
                         "message": f"**Goal identified:** {proposed_goal}"
                     })
                     continue
@@ -888,22 +1065,50 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
                     import json as json_module
                     candidate_json = response.split(":", 1)[1]
                     candidate = json_module.loads(candidate_json)
-                    print(f"[WS DEBUG] Teaching candidate proposed: {candidate['topic']}")
+                    teaching_message = f"I think I found a great starting point: {candidate['topic']}. Want to explore this?"
+                    
+                    # Generate TTS for teaching proposal
+                    teaching_audio_url = None
+                    try:
+                        audio_path = audio_service.text_to_speech(teaching_message)
+                        teaching_audio_url = f"/audio/{audio_path.name}"
+                    except Exception as e:
+                        print(f"[Audio] TTS for teaching proposal failed: {e}")
+                    
                     await websocket.send_json({
                         "type": "teaching_proposed",
                         "candidate": candidate,
+                        "content": teaching_message,
+                        "audio_url": teaching_audio_url,
                         "message": f"I think I found a great starting point: **{candidate['topic']}**"
                     })
                     continue
 
-                # Audio generation disabled by default
-                audio_url = None
+                # Generate audio with ElevenLabs TTS
+                try:
+                    if response and response.strip():  # Only generate for non-empty responses
+                        audio_path = audio_service.text_to_speech(response)
+                        audio_url = f"/audio/{audio_path.name}"
+                    else:
+                        audio_url = None
+                except Exception as e:
+                    print(f"[Audio] TTS generation failed: {e}")
+                    audio_url = None
 
                 # Check if discovery is complete
                 if session_data.discovery_session.is_complete():
-                    print(f"[WS DEBUG] Discovery is complete, sending topic_found")
                     final_topic = session_data.discovery_session.get_final_topic()
-                    session_manager.save_final_topic(session_id, final_topic)
+
+                    # Validate final_topic before using it
+                    if not final_topic or not hasattr(final_topic, 'topic'):
+                        print(f"[WS ERROR] Invalid final_topic returned from get_final_topic()")
+                        await websocket.send_json({
+                            "type": "error",
+                            "message": "Failed to extract topic information"
+                        })
+                        continue
+
+                    await session_manager.save_final_topic(session_id, final_topic)
 
                     # Send topic found message
                     await websocket.send_json({
@@ -921,13 +1126,11 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
                     })
                 else:
                     # Send regular message
-                    print(f"[WS DEBUG] Sending message response ({len(response)} chars)")
                     await websocket.send_json({
                         "type": "message",
                         "content": response,
                         "audio_url": audio_url
                     })
-                    print(f"[WS DEBUG] Message sent successfully")
 
             except Exception as e:
                 # Command processing failed - send error but don't disconnect
@@ -957,19 +1160,19 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
 
         try:
             await websocket.send_json({"type": "error", "message": friendly_message})
-        except:
-            pass  # WebSocket might already be closed
+        except Exception as e:
+            print(f"[WebSocket] Error sending error message: {e}")
 
         try:
             await websocket.close()
-        except:
-            pass
+        except Exception as e:
+            print(f"[WebSocket] Error closing connection: {e}")
 
 
 @app.get("/api/discovery/{session_id}/schema")
 async def get_discovery_schema(session_id: str):
     """Get current discovery schema for debugging."""
-    session_data = session_manager.get_session(session_id)
+    session_data = await session_manager.get_session(session_id)
 
     if not session_data:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -977,108 +1180,6 @@ async def get_discovery_schema(session_id: str):
     # Get schema from discovery session
     schema = session_data.discovery_session.get_schema()
     return schema
-
-
-@app.post("/api/learning/start", response_model=LearningStartResponse)
-async def start_learning(request: LearningStartRequest):
-    """Start the learning phase for a session."""
-    session_data = session_manager.get_session(request.session_id)
-
-    if not session_data:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    if not session_data.final_topic:
-        raise HTTPException(status_code=400, detail="No topic identified yet")
-
-    # Import learning engine (will be created next)
-    from backend.services.learning_engine import LearningEngine
-    from src.llm_client import LLMClient
-
-    # Create learning engine
-    llm_client = LLMClient()
-    learning_engine = LearningEngine(llm_client)
-
-    # Start learning phase
-    opening_message = learning_engine.start_learning(session_data.final_topic)
-
-    # Store learning engine in session (we'll add this to SessionData)
-    if not hasattr(session_data, 'learning_engine'):
-        session_data.learning_engine = learning_engine
-
-    session_data.learning_state = "assess"
-
-    # Audio generation disabled by default
-    audio_url = None
-
-    return LearningStartResponse(
-        opening_message=opening_message,
-        audio_url=audio_url,
-        state="assess"
-    )
-
-
-@app.websocket("/ws/learning/{session_id}")
-async def learning_websocket(websocket: WebSocket, session_id: str):
-    """WebSocket endpoint for learning phase conversation."""
-    await websocket.accept()
-
-    session_data = session_manager.get_session(session_id)
-    if not session_data or not hasattr(session_data, 'learning_engine'):
-        await websocket.send_json({"type": "error", "message": "Learning session not found"})
-        await websocket.close()
-        return
-
-    learning_engine = session_data.learning_engine
-
-    try:
-        while True:
-            # Receive message
-            data = await websocket.receive_json()
-            user_message = data.get("content", "")
-
-            if not user_message:
-                continue
-
-            # Add to conversation history
-            session_data.learning_conversation.append({
-                "role": "user",
-                "content": user_message
-            })
-
-            # Process through learning engine
-            result = learning_engine.process_message(
-                user_message,
-                session_data.learning_conversation
-            )
-
-            # Add assistant response to history
-            session_data.learning_conversation.append({
-                "role": "assistant",
-                "content": result["response"]
-            })
-
-            # Update state
-            session_data.learning_state = result["state"]
-
-            # Audio generation disabled by default
-            audio_url = None
-
-            # Send response
-            await websocket.send_json({
-                "type": "learning_message",
-                "content": result["response"],
-                "audio_url": audio_url,
-                "state": result["state"],
-                "confusion_identified": result.get("confusion_identified"),
-                "explanation_complete": result.get("explanation_complete", False)
-            })
-
-    except WebSocketDisconnect:
-        print(f"WebSocket disconnected for learning session {session_id}")
-    except Exception as e:
-        print(f"Error in learning websocket: {e}")
-        await websocket.send_json({"type": "error", "message": str(e)})
-        await websocket.close()
 
 
 if __name__ == "__main__":

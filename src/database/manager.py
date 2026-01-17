@@ -374,19 +374,8 @@ class DatabaseManager:
         finally:
             session.close()
 
-    def save_conversation_history(self, session_id: str, conversation_history: list):
-        """Save conversation history to session."""
-        session = self._get_session()
-        try:
-            conv_session = session.query(ConversationSession).filter_by(session_id=session_id).first()
-            if conv_session:
-                conv_session.conversation_history = conversation_history
-                session.commit()
-        finally:
-            session.close()
-
-    def create_session_with_type(self, session_id: str, user_id: str, session_type: str = 'exploration', goal_id: int = None) -> ConversationSession:
-        """Create session with type (exploration or goal)."""
+    def create_session_with_type(self, session_id: str, user_id: str, session_type: str = 'exploration', goal_id: int = None, teaching_candidate_id: int = None) -> ConversationSession:
+        """Create session with type (exploration, goal, or teaching)."""
         session = self._get_session()
         try:
             conv_session = ConversationSession(
@@ -394,6 +383,7 @@ class DatabaseManager:
                 user_id=user_id,
                 session_type=session_type,
                 goal_id=goal_id,
+                teaching_candidate_id=teaching_candidate_id,
                 conversation_history=[]
             )
             session.add(conv_session)
@@ -425,6 +415,104 @@ class DatabaseManager:
                     "schema_state": conv_session.schema_state,
                     "turns_elapsed": conv_session.turns_elapsed,
                     "profile_summary": conv_session.profile_summary
+                }
+            return None
+        finally:
+            session.close()
+
+    def get_session_for_teaching(self, goal_id: int, teaching_candidate_id: int) -> Optional[Dict[str, Any]]:
+        """Get the teaching session for a specific goal and teaching candidate."""
+        session = self._get_session()
+        try:
+            conv_session = session.query(ConversationSession).filter_by(
+                goal_id=goal_id,
+                teaching_candidate_id=teaching_candidate_id,
+                session_type='teaching'
+            ).order_by(ConversationSession.started_at.desc()).first()
+            
+            if conv_session:
+                return {
+                    "session_id": conv_session.session_id,
+                    "conversation_history": conv_session.conversation_history or [],
+                    "schema_state": conv_session.schema_state,
+                    "turns_elapsed": conv_session.turns_elapsed,
+                    "profile_summary": conv_session.profile_summary,
+                    "goal_id": conv_session.goal_id,
+                    "teaching_candidate_id": conv_session.teaching_candidate_id
+                }
+            return None
+        finally:
+            session.close()
+
+    def get_or_create_teaching_session(self, user_id: str, goal_id: int, teaching_candidate_id: int) -> Dict[str, Any]:
+        """Get existing teaching session or create a new one."""
+        session = self._get_session()
+        try:
+            # Look for existing active teaching session for this goal + candidate
+            conv_session = session.query(ConversationSession).filter_by(
+                goal_id=goal_id,
+                teaching_candidate_id=teaching_candidate_id,
+                session_type='teaching',
+                ended_at=None
+            ).order_by(ConversationSession.started_at.desc()).first()
+            
+            if conv_session:
+                return {
+                    "session_id": conv_session.session_id,
+                    "conversation_history": conv_session.conversation_history or [],
+                    "schema_state": conv_session.schema_state,
+                    "turns_elapsed": conv_session.turns_elapsed,
+                    "profile_summary": conv_session.profile_summary,
+                    "goal_id": conv_session.goal_id,
+                    "teaching_candidate_id": conv_session.teaching_candidate_id,
+                    "is_new": False
+                }
+            
+            # Create new teaching session
+            import uuid
+            new_session_id = str(uuid.uuid4())
+            conv_session = ConversationSession(
+                session_id=new_session_id,
+                user_id=user_id,
+                session_type='teaching',
+                goal_id=goal_id,
+                teaching_candidate_id=teaching_candidate_id,
+                conversation_history=[]
+            )
+            session.add(conv_session)
+            
+            user = session.query(UserProfile).filter_by(user_id=user_id).first()
+            if user:
+                user.total_sessions += 1
+            
+            session.commit()
+            
+            return {
+                "session_id": new_session_id,
+                "conversation_history": [],
+                "schema_state": None,
+                "turns_elapsed": 0,
+                "profile_summary": None,
+                "goal_id": goal_id,
+                "teaching_candidate_id": teaching_candidate_id,
+                "is_new": True
+            }
+        finally:
+            session.close()
+
+    def get_goal_by_id(self, goal_id: int) -> Optional[Dict[str, Any]]:
+        """Get a specific goal by ID."""
+        session = self._get_session()
+        try:
+            goal = session.query(UserGoal).filter_by(id=goal_id).first()
+            if goal:
+                return {
+                    "id": goal.id,
+                    "user_id": goal.user_id,
+                    "goal_text": goal.goal_text,
+                    "status": goal.status,
+                    "teaching_candidate": goal.teaching_candidate,
+                    "has_teaching_candidate": bool(goal.has_teaching_candidate)
                 }
             return None
         finally:
@@ -530,6 +618,7 @@ class DatabaseManager:
                     "user_id": conv_session.user_id,
                     "session_type": conv_session.session_type,
                     "goal_id": conv_session.goal_id,
+                    "teaching_candidate_id": conv_session.teaching_candidate_id,
                     "conversation_history": conv_session.conversation_history or [],
                     "schema_state": conv_session.schema_state,
                     "turns_elapsed": conv_session.turns_elapsed,

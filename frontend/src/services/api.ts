@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:8000'
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 export interface ModelConfig {
   interviewer?: string
@@ -14,12 +14,6 @@ export interface SessionCreateResponse {
   profile_summary?: string
 }
 
-export interface LearningStartResponse {
-  opening_message: string
-  audio_url?: string
-  state: string
-}
-
 export interface LoginResponse {
   user_id: string
   username: string
@@ -33,6 +27,12 @@ export interface GoalData {
   created_at: string | null
   status: string
   has_teaching_candidate: boolean
+  teaching_candidate?: {
+    id: number
+    topic: string
+    focus_question: string
+    identified_gap: string
+  } | null
 }
 
 export interface ExplorationSession {
@@ -72,22 +72,6 @@ export const api = {
 
     if (!response.ok) {
       throw new Error('Failed to start discovery session')
-    }
-
-    return response.json()
-  },
-
-  async startLearningSession(sessionId: string): Promise<LearningStartResponse> {
-    const response = await fetch(`${API_BASE_URL}/api/learning/start`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ session_id: sessionId }),
-    })
-
-    if (!response.ok) {
-      throw new Error('Failed to start learning session')
     }
 
     return response.json()
@@ -208,6 +192,50 @@ export const api = {
 
     return response.json()
   },
+
+  // Teaching session management
+  async startTeachingSession(params: {
+    user_id: string
+    goal_id: number
+    goal_text: string
+    teaching_candidate_id: number
+    topic: string
+    identified_gap: string
+    focus_question: string
+    goal_conversation_history?: Array<{ role: string; content: string }>
+    user_background?: string
+    current_model_summary?: string
+    stakes_summary?: string
+  }): Promise<TeachingStartResponse> {
+    const response = await fetch(`${API_BASE_URL}/api/teaching/start`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(params),
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to start teaching session')
+    }
+
+    return response.json()
+  },
+
+  async getTeachingState(sessionId: string): Promise<TeachingSchema> {
+    const response = await fetch(`${API_BASE_URL}/api/teaching/${sessionId}/state`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to get teaching state')
+    }
+
+    return response.json()
+  },
 }
 
 export interface FeedItem {
@@ -217,4 +245,65 @@ export interface FeedItem {
   source_citation?: string
   source_url?: string
   relevance_note?: string
+}
+
+export interface TeachingStartResponse {
+  session_id: string
+  opening_message: string
+  conversation_history: Array<{ role: string; content: string }>
+  is_resumed: boolean
+  curriculum_plan?: CurriculumPlan
+}
+
+export interface CurriculumPlan {
+  topic: string
+  goal_text: string
+  total_steps: number
+  steps: CurriculumStep[]
+  current_step_id: number | null
+  completed_step_ids: number[]
+}
+
+export interface CurriculumStep {
+  id: number
+  objective: string
+  explanation_approach: string
+  quick_check: string
+  marker_targets: string[]
+  prerequisites: number[]
+  status: string
+  turns_spent: number
+  notes: string
+}
+
+export interface UnderstandingMarker {
+  id: string
+  name: string
+  description: string
+  level: 'not_yet' | 'developing' | 'strong'
+  evidence: string[]
+  notes: string
+  last_assessed_turn: number
+}
+
+export interface TeachingSchema {
+  session_id: string
+  user_id: string
+  goal_id: number
+  teaching_candidate_id: number
+  teaching_candidate: {
+    id: number
+    topic: string
+    focus_question: string
+    identified_gap: string
+  }
+  curriculum_plan: CurriculumPlan
+  turns_elapsed: number
+  current_step_index: number
+  understanding_markers: UnderstandingMarker[]
+  narrative_summary: string
+  next_best_move: string
+  open_questions: string[]
+  prerequisite_gaps: string[]
+  phase_complete: boolean
 }

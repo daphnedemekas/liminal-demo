@@ -17,9 +17,7 @@ interface User {
 
 function App() {
   const [phase, setPhase] = useState<Phase>('login')
-  const [sessionId] = useState<string>(() => crypto.randomUUID())
   const [onboardingInfo, setOnboardingInfo] = useState<string>('')
-  const [userGoal, setUserGoal] = useState<string | undefined>(undefined)
   const [modelConfig, setModelConfig] = useState<ModelConfig>({
     interviewer: 'openai:gpt-4o',
     ranker: 'openai:gpt-4o',
@@ -51,7 +49,8 @@ function App() {
         goal: g.goal_text,
         createdAt: g.created_at ? new Date(g.created_at) : new Date(),
         isActive: g.status === 'active',
-        teachingCandidates: g.teaching_candidates || [],  // Load teaching candidates
+        // Convert single teaching_candidate to array format
+        teachingCandidates: g.teaching_candidate ? [g.teaching_candidate] : [],
       }))
       
       setGoalSessions(loadedGoals)
@@ -95,8 +94,8 @@ function App() {
 
   const handleOnboardingComplete = async (info: string, goal?: string) => {
     setOnboardingInfo(info)
-    setUserGoal(goal)
-    
+
+    // Persist onboarding info
     if (user) {
       try {
         await api.updateOnboarding(user.id, info)
@@ -104,7 +103,26 @@ function App() {
         console.error('[App] Failed to save onboarding:', err)
       }
     }
-    
+
+    // If the user provided an explicit goal up-front, immediately create a goal panel
+    // and route them into the goal-specific chat. Exploration remains available in the sidebar.
+    if (goal && goal.trim() && user) {
+      try {
+        await handleGoalAccepted(goal.trim(), 'onboarding')
+        // Ensure we are viewing the new goal session (not exploration)
+        setActiveTeachingId(null)
+      } catch (err) {
+        console.error('[App] Failed to create initial goal panel from onboarding goal:', err)
+        // If this fails, fall back to exploration.
+        setActiveGoalSessionId(null)
+        setActiveTeachingId(null)
+      }
+    } else {
+      // Default: start in exploration
+      setActiveGoalSessionId(null)
+      setActiveTeachingId(null)
+    }
+
     setPhase('discovery')
   }
 
@@ -253,18 +271,12 @@ function App() {
             )}
 
             {/* Exploration Panel */}
-            {!isLoadingUserData && (
-              <div style={{
-                display: isViewingExploration ? 'flex' : 'none',
-                width: '100%',
-                height: '100%'
-              }}>
+            {!isLoadingUserData && isViewingExploration && (
+              <div style={{ width: '100%', height: '100%' }}>
                 <DiscoveryChat
-                  key={user?.id || sessionId}
-                  sessionId={sessionId}
+                  key={user?.id || 'anonymous-exploration'}
                   modelConfig={modelConfig}
                   onboardingInfo={onboardingInfo}
-                  userGoal={userGoal}
                   userId={user?.id}
                   onTopicFound={() => {}}  // No longer used
                   onGoalAccepted={handleGoalAccepted}

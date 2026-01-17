@@ -536,6 +536,7 @@ class DiscoveryOrchestrator:
         self.db.save_conversation_history(self.session_id, self.conversation_history)
 
         return {
+            "success": True,
             "goal": goal,
             "goal_id": goal_id,
             "message": confirmation_message

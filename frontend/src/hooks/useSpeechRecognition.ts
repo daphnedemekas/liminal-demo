@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 
 // Type for Web Speech API (not in TypeScript by default)
 interface SpeechRecognitionEvent extends Event {
@@ -51,27 +51,35 @@ interface UseSpeechRecognitionReturn {
   startListening: () => void
   stopListening: () => void
   isSupported: boolean
+  resetTranscript: () => void
 }
 
 export function useSpeechRecognition(): UseSpeechRecognitionReturn {
   const [isListening, setIsListening] = useState(false)
   const [transcript, setTranscript] = useState('')
   const recognitionRef = useRef<SpeechRecognition | null>(null)
+  const silenceTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   // Check if browser supports speech recognition
   const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition
   const isSupported = !!SpeechRecognitionAPI
 
-  // Initialize recognition
-  if (isSupported && !recognitionRef.current) {
+  // Initialize recognition in useEffect to avoid memory leaks
+  useEffect(() => {
+    if (!isSupported || recognitionRef.current) return
+
     const recognition = new SpeechRecognitionAPI()
-    recognition.continuous = false
-    recognition.interimResults = false
+    recognition.continuous = true  // Keep listening continuously
+    recognition.interimResults = true  // Show interim results as user speaks
     recognition.lang = 'en-US'
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
-      const result = event.results[0][0]
-      setTranscript(result.transcript)
+      // Accumulate all results (interim + final)
+      let fullTranscript = ''
+      for (let i = 0; i < event.results.length; i++) {
+        fullTranscript += event.results[i][0].transcript
+      }
+      setTranscript(fullTranscript)
     }
 
     recognition.onerror = (event: Event) => {
@@ -81,10 +89,23 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
 
     recognition.onend = () => {
       setIsListening(false)
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current)
+      }
     }
 
     recognitionRef.current = recognition
-  }
+
+    // Cleanup on unmount
+    return () => {
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current)
+      }
+      if (recognitionRef.current) {
+        recognitionRef.current.stop()
+      }
+    }
+  }, [isSupported])
 
   const startListening = useCallback(() => {
     if (recognitionRef.current && !isListening) {
@@ -96,9 +117,16 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
 
   const stopListening = useCallback(() => {
     if (recognitionRef.current && isListening) {
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current)
+      }
       recognitionRef.current.stop()
     }
   }, [isListening])
+
+  const resetTranscript = useCallback(() => {
+    setTranscript('')
+  }, [])
 
   return {
     isListening,
@@ -106,5 +134,6 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
     startListening,
     stopListening,
     isSupported,
+    resetTranscript,
   }
 }

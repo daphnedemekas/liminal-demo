@@ -1,0 +1,120 @@
+You are determining the next teaching action based on the current state.
+
+CURRENT TEACHING STATE:
+{teaching_state}
+
+CONVERSATION HISTORY (last 6 messages):
+{conversation}
+
+USER'S LAST MESSAGE:
+{user_message}
+
+TASK: Decide the next teaching action and what to focus on.
+
+AVAILABLE ACTIONS:
+
+1. EXPLAIN - Provide information/explanation
+   Use when: Starting new concept, user needs more information
+   Focus: Specific concept or aspect to explain
+
+2. ASK_SELF_EXPLANATION - Have user explain in their words
+   Use when: After explaining, to verify internalization
+   Focus: What concept they should explain back
+
+3. COUNTERFACTUAL_PROBE - "What if X were different?"
+   Use when: Testing deeper understanding
+   Focus: Specific counterfactual to explore
+
+4. ERROR_DETECTION - Present misconception to identify
+   Use when: Checking if they can spot mistakes
+   Focus: Common misconception to test
+
+5. TRANSFER_PROMPT - Apply to new context
+   Use when: Ready to generalize
+   Focus: New domain/context to apply knowledge to
+
+6. CALIBRATION_CHECK - Check confidence vs understanding
+   Use when: Unsure if they actually get it or are just nodding
+   Focus: Specific aspect to calibrate on
+
+7. ADJUST_PLAN - Modify curriculum
+   Use when: Gap detected, moving too fast/slow
+   Focus: What adjustment to make
+
+8. ANSWER_QUESTION - Respond to user's question
+   Use when: User asked something directly
+   Focus: Their specific question
+
+9. PROVIDE_EXAMPLE - Give concrete example
+   Use when: Concept is too abstract
+   Focus: Type of example needed
+
+10. CHECK_PREREQUISITE - Verify needed foundation
+    Use when: Seems confused, might be missing basics
+    Focus: Prerequisite concept to check
+
+11. SUMMARIZE_PROGRESS - Review what's been learned
+    Use when: End of step, transition point, or user seems lost
+    Focus: Key points to summarize
+
+DECISION LOGIC:
+
+1. IF user asked a direct question:
+   → ANSWER_QUESTION (prioritize responsiveness)
+
+2. IF confusion signals detected (e.g., "I don't get it", "what?", hesitation):
+   → CHECK_PREREQUISITE or PROVIDE_EXAMPLE
+
+3. IF user seems to be nodding along without engagement:
+   → ASK_SELF_EXPLANATION or CALIBRATION_CHECK
+
+4. IF just finished explaining a concept:
+   → ASK_SELF_EXPLANATION (verify before moving on)
+
+5. IF user demonstrated understanding of current step:
+   → Move to next step with EXPLAIN, or TRANSFER_PROMPT if near end
+
+6. IF user is ahead of curriculum:
+   → ADJUST_PLAN to skip steps, or COUNTERFACTUAL_PROBE to deepen
+
+7. IF multiple steps completed:
+   → SUMMARIZE_PROGRESS periodically
+
+SIGNAL DETECTION:
+
+Look for these in user message:
+- Question marks → They're asking something
+- "I think..." / "So basically..." → Self-explanation attempt (assess it!)
+- "I don't understand" / "huh?" → Confusion (slow down)
+- "That makes sense" / "Got it" → May be genuine OR surface agreement (verify)
+- "What about X?" / "But what if..." → Active engagement (good sign!)
+- "Can we move on?" → Boredom or frustration
+
+OUTPUT FORMAT (JSON):
+{{
+  "next_action": "explain" | "ask_self_explanation" | "counterfactual_probe" | ...,
+  "action_rationale": "Brief explanation of why this action",
+  "focus_content": "Specific content/question/concept to address",
+  "target_markers": ["marker1", "marker2"],
+  "user_question_pending": true | false,
+  "user_question": "Their question if any" | null,
+  "confusion_detected": true | false,
+  "prerequisite_gap_detected": true | false,
+  "pacing_adjustment": "slow_down" | "speed_up" | "maintain" | null
+}}
+
+MARKER OPTIONS:
+- recall, explanation, application, analysis
+- transfer, analogy_generation, connection_making, problem_decomposition
+- self_explanation, error_detection, metacognitive_awareness, confidence_calibration
+- limitation_awareness, prediction, counterfactual_reasoning, question_generation
+- teaching_ability, intuitive_grasp
+
+CRITICAL RULES:
+1. ALWAYS prioritize answering user questions - don't ignore them to push agenda
+2. Don't ask too many questions in a row - balance with information
+3. If they're confused, SLOW DOWN and provide support, don't just repeat
+4. Every 3-4 exchanges, consider SUMMARIZE_PROGRESS to consolidate
+5. Return ONLY valid JSON - no explanatory text
+
+IMPORTANT: Return ONLY valid JSON - no markdown code blocks.

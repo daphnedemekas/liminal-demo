@@ -47,7 +47,8 @@ export function useWebSocket(sessionId: string, phase: 'discovery' | 'learning')
       return
     }
 
-    const wsUrl = `ws://localhost:8000/ws/${phase}/${sessionId}`
+    const wsBase = import.meta.env.VITE_WS_URL || 'ws://localhost:8000'
+    const wsUrl = `${wsBase}/ws/${phase}/${sessionId}`
     const ws = new WebSocket(wsUrl)
 
     ws.onopen = () => {
@@ -130,7 +131,8 @@ export function useWebSocket(sessionId: string, phase: 'discovery' | 'learning')
         const goalMessage: Message = {
           id: crypto.randomUUID(),
           role: 'assistant',
-          content: data.message,
+          content: data.content || data.message,
+          audio_url: data.audio_url,
           type: 'goal_proposed',
           proposedGoal: data.goal,
         }
@@ -155,7 +157,8 @@ export function useWebSocket(sessionId: string, phase: 'discovery' | 'learning')
         const teachingMessage: Message = {
           id: crypto.randomUUID(),
           role: 'assistant',
-          content: data.message,
+          content: data.content || data.message,
+          audio_url: data.audio_url,
           type: 'teaching_proposed',
           teachingCandidate: data.candidate,
         }

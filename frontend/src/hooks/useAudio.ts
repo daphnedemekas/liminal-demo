@@ -1,8 +1,9 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 
 interface UseAudioReturn {
   isAudioMode: boolean
   isRecording: boolean
+  isPlaying: boolean
   toggleAudioMode: () => void
   startRecording: () => Promise<void>
   stopRecording: () => Promise<string | null>
@@ -12,10 +13,27 @@ interface UseAudioReturn {
 export function useAudio(): UseAudioReturn {
   const [isAudioMode, setIsAudioMode] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
+  const [isPlaying, setIsPlaying] = useState(false)
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
   const currentAudioRef = useRef<HTMLAudioElement | null>(null)
+
+  // Cleanup effect to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      // Cleanup on unmount
+      if (currentAudioRef.current) {
+        currentAudioRef.current.pause()
+        currentAudioRef.current.src = ''  // Clear source to release memory
+        currentAudioRef.current = null
+      }
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop()
+        mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop())
+      }
+    }
+  }, [])
 
   const toggleAudioMode = useCallback(() => {
     setIsAudioMode(prev => !prev)
@@ -88,20 +106,28 @@ export function useAudio(): UseAudioReturn {
       const audio = new Audio(audioUrl)
       currentAudioRef.current = audio
 
+      setIsPlaying(true)
       await audio.play()
 
       // Clean up after playback
       audio.onended = () => {
         currentAudioRef.current = null
+        setIsPlaying(false)
+      }
+
+      audio.onerror = () => {
+        setIsPlaying(false)
       }
     } catch (error) {
       console.error('Error playing audio:', error)
+      setIsPlaying(false)
     }
   }, [])
 
   return {
     isAudioMode,
     isRecording,
+    isPlaying,
     toggleAudioMode,
     startRecording,
     stopRecording,

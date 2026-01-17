@@ -54,9 +54,10 @@ class ConversationSession(Base):
     started_at = Column(DateTime, default=datetime.utcnow)
     ended_at = Column(DateTime, nullable=True)
 
-    # Session type: 'exploration' or 'goal'
+    # Session type: 'exploration', 'goal', or 'teaching'
     session_type = Column(String, default='exploration')
     goal_id = Column(Integer, ForeignKey('user_goals.id'), nullable=True)
+    teaching_candidate_id = Column(Integer, nullable=True)  # ID of teaching candidate for teaching sessions
 
     # Session state (JSON)
     schema_state = Column(JSON)  # Full JSON schema snapshot at end

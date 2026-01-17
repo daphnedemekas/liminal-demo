@@ -1,10 +1,13 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useWebSocket, Message } from '../hooks/useWebSocket'
 import { useAudio } from '../hooks/useAudio'
+import { useSpeechRecognition } from '../hooks/useSpeechRecognition'
 import { api } from '../services/api'
 import MessageBubble from './MessageBubble'
 import ProfilePanel from './ProfilePanel'
 import FeedPanel from './FeedPanel'
+import AudioToggle from './AudioToggle'
+import BreathingCircle from './BreathingCircle'
 import { ModelConfig } from './ModelSelector'
 
 interface TeachingCandidate {
@@ -42,7 +45,24 @@ export default function GoalChat({
   const initRef = useRef(false)
 
   const { messages, sendMessage, sendCommand, isConnected, status, addMessage, setMessages } = useWebSocket(actualSessionId || '', 'discovery')
-  const { isAudioMode, playAudio } = useAudio()
+  const { isAudioMode, isPlaying, toggleAudioMode, playAudio } = useAudio()
+  const {
+    isListening,
+    transcript,
+    startListening,
+    stopListening,
+    isSupported: isSpeechSupported,
+    resetTranscript,
+  } = useSpeechRecognition()
+
+  // handleSend must be defined before any useEffect that depends on it
+  const handleSend = useCallback((text?: string) => {
+    const messageText = text || inputText.trim()
+    if (!messageText || !isConnected) return
+
+    sendMessage(messageText)
+    setInputText('')
+  }, [inputText, isConnected, sendMessage])
 
   // Initialize or resume goal-specific session
   useEffect(() => {
@@ -82,30 +102,6 @@ export default function GoalChat({
           content: msg.content,
         }))
         setMessages(restoredMessages)
-        
-        // Refresh history after a short delay to catch any in-flight saves
-        // (handles race condition when navigating away during long processing)
-        setTimeout(async () => {
-          try {
-            const freshData = await api.startDiscoverySession(modelConfig, goal, userId, goalId)
-            if (freshData.conversation_history?.length > response.conversation_history.length) {
-              console.log('[GoalChat] Found newer history:', freshData.conversation_history.length, 'messages')
-              // Skip first user message (onboarding context)
-              let freshHistory = freshData.conversation_history
-              if (freshHistory.length > 0 && freshHistory[0].role === 'user') {
-                freshHistory = freshHistory.slice(1)
-              }
-              const freshMessages: Message[] = freshHistory.map((msg: any, idx: number) => ({
-                id: `restored-fresh-${idx}`,
-                role: msg.role as 'user' | 'assistant',
-                content: msg.content,
-              }))
-              setMessages(freshMessages)
-            }
-          } catch (err) {
-            console.error('[GoalChat] Failed to refresh history:', err)
-          }
-        }, 2000)  // Wait 2 seconds for any pending saves to complete
       } else if (response.opening_message && response.opening_message.trim()) {
         // New session - add opening message
         addMessage({
@@ -150,6 +146,114 @@ export default function GoalChat({
     }
   }, [messages, onTeachingCandidateAccepted])
 
+  // Track if we've played audio for the current last message
+  const [lastPlayedMessageId, setLastPlayedMessageId] = useState<string | null>(null)
+  // Track when audio finished to add delay before recording
+  const [audioEndTime, setAudioEndTime] = useState<number>(0)
+
+  // Stop recording IMMEDIATELY when audio is about to play
+  useEffect(() => {
+    if (isPlaying && isListening) {
+      console.log('[Voice] Stopping recording - audio playing')
+      stopListening()
+    }
+  }, [isPlaying, isListening, stopListening])
+
+  // Track when audio ends
+  useEffect(() => {
+    if (!isPlaying && lastPlayedMessageId) {
+      setAudioEndTime(Date.now())
+    }
+  }, [isPlaying, lastPlayedMessageId])
+
+  // Auto-play TTS when AI responds in voice mode (ElevenLabs)
+  useEffect(() => {
+    const lastMessage = messages[messages.length - 1]
+    if (isAudioMode && lastMessage?.role === 'assistant' && lastMessage?.audio_url && !isPlaying && lastMessage.id !== lastPlayedMessageId) {
+      console.log('[Voice] Auto-playing audio for message:', lastMessage.id)
+      // Stop any recording before playing
+      if (isListening) {
+        stopListening()
+      }
+      setLastPlayedMessageId(lastMessage.id)
+      const timer = setTimeout(() => {
+        playAudio(lastMessage.audio_url!)
+      }, 200)
+      return () => clearTimeout(timer)
+    }
+  }, [messages, isAudioMode, isPlaying, playAudio, lastPlayedMessageId, isListening, stopListening])
+
+  // Stop recording when processing starts
+  useEffect(() => {
+    if (status && isListening) {
+      console.log('[Voice] Stopping recording - processing started')
+      stopListening()
+    }
+  }, [status, isListening, stopListening])
+
+  // Auto-start recording when AI finishes speaking in voice mode
+  useEffect(() => {
+    const lastMessage = messages[messages.length - 1]
+    // Don't auto-start recording if:
+    // 1. There's pending audio that hasn't been played yet
+    // 2. Audio is currently playing
+    // 3. We're processing a response (status is set)
+    // 4. No messages yet (waiting for opening)
+    // 5. Audio ended too recently (give 1.5s buffer to avoid echo)
+    const hasPendingAudio = lastMessage?.role === 'assistant' && lastMessage?.audio_url && lastMessage.id !== lastPlayedMessageId
+    const isProcessing = !!status
+    const hasNoMessages = messages.length === 0
+    const timeSinceAudioEnd = Date.now() - audioEndTime
+    const audioJustEnded = audioEndTime > 0 && timeSinceAudioEnd < 1500
+    
+    if (isAudioMode && !isPlaying && !isListening && isSpeechSupported && !hasPendingAudio && !isProcessing && !hasNoMessages && !audioJustEnded) {
+      const timer = setTimeout(() => {
+        if (!isPlaying) {
+          console.log('[Voice] Starting recording after audio finished')
+          startListening()
+        }
+      }, 500)
+      return () => clearTimeout(timer)
+    }
+    
+    // If audio just ended, schedule a check for when the delay is over
+    if (isAudioMode && !isPlaying && !isListening && isSpeechSupported && !hasPendingAudio && !isProcessing && !hasNoMessages && audioJustEnded) {
+      const remainingDelay = 1500 - timeSinceAudioEnd + 100
+      const timer = setTimeout(() => {
+        if (!isPlaying) {
+          console.log('[Voice] Starting recording after audio delay')
+          startListening()
+        }
+      }, remainingDelay)
+      return () => clearTimeout(timer)
+    }
+  }, [isPlaying, isAudioMode, isListening, isSpeechSupported, startListening, messages, lastPlayedMessageId, status, audioEndTime])
+
+  // Handle spacebar to stop recording and send
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't intercept if user is typing in an input/textarea
+      const target = e.target as HTMLElement
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        return
+      }
+
+      if (e.code === 'Space' && isListening && isAudioMode) {
+        e.preventDefault()
+        stopListening()
+
+        // Send the transcript after stopping
+        if (transcript && transcript.trim()) {
+          handleSend(transcript)
+          resetTranscript()
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isListening, isAudioMode, stopListening, transcript, handleSend, resetTranscript])
+
   // Check for teaching candidate proposed
   const lastTeachingProposedIndex = messages.findLastIndex(m => m.type === 'teaching_proposed')
   const lastTeachingPanelIndex = messages.findLastIndex(m => m.type === 'create_teaching_panel' || m.type === 'teaching_accepted')
@@ -174,14 +278,6 @@ export default function GoalChat({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  const handleSend = () => {
-    const messageText = inputText.trim()
-    if (!messageText || !isConnected) return
-
-    sendMessage(messageText)
-    setInputText('')
-  }
-
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
@@ -202,7 +298,32 @@ export default function GoalChat({
 
       <div className="goal-chat-layout">
         {/* Chat Area */}
-        <div className="goal-chat">
+        <div className="goal-chat" style={{ position: 'relative' }}>
+          {/* Voice Mode Overlay - covers the chat panel */}
+          <BreathingCircle 
+            isVisible={isAudioMode} 
+            isAISpeaking={isPlaying}
+            isUserRecording={isListening && !status}
+            isProcessing={!!status || messages.length === 0}
+            onTap={() => {
+              if (status || messages.length === 0) {
+                // Don't do anything while processing or waiting for opening
+                return
+              }
+              if (isListening) {
+                stopListening()
+                if (transcript && transcript.trim()) {
+                  handleSend(transcript)
+                  resetTranscript()
+                }
+              } else if (!isPlaying) {
+                startListening()
+              }
+            }}
+            onExit={toggleAudioMode}
+            statusText={isListening && !status ? transcript : undefined}
+          />
+
           {/* Goal Header */}
           <div className="goal-chat-header">
           <div className="goal-chat-title">
@@ -210,6 +331,7 @@ export default function GoalChat({
             <h2>{goal}</h2>
           </div>
           <div className="goal-chat-status">
+            <AudioToggle isAudioMode={isAudioMode} onToggle={toggleAudioMode} />
             {isResumed && <span className="resumed-badge">Resumed</span>}
             {status ? (
               <span className="status-indicator-small">
@@ -225,7 +347,7 @@ export default function GoalChat({
         </div>
 
         {/* Messages */}
-        <div className="goal-chat-messages">
+        <div className="goal-chat-messages" style={{ position: 'relative' }}>
           {messages.map((msg, index) => (
             <div key={msg.id}>
               <MessageBubble
@@ -279,27 +401,29 @@ export default function GoalChat({
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input */}
-        <div className="goal-chat-input">
-          <div className="text-input-container">
-            <input
-              type="text"
-              className="text-input"
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="Continue exploring this goal..."
-              disabled={!isConnected}
-            />
-            <button
-              className="send-button"
-              onClick={handleSend}
-              disabled={!inputText.trim() || !isConnected}
-            >
-              Send
-            </button>
+        {/* Input - hidden in voice mode since overlay handles it */}
+        {!isAudioMode && (
+          <div className="goal-chat-input">
+            <div className="text-input-container">
+              <input
+                type="text"
+                className="text-input"
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                onKeyPress={handleKeyPress}
+                placeholder="Continue exploring this goal..."
+                disabled={!isConnected}
+              />
+              <button
+                className="send-button"
+                onClick={() => handleSend()}
+                disabled={!inputText.trim() || !isConnected}
+              >
+                Send
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
         {/* Profile Panel */}

@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import ReactMarkdown from 'react-markdown'
 
 interface MessageBubbleProps {
   role: 'user' | 'assistant'
@@ -24,7 +25,9 @@ export default function MessageBubble({
 
   return (
     <div className={`message-bubble ${role}`}>
-      <div className="message-content">{content}</div>
+      <div className="message-content">
+        <ReactMarkdown>{content}</ReactMarkdown>
+      </div>
     </div>
   )
 }

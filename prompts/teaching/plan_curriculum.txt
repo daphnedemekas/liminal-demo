@@ -1,0 +1,122 @@
+You are designing a curriculum plan for teaching a specific topic.
+
+CONTEXT:
+- Learning Goal: {goal_text}
+- Teaching Topic: {topic}
+- Focus Question: {focus_question}
+- Identified Gap: {identified_gap}
+- User's Current Understanding: {current_model_summary}
+- Why This Matters to Them: {stakes_summary}
+- User Background: {user_background}
+
+PRIOR CONVERSATION CONTEXT (from goal discovery):
+{goal_conversation_summary}
+
+TASK: Create a structured curriculum plan with 3-7 steps that will help the user understand this topic.
+
+CURRICULUM DESIGN PRINCIPLES:
+
+1. START WHERE THEY ARE
+   - Don't assume knowledge they don't have
+   - Build on what they already understand
+   - Check prerequisites before diving in
+
+2. PROGRESSIVE COMPLEXITY
+   - Begin with concrete, accessible concepts
+   - Build toward abstraction
+   - Each step should scaffold the next
+
+3. MULTIPLE REPRESENTATIONS
+   - Plan for analogies, examples, and visualizations
+   - Different angles on the same concept help it stick
+   - Let them see it from multiple perspectives
+
+4. ACTIVE ENGAGEMENT
+   - Include quick checks (not quizzes - calibration questions)
+   - Plan for self-explanation opportunities
+   - Design transfer moments to apply knowledge
+
+5. ADAPTIVE STRUCTURE
+   - Plan can be adjusted based on progress
+   - Some steps may be skipped if they already get it
+   - New steps may be inserted if gaps appear
+
+STEP STRUCTURE:
+
+Each curriculum step should have:
+- objective: What the user will understand after this step (1 sentence)
+- explanation_approach: How to teach it (analogy, example, mechanism, visual, etc.)
+- quick_check: A question to verify understanding (recognition, not recall)
+- marker_targets: Which understanding markers this step aims to develop
+- prerequisites: IDs of steps that must come first (empty for first step)
+
+MARKER OPTIONS (choose 1-3 per step):
+- recall, explanation, application, analysis
+- transfer, analogy_generation, connection_making, problem_decomposition
+- self_explanation, error_detection, metacognitive_awareness, confidence_calibration
+- limitation_awareness, prediction, counterfactual_reasoning, question_generation
+- teaching_ability, intuitive_grasp
+
+EXAMPLE CURRICULUM PLAN:
+
+Topic: "How backpropagation calculates gradients"
+
+Step 1: The chain rule foundation
+- objective: Understand why we need the chain rule for nested functions
+- explanation_approach: Visual example with nested boxes + simple numerical chain
+- quick_check: "If f(g(x)) changes, and g changes twice as fast as x, how does f change with x?"
+- marker_targets: ["recall", "connection_making"]
+- prerequisites: []
+
+Step 2: Forward pass as information flow
+- objective: See the neural network as a chain of transformations
+- explanation_approach: Trace a single input through a tiny network with actual numbers
+- quick_check: "If I double this input, what happens to the output?"
+- marker_targets: ["explanation", "prediction"]
+- prerequisites: [1]
+
+Step 3: Backward pass as blame assignment
+- objective: Understand gradients as "credit/blame" flowing backward
+- explanation_approach: Analogy of tracing why a group project failed back to who did what
+- quick_check: "If the final error is high, which weight gets more 'blame'?"
+- marker_targets: ["analogy_generation", "intuitive_grasp"]
+- prerequisites: [2]
+
+OUTPUT FORMAT (JSON):
+
+Return ONLY valid JSON with this structure:
+{{
+  "topic": "{topic}",
+  "goal_text": "{goal_text}",
+  "total_steps": 4,
+  "steps": [
+    {{
+      "id": 1,
+      "objective": "...",
+      "explanation_approach": "...",
+      "quick_check": "...",
+      "marker_targets": ["recall", "connection_making"],
+      "prerequisites": [],
+      "status": "not_started",
+      "turns_spent": 0,
+      "notes": ""
+    }},
+    ...
+  ],
+  "current_step_id": 1,
+  "completed_step_ids": [],
+  "created_at_turn": {turns_elapsed},
+  "last_modified_turn": {turns_elapsed},
+  "adaptations_made": 0,
+  "adaptation_history": []
+}}
+
+CRITICAL RULES:
+1. 3-7 steps maximum - this is a focused teaching moment, not a course
+2. Steps should be achievable in 2-5 turns of conversation each
+3. Prerequisites must reference earlier step IDs (or empty for first step)
+4. marker_targets should be 1-3 markers per step
+5. quick_check should be recognition-based, not demanding recall from scratch
+6. Return ONLY valid JSON - no explanatory text before or after
+
+IMPORTANT: Return ONLY valid JSON - no markdown code blocks.

@@ -3,8 +3,8 @@ import os
 from typing import Optional
 from pathlib import Path
 import tempfile
+import uuid
 from elevenlabs.client import ElevenLabs
-from elevenlabs import save
 
 
 class AudioService:
@@ -13,13 +13,16 @@ class AudioService:
     def __init__(self, api_key: Optional[str] = None, voice_id: Optional[str] = None):
         self.api_key = api_key or os.getenv("ELEVENLABS_API_KEY")
         if not self.api_key:
+            print("[Audio] WARNING: ELEVENLABS_API_KEY not found in environment!")
+            print(f"[Audio] Available env vars: {[k for k in os.environ.keys() if 'ELEVEN' in k.upper()]}")
             raise ValueError("ELEVENLABS_API_KEY not found in environment")
 
+        print(f"[Audio] ElevenLabs API key loaded: {self.api_key[:10]}...")
         self.client = ElevenLabs(api_key=self.api_key)
 
         # Default to a natural conversational voice
         # You can change this to any ElevenLabs voice ID
-        self.voice_id = voice_id or "21m00Tcm4TlvDq8ikWAM"  # Rachel voice
+        self.voice_id = voice_id or "c4NIULtANlpduSDihsKJ"  # Custom voice
         self.model = "eleven_turbo_v2"  # Fast model for real-time feel
 
         # Directory to store temporary audio files
@@ -36,24 +39,34 @@ class AudioService:
         Returns:
             Path to the audio file
         """
+        print(f"[Audio] TTS called with {len(text)} chars: {text[:50]}...")
         try:
-            # Generate audio
-            audio = self.client.generate(
+            # Generate audio using the new SDK API
+            print(f"[Audio] Calling ElevenLabs API with voice_id={self.voice_id}, model={self.model}")
+            audio_generator = self.client.text_to_speech.convert(
                 text=text,
-                voice=self.voice_id,
-                model=self.model
+                voice_id=self.voice_id,
+                model_id=self.model,
+                output_format="mp3_44100_128"
             )
 
             # Save to temporary file
-            timestamp = int(Path(tempfile.mktemp()).name.split('tmp')[-1] or 0)
-            audio_path = self.audio_dir / f"audio_{timestamp}.mp3"
-
-            save(audio, str(audio_path))
-
+            audio_path = self.audio_dir / f"audio_{uuid.uuid4().hex[:8]}.mp3"
+            
+            # Write audio chunks to file
+            bytes_written = 0
+            with open(audio_path, 'wb') as f:
+                for chunk in audio_generator:
+                    f.write(chunk)
+                    bytes_written += len(chunk)
+            
+            print(f"[Audio] TTS SUCCESS: {bytes_written} bytes written to {audio_path}")
             return audio_path
 
         except Exception as e:
-            print(f"Error generating audio: {e}")
+            print(f"[Audio] TTS ERROR: {e}")
+            import traceback
+            traceback.print_exc()
             raise
 
     def text_to_speech_stream(self, text: str):
@@ -67,11 +80,11 @@ class AudioService:
             Generator yielding audio chunks
         """
         try:
-            audio_stream = self.client.generate(
+            audio_stream = self.client.text_to_speech.convert(
                 text=text,
-                voice=self.voice_id,
-                model=self.model,
-                stream=True
+                voice_id=self.voice_id,
+                model_id=self.model,
+                output_format="mp3_44100_128"
             )
             return audio_stream
 

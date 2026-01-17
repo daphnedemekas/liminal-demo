@@ -6,11 +6,11 @@ interface AudioToggleProps {
 export default function AudioToggle({ isAudioMode, onToggle }: AudioToggleProps) {
   return (
     <button
-      className="audio-toggle"
+      className={`audio-mode-toggle ${isAudioMode ? 'active' : ''}`}
       onClick={onToggle}
-      aria-label={isAudioMode ? 'Switch to text' : 'Switch to audio'}
+      aria-label={isAudioMode ? 'Switch to text mode' : 'Switch to audio mode'}
     >
-      {isAudioMode ? '📝' : '🎤'}
+      {isAudioMode ? 'Text' : 'Audio'}
     </button>
   )
 }

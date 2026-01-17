@@ -21,7 +21,8 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
     setError(null)
 
     try {
-      const response = await fetch('http://localhost:8000/api/auth/login', {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const response = await fetch(`${apiUrl}/api/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { api } from '../services/api'
 
 interface FeedItem {
@@ -69,10 +69,30 @@ export default function FeedPanel({
     fetchFeed()
   }
 
+  // Auto-load feed on mount (only once)
+  useEffect(() => {
+    if (!hasEverLoaded && !loading) {
+      fetchFeed()
+    }
+  }, [hasEverLoaded, loading, fetchFeed])
+
+  // Auto-refresh when context changes (goal/teaching panel switches)
+  useEffect(() => {
+    // Auto-refresh when context changes significantly (goal text, teaching topic)
+    // This triggers when the user switches panels or a new goal/teaching is created
+    if (hasEverLoaded && !loading) {
+      // Add a small delay to let the conversation context update
+      const timer = setTimeout(() => {
+        fetchFeed()
+      }, 2000)
+      return () => clearTimeout(timer)
+    }
+  }, [goalText, teachingTopic, goalId, teachingCandidateId])
+
   const getContextLabel = () => {
     switch (contextType) {
       case 'exploration':
-        return 'Explore & Learn'
+        return 'Feed'
       case 'goal':
         return goalText ? `About: ${goalText.slice(0, 40)}...` : 'Learning Goal'
       case 'teaching_candidate':
@@ -87,7 +107,7 @@ export default function FeedPanel({
     return (
       <div className="feed-panel">
         <div className="feed-header">
-          <h3>📚 {getContextLabel()}</h3>
+          <h3>{getContextLabel()}</h3>
         </div>
         <div className="feed-loading">
           <div className="feed-loading-spinner" />
@@ -102,7 +122,7 @@ export default function FeedPanel({
     return (
       <div className="feed-panel">
         <div className="feed-header">
-          <h3>📚 {getContextLabel()}</h3>
+          <h3>{getContextLabel()}</h3>
         </div>
         <div className="feed-error">
           <p>{error}</p>
@@ -119,7 +139,7 @@ export default function FeedPanel({
     return (
       <div className="feed-panel">
         <div className="feed-header">
-          <h3>📚 {getContextLabel()}</h3>
+          <h3>{getContextLabel()}</h3>
         </div>
         <div className="feed-empty">
           <p>Get personalized content based on your conversation.</p>
@@ -135,7 +155,7 @@ export default function FeedPanel({
   return (
     <div className="feed-panel">
       <div className="feed-header">
-        <h3>📚 {getContextLabel()}</h3>
+        <h3>{getContextLabel()}</h3>
         <div className="feed-header-actions">
           {justGenerated && (
             <span className="feed-new-badge">New</span>

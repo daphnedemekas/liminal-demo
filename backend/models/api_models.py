@@ -43,15 +43,3 @@ class TopicFoundResponse(BaseModel):
     learning_hook: str
     suggested_angles: List[str]
     scores: dict
-
-
-class LearningStartRequest(BaseModel):
-    """Request to start the learning phase."""
-    session_id: str
-
-
-class LearningStartResponse(BaseModel):
-    """Response when starting learning phase."""
-    opening_message: str
-    audio_url: Optional[str] = None
-    state: Literal["assess", "identify", "explain"]

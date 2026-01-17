@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 from typing import Optional, Dict
 from datetime import datetime
+import asyncio
 
 # Add parent directory to path to import from src
 sys.path.append(str(Path(__file__).parent.parent.parent))
@@ -29,6 +30,7 @@ class SessionData:
         self.discovery_session: Optional[DiscoveryOrchestrator] = None
         self.final_topic: Optional[FinalTopic] = None
         self.learning_conversation: list = []
+        self.learning_engine: Optional[object] = None  # LearningEngine instance
         self.learning_state: str = "not_started"  # not_started, assess, identify, explain, complete
         self.created_at: datetime = datetime.now()
         self.last_activity: datetime = datetime.now()
@@ -39,50 +41,59 @@ class SessionManager:
 
     def __init__(self):
         self.sessions: Dict[str, SessionData] = {}
+        self._locks: Dict[str, asyncio.Lock] = {}  # Per-session locks for thread safety
 
-    def create_session(
-        self, 
-        session_id: str, 
-        debug: bool = False, 
-        model_config: Optional[Dict] = None, 
+    def _get_lock(self, session_id: str) -> asyncio.Lock:
+        """Get or create a lock for the given session_id."""
+        if session_id not in self._locks:
+            self._locks[session_id] = asyncio.Lock()
+        return self._locks[session_id]
+
+    async def create_session(
+        self,
+        session_id: str,
+        debug: bool = False,
+        model_config: Optional[Dict] = None,
         user_goal: Optional[str] = None,
         user_id: Optional[str] = None,
         conversation_history: Optional[list] = None,
         schema_state: Optional[dict] = None
     ) -> SessionData:
         """Initialize new discovery session or resume existing one."""
-        session_data = SessionData(session_id)
-        
-        # Pass all parameters to orchestrator
-        session_data.discovery_session = DiscoveryOrchestrator(
-            user_id=user_id or session_id,
-            model_config=model_config,
-            user_goal=user_goal,
-            session_id=session_id,  # Always pass session_id - database ID is source of truth
-            conversation_history=conversation_history,
-            schema_state=schema_state
-        )
-        
-        # Store goal in schema if provided (for new sessions without restored state)
-        if user_goal and not schema_state:
-            session_data.discovery_session.schema.interview_state.user_goal = user_goal
-            session_data.discovery_session.schema.interview_state.goal_provided = True
-            session_data.discovery_session.schema.interview_state.goal_identified = True  # Goal upfront = already identified
-            print(f"[SessionManager] User goal set: {user_goal}")
+        async with self._get_lock(session_id):
+            session_data = SessionData(session_id)
 
-        self.sessions[session_id] = session_data
-        return session_data
+            # Pass all parameters to orchestrator
+            session_data.discovery_session = DiscoveryOrchestrator(
+                user_id=user_id or session_id,
+                model_config=model_config,
+                user_goal=user_goal,
+                session_id=session_id,  # Always pass session_id - database ID is source of truth
+                conversation_history=conversation_history,
+                schema_state=schema_state
+            )
 
-    def get_session(self, session_id: str) -> Optional[SessionData]:
+            # Store goal in schema if provided (for new sessions without restored state)
+            if user_goal and not schema_state:
+                session_data.discovery_session.schema.interview_state.user_goal = user_goal
+                session_data.discovery_session.schema.interview_state.goal_provided = True
+                session_data.discovery_session.schema.interview_state.goal_identified = True  # Goal upfront = already identified
+                print(f"[SessionManager] User goal set: {user_goal}")
+
+            self.sessions[session_id] = session_data
+            return session_data
+
+    async def get_session(self, session_id: str) -> Optional[SessionData]:
         """Retrieve existing session."""
-        session_data = self.sessions.get(session_id)
-        if session_data:
-            session_data.last_activity = datetime.now()
-        return session_data
+        async with self._get_lock(session_id):
+            session_data = self.sessions.get(session_id)
+            if session_data:
+                session_data.last_activity = datetime.now()
+            return session_data
 
-    def save_final_topic(self, session_id: str, topic: FinalTopic):
+    async def save_final_topic(self, session_id: str, topic: FinalTopic):
         """Store discovered topic for learning phase."""
-        session_data = self.get_session(session_id)
+        session_data = await self.get_session(session_id)
         if session_data:
             session_data.final_topic = topic
             session_data.learning_state = "ready"

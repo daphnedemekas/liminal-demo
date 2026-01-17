@@ -1,43 +1,51 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useWebSocket } from '../hooks/useWebSocket'
 import { useAudio } from '../hooks/useAudio'
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition'
 import { api } from '../services/api'
 import MessageBubble from './MessageBubble'
 import AudioToggle from './AudioToggle'
+import BreathingCircle from './BreathingCircle'
 import ProfilePanel from './ProfilePanel'
 import FeedPanel from './FeedPanel'
 import { ModelConfig } from './ModelSelector'
 
 interface DiscoveryChatProps {
-  sessionId: string
   modelConfig: ModelConfig
   onboardingInfo: string
-  userGoal?: string
   userId?: string  // For persistent sessions
   onTopicFound: (topic: any) => void
   onGoalAccepted?: (goal: string, sessionId: string) => void
 }
 
-export default function DiscoveryChat({ sessionId: _initialSessionId, modelConfig, onboardingInfo, userGoal, userId, onTopicFound, onGoalAccepted }: DiscoveryChatProps) {
+export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onTopicFound, onGoalAccepted }: DiscoveryChatProps) {
   const [inputText, setInputText] = useState('')
   const [actualSessionId, setActualSessionId] = useState<string | null>(null)
   const [onboardingSent, setOnboardingSent] = useState(false)
-  const [isResumed, setIsResumed] = useState(false)
   const [profileSummary, setProfileSummary] = useState<string | undefined>(undefined)
   const [queuedOpening, setQueuedOpening] = useState<{ content: string; audio_url?: string } | null>(null)
   const initRef = useRef(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const { messages, sendMessage, sendCommand, isConnected, status, addMessage, setMessages } = useWebSocket(actualSessionId || '', 'discovery')
-  const { isAudioMode, toggleAudioMode, playAudio } = useAudio()
+  const { isAudioMode, isPlaying, toggleAudioMode, playAudio } = useAudio()
   const {
     isListening,
     transcript,
     startListening,
     stopListening,
     isSupported: isSpeechSupported,
+    resetTranscript,
   } = useSpeechRecognition()
+
+  // handleSend must be defined before any useEffect that depends on it
+  const handleSend = useCallback((text?: string) => {
+    const messageText = text || inputText.trim()
+    if (!messageText || !isConnected) return
+
+    sendMessage(messageText)
+    setInputText('')
+  }, [inputText, isConnected, sendMessage])
 
   // Initialize session and get opening message
   useEffect(() => {
@@ -60,8 +68,7 @@ export default function DiscoveryChat({ sessionId: _initialSessionId, modelConfi
         history_length: response.conversation_history?.length || 0
       })
       setActualSessionId(response.session_id)
-      setIsResumed(response.is_resumed)
-      
+
       // Load profile summary if available
       if (response.profile_summary) {
         setProfileSummary(response.profile_summary)
@@ -84,30 +91,6 @@ export default function DiscoveryChat({ sessionId: _initialSessionId, modelConfi
         setMessages(restoredMessages)
         setOnboardingSent(true)  // Don't re-send onboarding for resumed sessions
         setQueuedOpening({ content: '', audio_url: undefined })  // No need for opening
-        
-        // Refresh history after a short delay to catch any in-flight saves
-        // (handles race condition when navigating away during long processing)
-        setTimeout(async () => {
-          try {
-            const freshData = await api.startDiscoverySession(modelConfig, undefined, userId)
-            if (freshData.conversation_history?.length > response.conversation_history.length) {
-              console.log('[DiscoveryChat] Found newer history:', freshData.conversation_history.length, 'messages')
-              // Skip first user message (onboarding context)
-              let freshHistory = freshData.conversation_history
-              if (freshHistory.length > 0 && freshHistory[0].role === 'user') {
-                freshHistory = freshHistory.slice(1)
-              }
-              const freshMessages = freshHistory.map((msg: any, idx: number) => ({
-                id: `restored-fresh-${idx}`,
-                role: msg.role as 'user' | 'assistant',
-                content: msg.content,
-              }))
-              setMessages(freshMessages)
-            }
-          } catch (err) {
-            console.error('[DiscoveryChat] Failed to refresh history:', err)
-          }
-        }, 2000)  // Wait 2 seconds for any pending saves to complete
       } else if (response.opening_message && response.opening_message.trim()) {
         // New session with opening message
         setQueuedOpening({
@@ -164,7 +147,7 @@ export default function DiscoveryChat({ sessionId: _initialSessionId, modelConfi
         }
       }, 100)
     }
-  }, [isConnected, onboardingInfo, onboardingSent, queuedOpening, sendMessage, addMessage, isAudioMode, playAudio, actualSessionId])
+  }, [isConnected, onboardingInfo, onboardingSent, queuedOpening, sendCommand, sendMessage, addMessage, isAudioMode, playAudio, actualSessionId])
 
   // Check for topic found
   useEffect(() => {
@@ -182,6 +165,113 @@ export default function DiscoveryChat({ sessionId: _initialSessionId, modelConfi
       onGoalAccepted(lastMessage.goalData.goal, actualSessionId)
     }
   }, [messages, onGoalAccepted, actualSessionId])
+
+  // Track if we've played audio for the current last message
+  const [lastPlayedMessageId, setLastPlayedMessageId] = useState<string | null>(null)
+  // Track when audio finished to add delay before recording
+  const [audioEndTime, setAudioEndTime] = useState<number>(0)
+  
+  // Stop recording IMMEDIATELY when audio is about to play
+  useEffect(() => {
+    if (isPlaying && isListening) {
+      console.log('[Voice] Stopping recording - audio playing')
+      stopListening()
+    }
+  }, [isPlaying, isListening, stopListening])
+
+  // Track when audio ends
+  useEffect(() => {
+    if (!isPlaying && lastPlayedMessageId) {
+      setAudioEndTime(Date.now())
+    }
+  }, [isPlaying, lastPlayedMessageId])
+  
+  // Auto-play TTS when AI responds in voice mode (ElevenLabs)
+  useEffect(() => {
+    const lastMessage = messages[messages.length - 1]
+    if (isAudioMode && lastMessage?.role === 'assistant' && lastMessage?.audio_url && !isPlaying && lastMessage.id !== lastPlayedMessageId) {
+      console.log('[Voice] Auto-playing audio for message:', lastMessage.id)
+      // Stop any recording before playing
+      if (isListening) {
+        stopListening()
+      }
+      setLastPlayedMessageId(lastMessage.id)
+      const timer = setTimeout(() => {
+        playAudio(lastMessage.audio_url!)
+      }, 200)
+      return () => clearTimeout(timer)
+    }
+  }, [messages, isAudioMode, isPlaying, playAudio, lastPlayedMessageId, isListening, stopListening])
+
+  // Stop recording when processing starts
+  useEffect(() => {
+    if (status && isListening) {
+      console.log('[Voice] Stopping recording - processing started')
+      stopListening()
+    }
+  }, [status, isListening, stopListening])
+
+  // Auto-start recording when AI finishes speaking in voice mode
+  useEffect(() => {
+    const lastMessage = messages[messages.length - 1]
+    // Don't auto-start recording if:
+    // 1. There's pending audio that hasn't been played yet
+    // 2. Audio is currently playing
+    // 3. We're processing a response (status is set)
+    // 4. Audio ended too recently (give 1.5s buffer to avoid echo)
+    const hasPendingAudio = lastMessage?.role === 'assistant' && lastMessage?.audio_url && lastMessage.id !== lastPlayedMessageId
+    const isProcessing = !!status
+    const timeSinceAudioEnd = Date.now() - audioEndTime
+    const audioJustEnded = audioEndTime > 0 && timeSinceAudioEnd < 1500
+    
+    if (isAudioMode && !isPlaying && !isListening && isSpeechSupported && !hasPendingAudio && !isProcessing && !audioJustEnded) {
+      const timer = setTimeout(() => {
+        // Double-check we're still not playing
+        if (!isPlaying) {
+          console.log('[Voice] Starting recording after audio finished')
+          startListening()
+        }
+      }, 500)
+      return () => clearTimeout(timer)
+    }
+    
+    // If audio just ended, schedule a check for when the delay is over
+    if (isAudioMode && !isPlaying && !isListening && isSpeechSupported && !hasPendingAudio && !isProcessing && audioJustEnded) {
+      const remainingDelay = 1500 - timeSinceAudioEnd + 100
+      const timer = setTimeout(() => {
+        if (!isPlaying) {
+          console.log('[Voice] Starting recording after audio delay')
+          startListening()
+        }
+      }, remainingDelay)
+      return () => clearTimeout(timer)
+    }
+  }, [isPlaying, isAudioMode, isListening, isSpeechSupported, startListening, messages, lastPlayedMessageId, status, audioEndTime])
+
+  // Handle spacebar to stop recording and send
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't intercept if user is typing in an input/textarea
+      const target = e.target as HTMLElement
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        return
+      }
+
+      if (e.code === 'Space' && isListening && isAudioMode) {
+        e.preventDefault()
+        stopListening()
+
+        // Send the transcript after stopping
+        if (transcript && transcript.trim()) {
+          handleSend(transcript)
+          resetTranscript()
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isListening, isAudioMode, stopListening, transcript, handleSend, resetTranscript])
 
   // Helper to find last index (since findLastIndex may not be available)
   const findLastIdx = (arr: any[], predicate: (item: any) => boolean): number => {
@@ -246,38 +336,15 @@ export default function DiscoveryChat({ sessionId: _initialSessionId, modelConfi
     sendMessage("Suggest something completely different to explore - look at my background and interests for a topic that's unrelated to the goals I've already accepted. I want diverse learning areas, not variations of the same theme.")
   }
 
-  // Handle speech recognition transcript
-  useEffect(() => {
-    if (transcript && !isListening) {
-      handleSend(transcript)
-    }
-  }, [transcript, isListening])
-
   // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  const handleSend = (text?: string) => {
-    const messageText = text || inputText.trim()
-    if (!messageText || !isConnected) return
-
-    sendMessage(messageText)
-    setInputText('')
-  }
-
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSend()
-    }
-  }
-
-  const handleMicClick = () => {
-    if (isListening) {
-      stopListening()
-    } else {
-      startListening()
     }
   }
 
@@ -301,10 +368,36 @@ export default function DiscoveryChat({ sessionId: _initialSessionId, modelConfi
 
       <div className="discovery-layout">
         {/* Chat Area */}
-        <div className="chat-container">
+        <div className="chat-container" style={{ position: 'relative' }}>
           <AudioToggle isAudioMode={isAudioMode} onToggle={toggleAudioMode} />
 
-        <div className="messages">
+          {/* Voice Mode Overlay - covers the chat panel */}
+          <BreathingCircle 
+            isVisible={isAudioMode} 
+            isAISpeaking={isPlaying}
+            isUserRecording={isListening && !status}
+            isProcessing={!!status}
+            onTap={() => {
+              if (status) {
+                // Don't do anything while processing
+                return
+              }
+              if (isListening) {
+                stopListening()
+                if (transcript && transcript.trim()) {
+                  handleSend(transcript)
+                  resetTranscript()
+                }
+              } else if (!isPlaying) {
+                startListening()
+              }
+            }}
+            onExit={toggleAudioMode}
+            statusText={isListening ? transcript : undefined}
+          />
+
+        <div className="messages" style={{ position: 'relative' }}>
+
           {/* All messages in unified array */}
           {messages.map((msg, index) => (
             <div key={msg.id}>
@@ -380,17 +473,9 @@ export default function DiscoveryChat({ sessionId: _initialSessionId, modelConfi
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input area */}
-        <div className="input-area">
-          {isAudioMode && isSpeechSupported ? (
-            <button
-              className={`mic-button ${isListening ? 'listening' : ''}`}
-              onMouseDown={handleMicClick}
-              disabled={!isConnected}
-            >
-              {isListening ? 'Listening...' : 'Hold to Speak'}
-            </button>
-          ) : (
+        {/* Input area - hidden in voice mode since overlay handles it */}
+        {!isAudioMode && (
+          <div className="input-area">
             <div className="text-input-container">
               <input
                 type="text"
@@ -409,8 +494,8 @@ export default function DiscoveryChat({ sessionId: _initialSessionId, modelConfi
                 Send
               </button>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
         {/* Profile Panel */}
@@ -418,6 +503,11 @@ export default function DiscoveryChat({ sessionId: _initialSessionId, modelConfi
           sessionId={actualSessionId} 
           isConnected={isConnected} 
           initialSummary={profileSummary}
+          onGoalSelected={onGoalAccepted ? (goalText) => {
+            if (actualSessionId) {
+              onGoalAccepted(goalText, actualSessionId)
+            }
+          } : undefined}
         />
       </div>
     </div>

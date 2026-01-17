@@ -71,7 +71,7 @@ debug:
 audio:
   elevenlabs:
     api_key_env: "ELEVENLABS_API_KEY"
-    voice_id: "21m00Tcm4TlvDq8ikWAM"  # Rachel voice (natural, conversational)
+    voice_id: "c4NIULtANlpduSDihsKJ"  # Custom voice
     model: "eleven_turbo_v2"  # Fast model for real-time feel
   speech_recognition:
     method: "browser"  # Use browser Web Speech API (free, instant)

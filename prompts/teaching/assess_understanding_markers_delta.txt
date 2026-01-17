@@ -1,0 +1,132 @@
+You are assessing the user's understanding based on recent conversation.
+
+CURRENT UNDERSTANDING MARKERS:
+{understanding_markers}
+
+CURRICULUM CONTEXT:
+- Topic: {topic}
+- Current Step: {current_step}
+- Current Step Objective: {current_step_objective}
+
+RECENT CONVERSATION (last 4-6 messages):
+{conversation}
+
+USER'S LAST MESSAGE:
+{user_message}
+
+TASK: Update understanding marker assessments based on evidence in the conversation.
+
+MARKER LEVELS:
+- NOT_YET: No evidence of this type of understanding
+- DEVELOPING: Some evidence, but incomplete or inconsistent
+- STRONG: Clear, consistent evidence of this understanding
+
+WHAT CONSTITUTES EVIDENCE:
+
+For RECALL:
+- Can state key facts/terms correctly
+- NOT just repeating what was just said
+
+For EXPLANATION:
+- Explains in their own words (not verbatim repeat)
+- Shows reorganization of information
+- Uses their own examples
+
+For APPLICATION:
+- Correctly uses concept in familiar context
+- Can follow procedure with new inputs
+
+For ANALYSIS:
+- Identifies component parts
+- Explains relationships between parts
+- Spots patterns
+
+For TRANSFER:
+- Applies to genuinely new domain
+- Makes valid cross-domain connections
+
+For ANALOGY_GENERATION:
+- Creates relevant analogies (not just uses given ones)
+- Analogies are structurally sound
+
+For CONNECTION_MAKING:
+- Links to prior knowledge
+- Sees how concept fits in larger picture
+
+For PROBLEM_DECOMPOSITION:
+- Breaks complex problem into parts
+- Identifies which parts to tackle first
+
+For SELF_EXPLANATION:
+- Articulates their reasoning process
+- Can explain why, not just what
+
+For ERROR_DETECTION:
+- Catches mistakes (own or presented)
+- Can explain why something is wrong
+
+For METACOGNITIVE_AWARENESS:
+- Knows what they don't understand
+- Can identify their confusion points
+
+For CONFIDENCE_CALIBRATION:
+- Expresses appropriate uncertainty
+- Doesn't claim to know what they don't
+
+For LIMITATION_AWARENESS:
+- Knows when concept doesn't apply
+- Can identify edge cases
+
+For PREDICTION:
+- Anticipates outcomes correctly
+- Can reason about what will happen
+
+For COUNTERFACTUAL_REASONING:
+- Reasons about "what if" scenarios
+- Can trace implications of changes
+
+For QUESTION_GENERATION:
+- Asks meaningful questions
+- Questions show engagement with concept
+
+For TEACHING_ABILITY:
+- Could explain to someone else
+- Clear, well-organized explanation
+
+For INTUITIVE_GRASP:
+- Quick, automatic responses
+- Concepts feel "obvious" to them now
+
+OUTPUT FORMAT (JSON):
+
+Return a delta update - only include markers that have new evidence:
+{{
+  "marker_updates": [
+    {{
+      "id": "explanation",
+      "new_level": "developing",
+      "evidence": ["When they said 'So it's like X because Y'"],
+      "notes": "Starting to reformulate but still shaky"
+    }},
+    {{
+      "id": "question_generation",
+      "new_level": "strong",
+      "evidence": ["Asked 'But what happens when Z?'"],
+      "notes": "Good probing question showing engagement"
+    }}
+  ],
+  "overall_assessment": "Brief 1-2 sentence summary of current understanding state",
+  "concerning_gaps": ["List any worrying gaps that need attention"],
+  "strengths": ["List demonstrated strengths"]
+}}
+
+CRITICAL RULES:
+
+1. ONLY update markers where you see NEW evidence in this exchange
+2. Don't downgrade markers without clear counter-evidence
+3. Be conservative - "developing" is appropriate when evidence is partial
+4. Quote actual user language as evidence
+5. Empty marker_updates array is valid if no new evidence
+6. Return ONLY valid JSON - no explanatory text
+
+IMPORTANT: Return ONLY valid JSON - no markdown code blocks.

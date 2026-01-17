@@ -24,6 +24,8 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
   const [onboardingSent, setOnboardingSent] = useState(false)
   const [profileSummary, setProfileSummary] = useState<string | undefined>(undefined)
   const [queuedOpening, setQueuedOpening] = useState<{ content: string; audio_url?: string } | null>(null)
+  const [sessionError, setSessionError] = useState<string | null>(null)
+  const [retryCount, setRetryCount] = useState(0)
   const initRef = useRef(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -52,11 +54,13 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
     console.log('[DiscoveryChat] Component mounted, initializing session...')
 
     // React 18 StrictMode runs effects twice in dev; guard so we don't double-create sessions / duplicate messages.
-    if (initRef.current) {
+    // But allow retry if we have an error
+    if (initRef.current && !sessionError) {
       console.log('[DiscoveryChat] Already initialized, skipping')
       return
     }
     initRef.current = true
+    setSessionError(null)
 
     console.log('[DiscoveryChat] Starting discovery session with model config:', modelConfig, 'userId:', userId)
 
@@ -68,6 +72,7 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
         history_length: response.conversation_history?.length || 0
       })
       setActualSessionId(response.session_id)
+      setSessionError(null)
 
       // Load profile summary if available
       if (response.profile_summary) {
@@ -105,9 +110,11 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
       }
     }).catch(err => {
       console.error('[DiscoveryChat] Failed to start session:', err)
+      setSessionError('Failed to connect to the server. Please try again.')
+      initRef.current = false  // Allow retry
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId]) // Reinitialize if userId changes
+  }, [userId, retryCount]) // Reinitialize if userId changes or retry requested
 
   // Send onboarding info automatically once connected
   useEffect(() => {
@@ -473,8 +480,21 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
           <div ref={messagesEndRef} />
         </div>
 
+        {/* Error display with retry button */}
+        {sessionError && (
+          <div className="session-error">
+            <p>{sessionError}</p>
+            <button 
+              className="retry-button"
+              onClick={() => setRetryCount(c => c + 1)}
+            >
+              Retry Connection
+            </button>
+          </div>
+        )}
+
         {/* Input area - hidden in voice mode since overlay handles it */}
-        {!isAudioMode && (
+        {!isAudioMode && !sessionError && (
           <div className="input-area">
             <div className="text-input-container">
               <input

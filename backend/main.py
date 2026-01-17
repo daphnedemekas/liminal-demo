@@ -849,10 +849,12 @@ async def start_discovery(request: SessionCreateRequest = SessionCreateRequest()
             schema_state=schema_state if is_resumed else None
         )
 
-        # Get opening question only for new sessions
+        # Get opening question for new sessions OR resumed sessions with no history
+        # (resumed with no history happens when goal panel is opened for first time)
         opening_message = ""
         audio_url = None
-        if not is_resumed:
+        needs_opening = not is_resumed or len(conversation_history) == 0
+        if needs_opening:
             opening_message = session_data.discovery_session.start()
             # Generate audio for opening message
             try:

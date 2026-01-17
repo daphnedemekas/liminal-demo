@@ -217,6 +217,42 @@ body {
   cursor: not-allowed;
 }
 
+/* Session Error */
+.session-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+  border-radius: 12px;
+  margin: 16px;
+  text-align: center;
+}
+
+.session-error p {
+  color: #DC2626;
+  margin: 0 0 12px 0;
+  font-size: 14px;
+}
+
+.retry-button {
+  padding: 10px 20px;
+  background: #DC2626;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.retry-button:hover {
+  background: #B91C1C;
+}
+
 /* Mic Button */
 .mic-button {
   width: 100%;

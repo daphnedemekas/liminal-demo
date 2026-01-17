@@ -117,11 +117,19 @@ export default function GoalChat({
     })
   }, [goalId, goal, userId, modelConfig, addMessage, setMessages])
 
-  // Send onboarding info once connected (only for new sessions)
+  // Send onboarding info once connected
+  // For new sessions OR resumed sessions with no history (first time opening goal panel)
   // Use sendCommand to send silently - don't show onboarding in chat UI
   const [onboardingSent, setOnboardingSent] = useState(false)
   useEffect(() => {
-    if (isConnected && initialized && !isResumed && !onboardingSent && onboardingInfo && messages.length <= 1) {
+    // Send onboarding if:
+    // 1. Connected and initialized
+    // 2. Not already sent
+    // 3. Have onboarding info
+    // 4. Either: not resumed, OR resumed but with no messages (first time opening goal panel)
+    const needsOnboarding = !isResumed || messages.length === 0
+    if (isConnected && initialized && !onboardingSent && onboardingInfo && needsOnboarding) {
+      console.log('[GoalChat] Sending onboarding to trigger opening message', { isResumed, messagesLength: messages.length })
       setOnboardingSent(true)
       // Send the user's background context silently (not shown in UI)
       setTimeout(() => {

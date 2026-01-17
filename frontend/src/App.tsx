@@ -262,7 +262,11 @@ function App() {
 
             {/* Keep exploration panel mounted to preserve state */}
             {phase === 'discovery' && !isLoadingUserData && (
-              <div style={{ display: activeView === 'exploration' ? 'block' : 'none' }}>
+              <div style={{
+                display: activeView === 'exploration' ? 'flex' : 'none',
+                width: '100%',
+                height: '100%'
+              }}>
                 <DiscoveryChat
                   key={user?.id || sessionId}  // Force remount when user changes
                   sessionId={sessionId}
@@ -281,7 +285,11 @@ function App() {
 
             {/* Keep goal panels mounted to preserve state */}
             {phase === 'discovery' && activeGoalSession && user && !isLoadingUserData && (
-              <div style={{ display: activeView === 'goal' ? 'block' : 'none' }}>
+              <div style={{
+                display: activeView === 'goal' ? 'flex' : 'none',
+                width: '100%',
+                height: '100%'
+              }}>
                 <GoalChat
                   key={activeGoalSession.id}  // Force remount when switching goals
                   goalId={activeGoalSession.goalId}

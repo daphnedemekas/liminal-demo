@@ -73,25 +73,15 @@ export default function ProfilePanel({ sessionId, isConnected, initialSummary }:
     }
   }, [schema, summary, generateSummary])
 
-  const getActiveFocus = (controller: any) => {
-    if (!controller) return 'neutral'
-    
-    const intent = (controller.question_intent || '').toLowerCase()
-    const focus = (controller.focus_instruction || '').toLowerCase()
-    const combined = `${intent} ${focus}`
-
-    if (combined.includes('pacing') || combined.includes('fast') || combined.includes('slow')) 
-      return 'profile-pacing'
-    if (combined.includes('uncertainty') || combined.includes('ambiguity') || combined.includes('unknown')) 
-      return 'profile-uncertainty'
-    if (combined.includes('goal') || combined.includes('outcome') || combined.includes('achieve')) 
-      return 'goals'
-    if (combined.includes('curiosity') || combined.includes('interest') || combined.includes('explore')) 
-      return 'profile-curiosity'
-    if (combined.includes('motivation') || combined.includes('why') || combined.includes('drive'))
-      return 'profile-motivation'
-    
-    return 'neutral'
+  const formatValue = (value: any): string => {
+    if (value === null || value === undefined) return '—'
+    if (typeof value === 'object') {
+      if (Array.isArray(value)) {
+        return value.length === 0 ? '[]' : JSON.stringify(value, null, 2)
+      }
+      return JSON.stringify(value, null, 2)
+    }
+    return String(value)
   }
 
   if (!schema) {
@@ -100,137 +90,196 @@ export default function ProfilePanel({ sessionId, isConnected, initialSummary }:
         <div className="profile-panel-header">
           <h2>Learner Profile</h2>
         </div>
-        <div className="profile-panel-loading">
-          <p>Waiting for conversation data...</p>
+        <div className="profile-panel-content">
+          <p style={{ color: '#888', padding: '10px' }}>Waiting for conversation data...</p>
         </div>
       </div>
     )
   }
 
-  const activeFocus = getActiveFocus(schema.controller)
   const profile = schema.user_profile || {}
   const goalCandidates = schema.goal_candidates || []
-  const interviewState = schema.interview_state
+  const teachingCandidates = schema.teaching_candidates || []
+  const themes = schema.conversational_themes || []
+  const interviewState = schema.interview_state || {}
+  const controller = schema.controller || {}
 
   return (
-    <div className="profile-panel visual-model">
+    <div className="profile-panel">
       <div className="profile-panel-header">
-        <h2>Insight Map</h2>
-        <span className="turn-counter">Turn {interviewState?.turns_elapsed || 0}</span>
+        <h2>Learner Profile</h2>
+        <span className="turn-counter">Turn {interviewState.turns_elapsed || 0}</span>
       </div>
 
       <div className="profile-panel-content">
-        {/* Summary */}
-        <div className="profile-summary">
-          <div className="profile-summary-header">
-            <span>Current Understanding</span>
+        {/* Summary Section */}
+        <div className="debug-category">
+          <div className="debug-category-header">
+            <h3 className="debug-category-title">Summary</h3>
             <button 
-              className="refresh-summary-btn"
+              className="refresh-btn"
               onClick={generateSummary}
               disabled={isGeneratingSummary}
-              title="Refresh summary"
             >
-              {isGeneratingSummary ? '...' : 'Refresh'}
+              {isGeneratingSummary ? '...' : '↻'}
             </button>
           </div>
-          <p className="profile-summary-text">
+          <p className="summary-text">
             {isGeneratingSummary && !summary 
               ? 'Analyzing conversation...' 
               : summary || 'Continue the conversation to build your learner profile.'}
           </p>
         </div>
 
-        {/* 1. THE CORE: User Traits */}
-        <div className="vm-section vm-core">
-          <h3 className="vm-title">Core Identity</h3>
-          <div className="vm-traits-grid">
-            <TraitCard 
-              label="Pacing" 
-              value={profile.pacing_preference?.value}
-              isActive={activeFocus === 'profile-pacing'} 
-            />
-            <TraitCard 
-              label="Uncertainty" 
-              value={profile.uncertainty_tolerance?.value}
-              isActive={activeFocus === 'profile-uncertainty'} 
-            />
-            <TraitCard 
-              label="Curiosity" 
-              value={profile.curiosity_type?.value}
-              isActive={activeFocus === 'profile-curiosity'} 
-            />
-            <TraitCard 
-              label="Motivation" 
-              value={profile.motivation_profile?.primary_driver}
-              isActive={activeFocus === 'profile-motivation'} 
-            />
+        {/* User Profile */}
+        <div className="debug-category">
+          <h3 className="debug-category-title">User Profile</h3>
+          <div className="debug-section-content">
+            <div className="debug-field">
+              <span className="debug-field-key">Curiosity:</span>
+              <span className="debug-field-value">{formatValue(profile.curiosity_type?.value)}</span>
+            </div>
+            <div className="debug-field">
+              <span className="debug-field-key">Entry Mode:</span>
+              <span className="debug-field-value">
+                people: {profile.entry_mode?.people?.toFixed(1) || '—'}, 
+                problems: {profile.entry_mode?.problems?.toFixed(1) || '—'}, 
+                ideas: {profile.entry_mode?.ideas?.toFixed(1) || '—'}
+              </span>
+            </div>
+            <div className="debug-field">
+              <span className="debug-field-key">Uncertainty:</span>
+              <span className="debug-field-value">{formatValue(profile.uncertainty_tolerance?.value)}</span>
+            </div>
+            <div className="debug-field">
+              <span className="debug-field-key">Pacing:</span>
+              <span className="debug-field-value">{formatValue(profile.pacing_preference?.value)}</span>
+            </div>
+            <div className="debug-field">
+              <span className="debug-field-key">Motivation:</span>
+              <span className="debug-field-value">{formatValue(profile.motivation_profile?.primary_driver)}</span>
+            </div>
           </div>
         </div>
 
-        {/* 2. THE HORIZON: Possibilities */}
-        <div className={`vm-section vm-horizon ${activeFocus === 'goals' ? 'active-section' : ''}`}>
-          <h3 className="vm-title">Horizon</h3>
-          <div className="vm-bubbles-container">
-            {goalCandidates.length === 0 ? (
-              <div className="vm-empty-state">Exploring possibilities...</div>
-            ) : (
-              goalCandidates.map((goal: any, i: number) => (
-                <GoalBubble 
-                  key={i} 
-                  goal={goal} 
-                  isActive={activeFocus === 'goals'}
-                  index={i}
-                />
-              ))
+        {/* Goal Candidates */}
+        {goalCandidates.length > 0 && (
+          <div className="debug-category">
+            <h3 className="debug-category-title">Goal Candidates ({goalCandidates.length})</h3>
+            {goalCandidates.map((goal: any, idx: number) => (
+              <div key={idx} className="debug-section">
+                <div className="debug-section-content">
+                  <div className="debug-field">
+                    <span className="debug-field-key">Goal:</span>
+                    <span className="debug-field-value">{goal.goal}</span>
+                  </div>
+                  <div className="debug-field">
+                    <span className="debug-field-key">Scores:</span>
+                    <span className="debug-field-value">
+                      concrete: {goal.concreteness?.toFixed(2)}, 
+                      scope: {goal.scope_appropriateness?.toFixed(2)}, 
+                      commit: {goal.user_commitment?.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Teaching Candidates */}
+        {teachingCandidates.length > 0 && (
+          <div className="debug-category">
+            <h3 className="debug-category-title">Teaching Candidates ({teachingCandidates.length})</h3>
+            {teachingCandidates.map((tc: any, idx: number) => (
+              <div key={idx} className="debug-section">
+                <div className="debug-section-content">
+                  <div className="debug-field">
+                    <span className="debug-field-key">Topic:</span>
+                    <span className="debug-field-value">{tc.topic}</span>
+                  </div>
+                  <div className="debug-field">
+                    <span className="debug-field-key">Gap:</span>
+                    <span className="debug-field-value">{tc.identified_gap || '—'}</span>
+                  </div>
+                  <div className="debug-field">
+                    <span className="debug-field-key">Readiness:</span>
+                    <span className="debug-field-value">{tc.readiness_score?.toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Conversational Themes */}
+        {themes.length > 0 && (
+          <div className="debug-category">
+            <h3 className="debug-category-title">Themes ({themes.length})</h3>
+            {themes.slice(0, 5).map((theme: any, idx: number) => (
+              <div key={idx} className="debug-field">
+                <span className="debug-field-key">{theme.theme_type}:</span>
+                <span className="debug-field-value">{theme.theme_seed}</span>
+              </div>
+            ))}
+            {themes.length > 5 && (
+              <div className="debug-field">
+                <span className="debug-field-value" style={{ fontStyle: 'italic' }}>
+                  +{themes.length - 5} more...
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Controller State */}
+        <div className="debug-category">
+          <h3 className="debug-category-title">Controller</h3>
+          <div className="debug-section-content">
+            <div className="debug-field">
+              <span className="debug-field-key">Mode:</span>
+              <span className="debug-field-value">{controller.conversation_mode || '—'}</span>
+            </div>
+            <div className="debug-field">
+              <span className="debug-field-key">Intent:</span>
+              <span className="debug-field-value">{controller.question_intent || '—'}</span>
+            </div>
+            <div className="debug-field">
+              <span className="debug-field-key">Target:</span>
+              <span className="debug-field-value">{controller.target_ambiguity || '—'}</span>
+            </div>
+            {controller.focus_instruction && (
+              <div className="debug-field">
+                <span className="debug-field-key">Focus:</span>
+                <span className="debug-field-value">{controller.focus_instruction}</span>
+              </div>
             )}
           </div>
         </div>
-        
-        {/* 3. THE LENS: Current Focus */}
-        <div className="vm-status-bar">
-          <span className="vm-status-label">Current Focus:</span>
-          <span className="vm-status-value">
-             {schema.controller?.question_intent || 'Observing...'}
-          </span>
+
+        {/* Interview State */}
+        <div className="debug-category">
+          <h3 className="debug-category-title">State</h3>
+          <div className="debug-section-content">
+            <div className="debug-field">
+              <span className="debug-field-key">Goal Identified:</span>
+              <span className="debug-field-value">{interviewState.goal_identified ? 'Yes' : 'No'}</span>
+            </div>
+            {interviewState.user_goal && (
+              <div className="debug-field">
+                <span className="debug-field-key">User Goal:</span>
+                <span className="debug-field-value">{interviewState.user_goal}</span>
+              </div>
+            )}
+            {interviewState.proposed_goal && (
+              <div className="debug-field">
+                <span className="debug-field-key">Proposed:</span>
+                <span className="debug-field-value">{interviewState.proposed_goal}</span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
-    </div>
-  )
-}
-
-function TraitCard({ label, value, isActive }: { label: string, value: string | null, isActive: boolean }) {
-  const isKnown = value !== null && value !== undefined
-  
-  // Format value for display
-  let displayValue = value
-  if (displayValue === 'fast_resolution') displayValue = 'Quick'
-  if (displayValue === 'exploratory') displayValue = 'Exploratory'
-  if (displayValue === 'mixed') displayValue = 'Balanced'
-  
-  return (
-    <div className={`vm-trait-card ${isActive ? 'active' : ''} ${isKnown ? 'known' : 'unknown'}`}>
-      <span className="vm-trait-label">{label}</span>
-      <span className="vm-trait-value">{displayValue || '...'}</span>
-      {isActive && <div className="vm-pulse-ring"></div>}
-    </div>
-  )
-}
-
-function GoalBubble({ goal, isActive, index }: { goal: any, isActive: boolean, index: number }) {
-  // Size based on concreteness
-  const size = 60 + ((goal.concreteness || 0) * 40)
-  
-  return (
-    <div 
-      className={`vm-goal-bubble ${isActive ? 'active' : ''}`}
-      style={{ 
-        width: `${size}px`, 
-        height: `${size}px`,
-        animationDelay: `${index * 0.2}s` 
-      }}
-      title={goal.goal}
-    >
-      <span className="vm-goal-text">{goal.goal.split(' ').slice(0, 3).join(' ')}...</span>
     </div>
   )
 }

@@ -78,6 +78,25 @@ export default function DiscoveryChat({ sessionId: _initialSessionId, modelConfi
         setMessages(restoredMessages)
         setOnboardingSent(true)  // Don't re-send onboarding for resumed sessions
         setQueuedOpening({ content: '', audio_url: undefined })  // No need for opening
+        
+        // Refresh history after a short delay to catch any in-flight saves
+        // (handles race condition when navigating away during long processing)
+        setTimeout(async () => {
+          try {
+            const freshData = await api.startDiscoverySession(modelConfig, undefined, userId)
+            if (freshData.conversation_history?.length > response.conversation_history.length) {
+              console.log('[DiscoveryChat] Found newer history:', freshData.conversation_history.length, 'messages')
+              const freshMessages = freshData.conversation_history.map((msg: any, idx: number) => ({
+                id: `restored-fresh-${idx}`,
+                role: msg.role as 'user' | 'assistant',
+                content: msg.content,
+              }))
+              setMessages(freshMessages)
+            }
+          } catch (err) {
+            console.error('[DiscoveryChat] Failed to refresh history:', err)
+          }
+        }, 2000)  // Wait 2 seconds for any pending saves to complete
       } else if (response.opening_message && response.opening_message.trim()) {
         // New session with opening message
         setQueuedOpening({
@@ -196,7 +215,8 @@ export default function DiscoveryChat({ sessionId: _initialSessionId, modelConfi
   // Handle continuation options after goal accepted
   const handleContinueThread = () => {
     setShowContinuationOptions(false)
-    // Just hide buttons, user can continue typing
+    // Ask AI to continue exploring the current thread
+    sendMessage("Let's continue exploring this thread further. What else can we uncover here?")
   }
 
   const handleProposeDirection = () => {
@@ -211,8 +231,8 @@ export default function DiscoveryChat({ sessionId: _initialSessionId, modelConfi
 
   const handleAIPropose = () => {
     setShowContinuationOptions(false)
-    // Send command to AI to propose a new topic
-    sendMessage("What else should I explore? Suggest something interesting based on what you know about me.")
+    // Send command to AI to propose a DIFFERENT topic - not related to already-accepted goals
+    sendMessage("Suggest something completely different to explore - look at my background and interests for a topic that's unrelated to the goals I've already accepted. I want diverse learning areas, not variations of the same theme.")
   }
 
   // Handle speech recognition transcript
@@ -340,7 +360,7 @@ export default function DiscoveryChat({ sessionId: _initialSessionId, modelConfi
                   className="continuation-btn ai-propose"
                   onClick={handleAIPropose}
                 >
-                  You suggest something
+                  AI suggestion
                 </button>
               </div>
             </div>

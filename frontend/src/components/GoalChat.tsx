@@ -75,6 +75,25 @@ export default function GoalChat({
           content: msg.content,
         }))
         setMessages(restoredMessages)
+        
+        // Refresh history after a short delay to catch any in-flight saves
+        // (handles race condition when navigating away during long processing)
+        setTimeout(async () => {
+          try {
+            const freshData = await api.startDiscoverySession(modelConfig, goal, userId, goalId)
+            if (freshData.conversation_history?.length > response.conversation_history.length) {
+              console.log('[GoalChat] Found newer history:', freshData.conversation_history.length, 'messages')
+              const freshMessages: Message[] = freshData.conversation_history.map((msg: any, idx: number) => ({
+                id: `restored-fresh-${idx}`,
+                role: msg.role as 'user' | 'assistant',
+                content: msg.content,
+              }))
+              setMessages(freshMessages)
+            }
+          } catch (err) {
+            console.error('[GoalChat] Failed to refresh history:', err)
+          }
+        }, 2000)  // Wait 2 seconds for any pending saves to complete
       } else if (response.opening_message && response.opening_message.trim()) {
         // New session - add opening message
         addMessage({

@@ -439,13 +439,20 @@ Respond with ONLY the category name, nothing else."""
             for cand in schema.goal_candidates:
                 print(f"  - ID {cand.id}: {cand.goal} (readiness: {cand.readiness_score:.2f})")
 
+            # Get already-accepted goals to avoid proposing similar ones
+            accepted_goal_ids = set(schema.interview_state.accepted_goal_ids)
+            accepted_goals = [g.goal for g in schema.goal_candidates if g.id in accepted_goal_ids]
+            if accepted_goals:
+                print(f"[GOAL DISCOVERY] Already accepted goals: {accepted_goals}")
+
             prompt_template = self.prompt_loader.load_ranker_prompt("update_goal_candidates", variant=self.get_prompt_variant())
 
             # Format with current schema context
             formatted_prompt = prompt_template.format(
                 goal_candidates=[g.model_dump() for g in schema.goal_candidates],
                 conversational_themes=[t.model_dump() for t in schema.conversational_themes],
-                conversation=self._format_conversation(history)
+                conversation=self._format_conversation(history),
+                accepted_goals=accepted_goals if accepted_goals else "None yet"
             )
 
             messages = [{"role": "user", "content": formatted_prompt}]

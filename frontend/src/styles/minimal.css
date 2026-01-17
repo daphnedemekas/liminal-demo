@@ -1757,6 +1757,49 @@ body {
   margin: 0;
 }
 
+.summary-text {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #334155;
+  margin: 8px 0 0 0;
+}
+
+.debug-category-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.debug-category-header .debug-category-title {
+  margin-bottom: 0;
+}
+
+.refresh-btn {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: #f1f5f9;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.refresh-btn:hover {
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Profile Sections */
 .profile-section {
   background: white;

@@ -5,6 +5,9 @@ CRITICAL DISTINCTION:
 - They are outcome-oriented, break-apartable into teachable sub-goals
 - Teaching candidates (which come later) are specific 5-15 minute gaps
 
+ALREADY ACCEPTED GOALS (DO NOT propose similar goals):
+{accepted_goals}
+
 CURRENT GOAL CANDIDATES:
 {goal_candidates}
 
@@ -15,6 +18,10 @@ CONVERSATION:
 {conversation}
 
 TASK: Identify NEW goal candidates or update existing ones.
+
+CRITICAL: If the user has already accepted goals, new goal candidates should be DIVERSE - 
+covering DIFFERENT areas of interest, not variations or extensions of accepted goals.
+Related sub-topics belong as TEACHING CANDIDATES within the accepted goal, not as new goals.
 
 WHAT IS A GOAL CANDIDATE?
 

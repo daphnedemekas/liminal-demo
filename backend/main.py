@@ -469,6 +469,92 @@ async def clear_feed(user_id: str, context_type: str, goal_id: Optional[int] = N
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ============================================
+# Teaching Chat Endpoint (Simple conversation, no discovery)
+# ============================================
+
+class TeachingChatRequest(BaseModel):
+    user_id: str
+    goal_id: int
+    teaching_candidate_id: int
+    topic: str
+    identified_gap: str
+    focus_question: str
+    message: str
+    conversation_history: list = []
+    user_background: str = ""
+
+class TeachingChatResponse(BaseModel):
+    response: str
+
+@app.post("/api/teaching/chat", response_model=TeachingChatResponse)
+async def teaching_chat(request: TeachingChatRequest):
+    """
+    Simple teaching conversation - no discovery, just helpful responses about the topic.
+    """
+    try:
+        from src.llm_client import LLMClient
+        from src.utils.config import get_model_name
+        
+        llm = LLMClient()
+        
+        # Build a simple teaching prompt
+        system_prompt = f"""You are a knowledgeable and patient teacher helping a user learn about: {request.topic}
+
+CONTEXT:
+- This is part of their broader learning goal
+- Their identified knowledge gap: {request.identified_gap}
+- A good starting question: {request.focus_question}
+- User background: {request.user_background}
+
+YOUR ROLE:
+- Explain concepts clearly and concisely
+- Use analogies and examples when helpful
+- Answer their questions directly
+- If they seem confused, break things down further
+- Provide interesting context and connections
+- Be engaging but not overwhelming
+- Keep responses focused and digestible (2-3 paragraphs max unless they ask for more detail)
+
+STYLE:
+- Conversational and friendly
+- No excessive praise or filler
+- Concrete and specific
+- If you don't know something, say so
+"""
+
+        # Build messages
+        messages = [{"role": "system", "content": system_prompt}]
+        
+        # Add conversation history
+        for msg in request.conversation_history:
+            messages.append({
+                "role": msg["role"],
+                "content": msg["content"]
+            })
+        
+        # Add current message
+        messages.append({"role": "user", "content": request.message})
+        
+        # Generate response using interviewer model (good at conversation)
+        model_name = get_model_name("interviewer", default="openai:gpt-4o")
+        
+        response = llm.chat(
+            messages=messages,
+            model=model_name,
+            temperature=0.7,
+            max_tokens=1000
+        )
+        
+        return TeachingChatResponse(response=response)
+        
+    except Exception as e:
+        print(f"[Teaching Chat] Error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/discovery/start", response_model=SessionCreateResponse)
 async def start_discovery(request: SessionCreateRequest = SessionCreateRequest()):
     """Create a new discovery session or resume an existing one."""

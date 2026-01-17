@@ -14,14 +14,15 @@ export interface GoalSession {
   goal: string
   createdAt: Date
   isActive: boolean
-  hasTeachingCandidate: boolean
-  teachingCandidate?: TeachingCandidate
+  teachingCandidates: TeachingCandidate[]  // Multiple teaching candidates per goal
 }
 
 interface SidebarProps {
   goalSessions: GoalSession[]
   activeSessionId: string | null
+  activeTeachingId: number | null  // Currently selected teaching candidate
   onSelectSession: (sessionId: string | null) => void
+  onSelectTeaching: (goalSessionId: string, teachingId: number) => void  // Select a teaching candidate
   onNewExploration: () => void
   isExplorationActive: boolean
   username?: string
@@ -31,19 +32,34 @@ interface SidebarProps {
 export default function Sidebar({ 
   goalSessions, 
   activeSessionId, 
+  activeTeachingId,
   onSelectSession, 
+  onSelectTeaching,
   onNewExploration,
   isExplorationActive,
   username,
   onLogout
 }: SidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false)
+  const [expandedGoals, setExpandedGoals] = useState<Set<string>>(new Set())
+
+  const toggleGoalExpanded = (goalId: string) => {
+    setExpandedGoals(prev => {
+      const next = new Set(prev)
+      if (next.has(goalId)) {
+        next.delete(goalId)
+      } else {
+        next.add(goalId)
+      }
+      return next
+    })
+  }
 
   return (
     <div className={`sidebar ${isCollapsed ? 'collapsed' : ''}`}>
       <div className="sidebar-header">
         <h2 className="sidebar-title">
-          {isCollapsed ? 'Goals' : 'Learning Goals'}
+          {isCollapsed ? 'L' : 'Learning Goals'}
         </h2>
         <button 
           className="sidebar-toggle"
@@ -63,7 +79,7 @@ export default function Sidebar({
               className={`sidebar-exploration-btn ${isExplorationActive ? 'active' : ''}`}
               onClick={onNewExploration}
             >
-              <span className="sidebar-exploration-icon"></span>
+              <span className="sidebar-exploration-icon">🔭</span>
               <span>Current Exploration</span>
             </button>
           </div>
@@ -78,23 +94,52 @@ export default function Sidebar({
                 </div>
               ) : (
                 goalSessions.map((session) => (
-                  <button
-                    key={session.id}
-                    className={`sidebar-session ${activeSessionId === session.id ? 'active' : ''}`}
-                    onClick={() => onSelectSession(session.id)}
-                  >
-                    <div className="sidebar-session-content">
-                      <span className="sidebar-session-icon">
-                        {session.hasTeachingCandidate ? 'Done' : 'Active'}
-                      </span>
-                      <div className="sidebar-session-info">
-                        <span className="sidebar-session-goal">{session.goal}</span>
-                        <span className="sidebar-session-date">
-                          {new Date(session.createdAt).toLocaleDateString()}
-                        </span>
-                      </div>
+                  <div key={session.id} className="sidebar-goal-group">
+                    {/* Goal Header */}
+                    <div 
+                      className={`sidebar-session ${activeSessionId === session.id && !activeTeachingId ? 'active' : ''}`}
+                    >
+                      <button
+                        className="sidebar-session-main"
+                        onClick={() => onSelectSession(session.id)}
+                      >
+                        <span className="sidebar-session-icon">🎯</span>
+                        <div className="sidebar-session-info">
+                          <span className="sidebar-session-goal">{session.goal}</span>
+                          <span className="sidebar-session-date">
+                            {new Date(session.createdAt).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </button>
+                      {session.teachingCandidates.length > 0 && (
+                        <button 
+                          className="sidebar-expand-btn"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            toggleGoalExpanded(session.id)
+                          }}
+                        >
+                          {expandedGoals.has(session.id) ? '▼' : '▶'}
+                        </button>
+                      )}
                     </div>
-                  </button>
+
+                    {/* Teaching Candidates (sub-items) */}
+                    {expandedGoals.has(session.id) && session.teachingCandidates.length > 0 && (
+                      <div className="sidebar-teaching-list">
+                        {session.teachingCandidates.map((tc) => (
+                          <button
+                            key={tc.id}
+                            className={`sidebar-teaching-item ${activeTeachingId === tc.id ? 'active' : ''}`}
+                            onClick={() => onSelectTeaching(session.id, tc.id)}
+                          >
+                            <span className="sidebar-teaching-icon">📚</span>
+                            <span className="sidebar-teaching-topic">{tc.topic}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 ))
               )}
             </div>
@@ -118,4 +163,3 @@ export default function Sidebar({
     </div>
   )
 }
-

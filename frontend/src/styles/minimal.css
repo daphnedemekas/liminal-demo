@@ -2654,3 +2654,133 @@ body {
   animation: pulse-ring 2s infinite ease-in-out;
   pointer-events: none;
 }
+
+/* ============================================
+   Teaching Chat Styles
+   ============================================ */
+
+.teaching-chat-layout {
+  display: flex;
+  width: 100%;
+  height: 100%;
+}
+
+.teaching-chat-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: white;
+  border-right: 1px solid #e2e8f0;
+}
+
+.teaching-chat-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid #e2e8f0;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+}
+
+.teaching-topic {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.teaching-label {
+  font-size: 12px;
+  color: #64748b;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.teaching-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.teaching-context {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.goal-context {
+  font-style: italic;
+}
+
+/* Sidebar Teaching Items */
+.sidebar-goal-group {
+  margin-bottom: 4px;
+}
+
+.sidebar-session-main {
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.sidebar-expand-btn {
+  padding: 4px 8px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #94a3b8;
+  font-size: 10px;
+  transition: color 0.15s;
+}
+
+.sidebar-expand-btn:hover {
+  color: #475569;
+}
+
+.sidebar-teaching-list {
+  margin-left: 24px;
+  padding-left: 12px;
+  border-left: 2px solid #e2e8f0;
+  margin-top: 4px;
+}
+
+.sidebar-teaching-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-bottom: 2px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: left;
+  font-size: 13px;
+  color: #475569;
+}
+
+.sidebar-teaching-item:hover {
+  background: white;
+  border-color: #e2e8f0;
+}
+
+.sidebar-teaching-item.active {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1e40af;
+}
+
+.sidebar-teaching-icon {
+  font-size: 14px;
+}
+
+.sidebar-teaching-topic {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

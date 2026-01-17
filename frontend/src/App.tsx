@@ -1,25 +1,14 @@
 import { useState, useCallback, useEffect } from 'react'
 import DiscoveryChat from './components/DiscoveryChat'
 import GoalChat from './components/GoalChat'
-import TransitionScreen from './components/TransitionScreen'
-import LearningChat from './components/LearningChat'
+import TeachingChat from './components/TeachingChat'
 import ModelSelector, { ModelConfig } from './components/ModelSelector'
 import OnboardingScreen from './components/OnboardingScreen'
 import LoginScreen from './components/LoginScreen'
-import Sidebar, { GoalSession } from './components/Sidebar'
+import Sidebar, { GoalSession, TeachingCandidate } from './components/Sidebar'
 import { api, GoalData } from './services/api'
 
-type Phase = 'login' | 'config' | 'onboarding' | 'discovery' | 'transition' | 'learning'
-type View = 'exploration' | 'goal'
-
-interface FinalTopic {
-  topic: string
-  user_confusion: string
-  stakes: string
-  learning_hook: string
-  suggested_angles: string[]
-  scores: Record<string, number>
-}
+type Phase = 'login' | 'config' | 'onboarding' | 'discovery'
 
 interface User {
   id: string
@@ -29,7 +18,6 @@ interface User {
 function App() {
   const [phase, setPhase] = useState<Phase>('login')
   const [sessionId] = useState<string>(() => crypto.randomUUID())
-  const [finalTopic, setFinalTopic] = useState<FinalTopic | null>(null)
   const [onboardingInfo, setOnboardingInfo] = useState<string>('')
   const [userGoal, setUserGoal] = useState<string | undefined>(undefined)
   const [modelConfig, setModelConfig] = useState<ModelConfig>({
@@ -43,8 +31,12 @@ function App() {
 
   // Sidebar state
   const [goalSessions, setGoalSessions] = useState<GoalSession[]>([])
-  const [activeView, setActiveView] = useState<View>('exploration')
   const [activeGoalSessionId, setActiveGoalSessionId] = useState<string | null>(null)
+  const [activeTeachingId, setActiveTeachingId] = useState<number | null>(null)
+
+  // Derived: what are we viewing?
+  const isViewingExploration = activeGoalSessionId === null
+  const isViewingTeaching = activeTeachingId !== null
 
   // Load user data when logged in
   const loadUserData = useCallback(async (userId: string) => {
@@ -55,16 +47,15 @@ function App() {
       // Convert goals to GoalSession format
       const loadedGoals: GoalSession[] = userData.goals.map((g: GoalData) => ({
         id: g.id.toString(),
-        goalId: g.id,  // Database ID for API calls
+        goalId: g.id,
         goal: g.goal_text,
         createdAt: g.created_at ? new Date(g.created_at) : new Date(),
         isActive: g.status === 'active',
-        hasTeachingCandidate: g.has_teaching_candidate,
+        teachingCandidates: g.teaching_candidates || [],  // Load teaching candidates
       }))
       
       setGoalSessions(loadedGoals)
       
-      // Load onboarding info if exists
       if (userData.onboarding_info) {
         setOnboardingInfo(userData.onboarding_info)
       }
@@ -85,10 +76,8 @@ function App() {
     setUser({ id: userId, username })
     
     if (isNewUser) {
-      // New user - go to config then onboarding
       setPhase('config')
     } else {
-      // Existing user - load their data and go to discovery
       await loadUserData(userId)
       if (savedOnboardingInfo) {
         setOnboardingInfo(savedOnboardingInfo)
@@ -108,7 +97,6 @@ function App() {
     setOnboardingInfo(info)
     setUserGoal(goal)
     
-    // Save onboarding info to database
     if (user) {
       try {
         await api.updateOnboarding(user.id, info)
@@ -124,8 +112,7 @@ function App() {
   const handleGoalAccepted = useCallback(async (goal: string, discoverySessionId: string) => {
     console.log('[App] Goal accepted:', goal)
     
-    // Save goal to database
-    let goalId = 0  // Will be set from database
+    let goalId = 0
     let displayId = crypto.randomUUID()
     if (user) {
       try {
@@ -138,61 +125,60 @@ function App() {
       }
     }
     
-    // Create a new goal session
     const newSession: GoalSession = {
       id: displayId,
       goalId: goalId,
       goal: goal,
       createdAt: new Date(),
       isActive: true,
-      hasTeachingCandidate: false,
+      teachingCandidates: [],  // Empty initially
     }
     
     setGoalSessions(prev => [...prev, newSession])
-    
-    // Switch to the new goal session
     setActiveGoalSessionId(newSession.id)
-    setActiveView('goal')
+    setActiveTeachingId(null)  // Clear any teaching selection
   }, [user])
 
-  // Handle sidebar navigation
+  // Handle sidebar navigation - select a goal
   const handleSelectSession = (sessionId: string | null) => {
     if (sessionId === null) {
-      // Go back to exploration
-      setActiveView('exploration')
+      // Go to exploration
       setActiveGoalSessionId(null)
+      setActiveTeachingId(null)
     } else {
-      setActiveView('goal')
+      // Select goal (not a specific teaching candidate)
       setActiveGoalSessionId(sessionId)
+      setActiveTeachingId(null)
     }
   }
 
-  const handleNewExploration = () => {
-    setActiveView('exploration')
-    setActiveGoalSessionId(null)
+  // Handle selecting a teaching candidate
+  const handleSelectTeaching = (goalSessionId: string, teachingId: number) => {
+    setActiveGoalSessionId(goalSessionId)
+    setActiveTeachingId(teachingId)
   }
 
-  // Handle when teaching candidate is accepted for a goal
-  const handleTeachingCandidateAccepted = useCallback((candidate: any, goalSessionId: string) => {
+  const handleNewExploration = () => {
+    setActiveGoalSessionId(null)
+    setActiveTeachingId(null)
+  }
+
+  // Handle when teaching candidate is accepted - ADD to goal's teaching list
+  const handleTeachingCandidateAccepted = useCallback((candidate: TeachingCandidate, goalSessionId: string) => {
     console.log('[App] Teaching candidate accepted for goal:', goalSessionId, candidate)
     
-    // Update the goal session with teaching candidate info
+    // Add the teaching candidate to the goal session
     setGoalSessions(prev => prev.map(session => 
       session.id === goalSessionId 
-        ? { ...session, hasTeachingCandidate: true, teachingCandidate: candidate }
+        ? { 
+            ...session, 
+            teachingCandidates: [...session.teachingCandidates, candidate]
+          }
         : session
     ))
     
-    // Store the final topic and transition to learning
-    setFinalTopic({
-      topic: candidate.topic,
-      user_confusion: candidate.identified_gap,
-      stakes: '',
-      learning_hook: candidate.focus_question,
-      suggested_angles: [],
-      scores: { readiness: candidate.readiness_score }
-    })
-    setPhase('transition')
+    // Automatically switch to the new teaching candidate view
+    setActiveTeachingId(candidate.id)
   }, [])
 
   // Handle logout
@@ -201,15 +187,19 @@ function App() {
     setGoalSessions([])
     setOnboardingInfo('')
     setPhase('login')
-    setActiveView('exploration')
     setActiveGoalSessionId(null)
+    setActiveTeachingId(null)
   }
 
   // Get the active goal session data
   const activeGoalSession = goalSessions.find(s => s.id === activeGoalSessionId)
+  
+  // Get the active teaching candidate (if any)
+  const activeTeachingCandidate = activeGoalSession?.teachingCandidates.find(
+    tc => tc.id === activeTeachingId
+  )
 
-  // Show sidebar only after onboarding is complete
-  const showSidebar = phase === 'discovery' || phase === 'transition' || phase === 'learning'
+  const showSidebar = phase === 'discovery'
 
   return (
     <div className="app-container">
@@ -245,9 +235,11 @@ function App() {
           <Sidebar
             goalSessions={goalSessions}
             activeSessionId={activeGoalSessionId}
+            activeTeachingId={activeTeachingId}
             onSelectSession={handleSelectSession}
+            onSelectTeaching={handleSelectTeaching}
             onNewExploration={handleNewExploration}
-            isExplorationActive={activeView === 'exploration'}
+            isExplorationActive={isViewingExploration}
             username={user?.username}
             onLogout={handleLogout}
           />
@@ -260,38 +252,35 @@ function App() {
               </div>
             )}
 
-            {/* Keep exploration panel mounted to preserve state */}
-            {phase === 'discovery' && !isLoadingUserData && (
+            {/* Exploration Panel */}
+            {!isLoadingUserData && (
               <div style={{
-                display: activeView === 'exploration' ? 'flex' : 'none',
+                display: isViewingExploration ? 'flex' : 'none',
                 width: '100%',
                 height: '100%'
               }}>
                 <DiscoveryChat
-                  key={user?.id || sessionId}  // Force remount when user changes
+                  key={user?.id || sessionId}
                   sessionId={sessionId}
                   modelConfig={modelConfig}
                   onboardingInfo={onboardingInfo}
                   userGoal={userGoal}
                   userId={user?.id}
-                  onTopicFound={(topic) => {
-                    setFinalTopic(topic)
-                    setPhase('transition')
-                  }}
+                  onTopicFound={() => {}}  // No longer used
                   onGoalAccepted={handleGoalAccepted}
                 />
               </div>
             )}
 
-            {/* Keep goal panels mounted to preserve state */}
-            {phase === 'discovery' && activeGoalSession && user && !isLoadingUserData && (
+            {/* Goal Panel (when viewing a goal, not a teaching candidate) */}
+            {activeGoalSession && user && !isLoadingUserData && !isViewingTeaching && (
               <div style={{
-                display: activeView === 'goal' ? 'flex' : 'none',
+                display: !isViewingExploration ? 'flex' : 'none',
                 width: '100%',
                 height: '100%'
               }}>
                 <GoalChat
-                  key={activeGoalSession.id}  // Force remount when switching goals
+                  key={activeGoalSession.id}
                   goalId={activeGoalSession.goalId}
                   goal={activeGoalSession.goal}
                   userId={user.id}
@@ -304,17 +293,22 @@ function App() {
               </div>
             )}
 
-            {phase === 'transition' && finalTopic && (
-              <TransitionScreen
-                topic={finalTopic}
-                onStartLearning={() => setPhase('learning')}
-              />
-            )}
-
-            {phase === 'learning' && finalTopic && (
-              <LearningChat
-                sessionId={sessionId}
-              />
+            {/* Teaching Panel (when viewing a specific teaching candidate) */}
+            {activeGoalSession && activeTeachingCandidate && user && !isLoadingUserData && (
+              <div style={{
+                display: isViewingTeaching ? 'flex' : 'none',
+                width: '100%',
+                height: '100%'
+              }}>
+                <TeachingChat
+                  key={activeTeachingCandidate.id}
+                  candidate={activeTeachingCandidate}
+                  goalId={activeGoalSession.goalId}
+                  goalText={activeGoalSession.goal}
+                  userId={user.id}
+                  onboardingInfo={onboardingInfo}
+                />
+              </div>
             )}
           </div>
         </div>

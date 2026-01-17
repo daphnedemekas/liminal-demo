@@ -6,6 +6,7 @@ export interface TeachingCandidate {
   focus_question: string
   identified_gap: string
   readiness_score: number
+  goalConversationHistory?: Array<{ role: string; content: string }>  // Context from goal chat
 }
 
 export interface GoalSession {

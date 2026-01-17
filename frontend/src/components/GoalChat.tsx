@@ -13,6 +13,7 @@ interface TeachingCandidate {
   focus_question: string
   identified_gap: string
   readiness_score: number
+  goalConversationHistory?: Array<{ role: string; content: string }>
 }
 
 interface GoalChatProps {
@@ -127,7 +128,14 @@ export default function GoalChat({
     const lastMessage = messages[messages.length - 1]
     if (lastMessage?.type === 'create_teaching_panel' && lastMessage.teachingCandidate) {
       console.log('[GoalChat] Creating teaching panel:', lastMessage.teachingCandidate.topic)
-      onTeachingCandidateAccepted(lastMessage.teachingCandidate)
+      // Pass the goal conversation history along with the candidate
+      const conversationHistory = messages
+        .filter(m => m.role === 'user' || m.role === 'assistant')
+        .map(m => ({ role: m.role, content: m.content }))
+      onTeachingCandidateAccepted({
+        ...lastMessage.teachingCandidate,
+        goalConversationHistory: conversationHistory
+      })
     }
   }, [messages, onTeachingCandidateAccepted])
 

@@ -7,6 +7,53 @@ interface ProfilePanelProps {
   initialSummary?: string
 }
 
+// Helper functions to convert numeric values to descriptive labels
+
+const getReadinessLabel = (score: number | undefined): { label: string; level: string } => {
+  if (score === undefined || score === null) return { label: 'Unknown', level: 'unknown' }
+  if (score >= 0.7) return { label: 'Ready', level: 'high' }
+  if (score >= 0.5) return { label: 'Developing', level: 'medium' }
+  return { label: 'Emerging', level: 'low' }
+}
+
+const getDominantEntryMode = (entryMode: any): { mode: string; icon: string } => {
+  if (!entryMode) return { mode: 'Exploring', icon: '🔍' }
+  const { people = 0, problems = 0, ideas = 0 } = entryMode
+  const max = Math.max(people, problems, ideas)
+  if (max < 0.3) return { mode: 'Exploring', icon: '🔍' }
+  if (people === max) return { mode: 'People-oriented', icon: '👥' }
+  if (problems === max) return { mode: 'Problem-solver', icon: '🎯' }
+  return { mode: 'Ideas-driven', icon: '💡' }
+}
+
+const getConfidenceLabel = (confidence: number | undefined): string => {
+  if (confidence === undefined || confidence === null) return ''
+  if (confidence >= 0.7) return 'Strong signal'
+  if (confidence >= 0.4) return 'Moderate signal'
+  return 'Weak signal'
+}
+
+const formatTraitValue = (trait: any): { value: string; confidence: string } => {
+  if (!trait) return { value: '—', confidence: '' }
+  if (typeof trait === 'object' && trait.value) {
+    return { 
+      value: trait.value || '—', 
+      confidence: getConfidenceLabel(trait.confidence) 
+    }
+  }
+  return { value: String(trait), confidence: '' }
+}
+
+const getThemeIcon = (themeType: string): string => {
+  switch (themeType) {
+    case 'abstract_goal': return '🎯'
+    case 'concrete_topic': return '📚'
+    case 'metacognitive_pattern': return '🧠'
+    case 'preference': return '⚙️'
+    default: return '💬'
+  }
+}
+
 export default function ProfilePanel({ sessionId, isConnected, initialSummary }: ProfilePanelProps) {
   const [schema, setSchema] = useState<any>(null)
   const [summary, setSummary] = useState<string>(initialSummary || '')
@@ -73,17 +120,6 @@ export default function ProfilePanel({ sessionId, isConnected, initialSummary }:
     }
   }, [schema, summary, generateSummary])
 
-  const formatValue = (value: any): string => {
-    if (value === null || value === undefined) return '—'
-    if (typeof value === 'object') {
-      if (Array.isArray(value)) {
-        return value.length === 0 ? '[]' : JSON.stringify(value, null, 2)
-      }
-      return JSON.stringify(value, null, 2)
-    }
-    return String(value)
-  }
-
   if (!schema) {
     return (
       <div className="profile-panel">
@@ -91,7 +127,9 @@ export default function ProfilePanel({ sessionId, isConnected, initialSummary }:
           <h2>Learner Profile</h2>
         </div>
         <div className="profile-panel-content">
-          <p style={{ color: '#888', padding: '10px' }}>Waiting for conversation data...</p>
+          <div className="profile-card empty-state">
+            <p>Waiting for conversation data...</p>
+          </div>
         </div>
       </div>
     )
@@ -104,6 +142,12 @@ export default function ProfilePanel({ sessionId, isConnected, initialSummary }:
   const interviewState = schema.interview_state || {}
   const controller = schema.controller || {}
 
+  const entryMode = getDominantEntryMode(profile.entry_mode)
+  const curiosity = formatTraitValue(profile.curiosity_type)
+  const uncertainty = formatTraitValue(profile.uncertainty_tolerance)
+  const pacing = formatTraitValue(profile.pacing_preference)
+  const motivation = profile.motivation_profile?.primary_driver || '—'
+
   return (
     <div className="profile-panel">
       <div className="profile-panel-header">
@@ -112,14 +156,15 @@ export default function ProfilePanel({ sessionId, isConnected, initialSummary }:
       </div>
 
       <div className="profile-panel-content">
-        {/* Summary Section */}
-        <div className="debug-category">
-          <div className="debug-category-header">
-            <h3 className="debug-category-title">Summary</h3>
+        {/* Summary Card */}
+        <div className="profile-card summary-card">
+          <div className="card-header">
+            <span className="card-title">Current Understanding</span>
             <button 
               className="refresh-btn"
               onClick={generateSummary}
               disabled={isGeneratingSummary}
+              title="Refresh summary"
             >
               {isGeneratingSummary ? '...' : '↻'}
             </button>
@@ -131,151 +176,159 @@ export default function ProfilePanel({ sessionId, isConnected, initialSummary }:
           </p>
         </div>
 
-        {/* User Profile */}
-        <div className="debug-category">
-          <h3 className="debug-category-title">User Profile</h3>
-          <div className="debug-section-content">
-            <div className="debug-field">
-              <span className="debug-field-key">Curiosity:</span>
-              <span className="debug-field-value">{formatValue(profile.curiosity_type?.value)}</span>
+        {/* Learning Style Traits */}
+        <div className="profile-card">
+          <div className="card-header">
+            <span className="card-title">How You Learn</span>
+          </div>
+          <div className="trait-grid">
+            <div className="trait-item">
+              <span className="trait-icon">{entryMode.icon}</span>
+              <span className="trait-label">Entry</span>
+              <span className="trait-value">{entryMode.mode}</span>
             </div>
-            <div className="debug-field">
-              <span className="debug-field-key">Entry Mode:</span>
-              <span className="debug-field-value">
-                people: {profile.entry_mode?.people?.toFixed(1) || '—'}, 
-                problems: {profile.entry_mode?.problems?.toFixed(1) || '—'}, 
-                ideas: {profile.entry_mode?.ideas?.toFixed(1) || '—'}
-              </span>
+            <div className="trait-item">
+              <span className="trait-icon">🔮</span>
+              <span className="trait-label">Curiosity</span>
+              <span className="trait-value">{curiosity.value}</span>
+              {curiosity.confidence && <span className="trait-confidence">{curiosity.confidence}</span>}
             </div>
-            <div className="debug-field">
-              <span className="debug-field-key">Uncertainty:</span>
-              <span className="debug-field-value">{formatValue(profile.uncertainty_tolerance?.value)}</span>
+            <div className="trait-item">
+              <span className="trait-icon">⚡</span>
+              <span className="trait-label">Pacing</span>
+              <span className="trait-value">{pacing.value}</span>
             </div>
-            <div className="debug-field">
-              <span className="debug-field-key">Pacing:</span>
-              <span className="debug-field-value">{formatValue(profile.pacing_preference?.value)}</span>
+            <div className="trait-item">
+              <span className="trait-icon">🌊</span>
+              <span className="trait-label">Uncertainty</span>
+              <span className="trait-value">{uncertainty.value}</span>
             </div>
-            <div className="debug-field">
-              <span className="debug-field-key">Motivation:</span>
-              <span className="debug-field-value">{formatValue(profile.motivation_profile?.primary_driver)}</span>
+            <div className="trait-item">
+              <span className="trait-icon">🔥</span>
+              <span className="trait-label">Driver</span>
+              <span className="trait-value">{motivation}</span>
             </div>
           </div>
         </div>
 
         {/* Goal Candidates */}
         {goalCandidates.length > 0 && (
-          <div className="debug-category">
-            <h3 className="debug-category-title">Goal Candidates ({goalCandidates.length})</h3>
-            {goalCandidates.map((goal: any, idx: number) => (
-              <div key={idx} className="debug-section">
-                <div className="debug-section-content">
-                  <div className="debug-field">
-                    <span className="debug-field-key">Goal:</span>
-                    <span className="debug-field-value">{goal.goal}</span>
-                  </div>
-                  <div className="debug-field">
-                    <span className="debug-field-key">Scores:</span>
-                    <span className="debug-field-value">
-                      concrete: {goal.concreteness?.toFixed(2)}, 
-                      scope: {goal.scope_appropriateness?.toFixed(2)}, 
-                      commit: {goal.user_commitment?.toFixed(2)}
+          <div className="profile-card">
+            <div className="card-header">
+              <span className="card-title">Emerging Goals</span>
+              <span className="item-count">{goalCandidates.length}</span>
+            </div>
+            <div className="goal-list">
+              {goalCandidates.map((goal: any, idx: number) => {
+                const avgScore = (
+                  (goal.concreteness || 0) + 
+                  (goal.scope_appropriateness || 0) + 
+                  (goal.user_commitment || 0)
+                ) / 3
+                const readiness = getReadinessLabel(avgScore)
+                return (
+                  <div key={idx} className="goal-item">
+                    <p className="goal-text">{goal.goal}</p>
+                    <span className={`readiness-badge ${readiness.level}`}>
+                      {readiness.label}
                     </span>
                   </div>
-                </div>
-              </div>
-            ))}
+                )
+              })}
+            </div>
           </div>
         )}
 
         {/* Teaching Candidates */}
         {teachingCandidates.length > 0 && (
-          <div className="debug-category">
-            <h3 className="debug-category-title">Teaching Candidates ({teachingCandidates.length})</h3>
-            {teachingCandidates.map((tc: any, idx: number) => (
-              <div key={idx} className="debug-section">
-                <div className="debug-section-content">
-                  <div className="debug-field">
-                    <span className="debug-field-key">Topic:</span>
-                    <span className="debug-field-value">{tc.topic}</span>
+          <div className="profile-card">
+            <div className="card-header">
+              <span className="card-title">Teaching Topics</span>
+              <span className="item-count">{teachingCandidates.length}</span>
+            </div>
+            <div className="teaching-list">
+              {teachingCandidates.map((tc: any, idx: number) => {
+                const readiness = getReadinessLabel(tc.readiness_score)
+                return (
+                  <div key={idx} className="teaching-item">
+                    <p className="teaching-topic">{tc.topic}</p>
+                    {tc.identified_gap && (
+                      <p className="teaching-gap">Gap: {tc.identified_gap}</p>
+                    )}
+                    <span className={`readiness-badge ${readiness.level}`}>
+                      {readiness.label}
+                    </span>
                   </div>
-                  <div className="debug-field">
-                    <span className="debug-field-key">Gap:</span>
-                    <span className="debug-field-value">{tc.identified_gap || '—'}</span>
-                  </div>
-                  <div className="debug-field">
-                    <span className="debug-field-key">Readiness:</span>
-                    <span className="debug-field-value">{tc.readiness_score?.toFixed(2)}</span>
-                  </div>
-                </div>
-              </div>
-            ))}
+                )
+              })}
+            </div>
           </div>
         )}
 
         {/* Conversational Themes */}
         {themes.length > 0 && (
-          <div className="debug-category">
-            <h3 className="debug-category-title">Themes ({themes.length})</h3>
-            {themes.slice(0, 5).map((theme: any, idx: number) => (
-              <div key={idx} className="debug-field">
-                <span className="debug-field-key">{theme.theme_type}:</span>
-                <span className="debug-field-value">{theme.theme_seed}</span>
-              </div>
-            ))}
-            {themes.length > 5 && (
-              <div className="debug-field">
-                <span className="debug-field-value" style={{ fontStyle: 'italic' }}>
-                  +{themes.length - 5} more...
+          <div className="profile-card">
+            <div className="card-header">
+              <span className="card-title">Themes</span>
+            </div>
+            <div className="theme-tags">
+              {themes.slice(0, 8).map((theme: any, idx: number) => (
+                <span key={idx} className="theme-tag">
+                  <span className="theme-icon">{getThemeIcon(theme.theme_type)}</span>
+                  {theme.theme_seed}
                 </span>
-              </div>
-            )}
+              ))}
+              {themes.length > 8 && (
+                <span className="theme-more">+{themes.length - 8} more</span>
+              )}
+            </div>
           </div>
         )}
 
-        {/* Controller State */}
-        <div className="debug-category">
-          <h3 className="debug-category-title">Controller</h3>
-          <div className="debug-section-content">
-            <div className="debug-field">
-              <span className="debug-field-key">Mode:</span>
-              <span className="debug-field-value">{controller.conversation_mode || '—'}</span>
-            </div>
-            <div className="debug-field">
-              <span className="debug-field-key">Intent:</span>
-              <span className="debug-field-value">{controller.question_intent || '—'}</span>
-            </div>
-            <div className="debug-field">
-              <span className="debug-field-key">Target:</span>
-              <span className="debug-field-value">{controller.target_ambiguity || '—'}</span>
-            </div>
-            {controller.focus_instruction && (
-              <div className="debug-field">
-                <span className="debug-field-key">Focus:</span>
-                <span className="debug-field-value">{controller.focus_instruction}</span>
+        {/* Current Focus */}
+        <div className="profile-card focus-card">
+          <div className="card-header">
+            <span className="card-title">Current Focus</span>
+          </div>
+          <div className="focus-details">
+            {controller.conversation_mode && (
+              <div className="focus-item">
+                <span className="focus-label">Mode</span>
+                <span className="focus-value mode-badge">
+                  {controller.conversation_mode.replace(/_/g, ' ')}
+                </span>
+              </div>
+            )}
+            {controller.question_intent && (
+              <div className="focus-item">
+                <span className="focus-label">Intent</span>
+                <span className="focus-value">{controller.question_intent.replace(/_/g, ' ')}</span>
+              </div>
+            )}
+            {controller.target_ambiguity && (
+              <div className="focus-item">
+                <span className="focus-label">Target</span>
+                <span className="focus-value target-badge">{controller.target_ambiguity}</span>
               </div>
             )}
           </div>
         </div>
 
         {/* Interview State */}
-        <div className="debug-category">
-          <h3 className="debug-category-title">State</h3>
-          <div className="debug-section-content">
-            <div className="debug-field">
-              <span className="debug-field-key">Goal Identified:</span>
-              <span className="debug-field-value">{interviewState.goal_identified ? 'Yes' : 'No'}</span>
+        <div className="profile-card state-card">
+          <div className="card-header">
+            <span className="card-title">Discovery State</span>
+          </div>
+          <div className="state-indicators">
+            <div className={`state-indicator ${interviewState.goal_identified ? 'active' : ''}`}>
+              <span className="state-dot"></span>
+              <span className="state-label">Goal {interviewState.goal_identified ? 'Found' : 'Searching'}</span>
             </div>
             {interviewState.user_goal && (
-              <div className="debug-field">
-                <span className="debug-field-key">User Goal:</span>
-                <span className="debug-field-value">{interviewState.user_goal}</span>
-              </div>
+              <p className="confirmed-goal">{interviewState.user_goal}</p>
             )}
-            {interviewState.proposed_goal && (
-              <div className="debug-field">
-                <span className="debug-field-key">Proposed:</span>
-                <span className="debug-field-value">{interviewState.proposed_goal}</span>
-              </div>
+            {interviewState.proposed_goal && !interviewState.goal_identified && (
+              <p className="proposed-goal">Proposed: {interviewState.proposed_goal}</p>
             )}
           </div>
         </div>

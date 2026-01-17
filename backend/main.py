@@ -473,6 +473,115 @@ async def clear_feed(user_id: str, context_type: str, goal_id: Optional[int] = N
 # Teaching Chat Endpoint (Simple conversation, no discovery)
 # ============================================
 
+class TeachingStartRequest(BaseModel):
+    user_id: str
+    goal_id: int
+    goal_text: str
+    teaching_candidate_id: int
+    topic: str
+    identified_gap: str
+    focus_question: str
+    goal_conversation_history: list = []  # Context from goal chat
+    user_background: str = ""
+
+class TeachingStartResponse(BaseModel):
+    session_id: str
+    opening_message: str
+
+@app.post("/api/teaching/start", response_model=TeachingStartResponse)
+async def start_teaching(request: TeachingStartRequest):
+    """
+    Initialize a teaching session with a structured opening that references the goal conversation.
+    Summarizes what was discussed, proposes a learning path, and asks for confirmation.
+    """
+    try:
+        from src.llm_client import LLMClient
+        from src.utils.config import get_model_name
+        import uuid
+        
+        llm = LLMClient()
+        session_id = str(uuid.uuid4())
+        
+        # Format the goal conversation for context
+        goal_context = ""
+        if request.goal_conversation_history:
+            goal_context = "\n".join([
+                f"{'User' if msg['role'] == 'user' else 'Assistant'}: {msg['content']}"
+                for msg in request.goal_conversation_history[-10:]  # Last 10 messages for context
+            ])
+        
+        # Build prompt for structured opening
+        system_prompt = f"""You are an expert learning coach helping someone learn about: {request.topic}
+
+BROADER LEARNING GOAL: {request.goal_text}
+IDENTIFIED KNOWLEDGE GAP: {request.identified_gap}
+
+CONTEXT FROM PREVIOUS CONVERSATION:
+The user just had a discovery conversation exploring this goal. Here's what was discussed:
+
+{goal_context if goal_context else "No prior conversation available."}
+
+USER BACKGROUND: {request.user_background}
+
+YOUR TASK:
+Generate a structured opening message that:
+
+1. BRIEFLY SUMMARIZE (2-3 sentences) what you discussed in the goal conversation - reference specific topics, methods, or concepts they mentioned being interested in
+
+2. PROPOSE A LEARNING PATH - Based on what they expressed interest in, propose a structured approach:
+   - What you'll cover first
+   - What builds on that
+   - What you'll explore after
+   
+3. ASK FOR CONFIRMATION - End by asking if this structure works for them or if they'd like to adjust the focus or order
+
+FORMAT:
+- Use markdown for structure (bold headers, bullet points)
+- Be specific - reference actual topics from the conversation (like RAG, RLHF, fact-checking modules, etc. if discussed)
+- Keep it concise but informative
+- Sound like a knowledgeable guide, not a generic assistant
+- NO sycophancy or filler phrases
+
+Example structure:
+**What we've explored so far:**
+[Brief summary of key topics/methods discussed]
+
+**Proposed learning path:**
+1. [First topic] - [why it makes sense to start here]
+2. [Second topic] - [how it builds on #1]
+3. [Third topic] - [where this leads]
+
+Does this structure work for you, or would you like to adjust the focus or order?
+"""
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": "Please generate the structured opening for our teaching session."}
+        ]
+        
+        model_name = get_model_name("interviewer", default="openai:gpt-4o")
+        
+        opening = llm.chat(
+            messages=messages,
+            model=model_name,
+            temperature=0.7,
+            max_tokens=800
+        )
+        
+        print(f"[Teaching Start] Generated structured opening for topic: {request.topic}")
+        
+        return TeachingStartResponse(
+            session_id=session_id,
+            opening_message=opening
+        )
+        
+    except Exception as e:
+        print(f"[Teaching Start] Error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 class TeachingChatRequest(BaseModel):
     user_id: str
     goal_id: int
@@ -483,6 +592,7 @@ class TeachingChatRequest(BaseModel):
     message: str
     conversation_history: list = []
     user_background: str = ""
+    goal_conversation_history: list = []  # Context from goal chat
 
 class TeachingChatResponse(BaseModel):
     response: str
@@ -490,7 +600,7 @@ class TeachingChatResponse(BaseModel):
 @app.post("/api/teaching/chat", response_model=TeachingChatResponse)
 async def teaching_chat(request: TeachingChatRequest):
     """
-    Simple teaching conversation - no discovery, just helpful responses about the topic.
+    Teaching conversation that builds on the context from the goal discovery phase.
     """
     try:
         from src.llm_client import LLMClient
@@ -498,35 +608,49 @@ async def teaching_chat(request: TeachingChatRequest):
         
         llm = LLMClient()
         
-        # Build a simple teaching prompt
+        # Format goal conversation context for reference
+        goal_context_summary = ""
+        if request.goal_conversation_history:
+            # Extract key topics mentioned in goal conversation
+            goal_context_summary = "\n".join([
+                f"- {msg['content'][:200]}..." if len(msg['content']) > 200 else f"- {msg['content']}"
+                for msg in request.goal_conversation_history[-6:]
+                if msg['role'] == 'user'
+            ])
+        
+        # Build a teaching prompt with goal context
         system_prompt = f"""You are a knowledgeable and patient teacher helping a user learn about: {request.topic}
 
 CONTEXT:
-- This is part of their broader learning goal
+- Their broader learning goal: They want to understand this topic as part of their learning journey
 - Their identified knowledge gap: {request.identified_gap}
-- A good starting question: {request.focus_question}
 - User background: {request.user_background}
+
+WHAT THEY DISCUSSED BEFORE STARTING THIS LESSON:
+{goal_context_summary if goal_context_summary else "No prior context available."}
 
 YOUR ROLE:
 - Explain concepts clearly and concisely
 - Use analogies and examples when helpful
 - Answer their questions directly
+- Reference connections to topics they mentioned being interested in (from the goal conversation)
 - If they seem confused, break things down further
-- Provide interesting context and connections
+- Provide interesting context and real-world applications
 - Be engaging but not overwhelming
-- Keep responses focused and digestible (2-3 paragraphs max unless they ask for more detail)
+- Keep responses focused (2-3 paragraphs unless they ask for more detail)
 
 STYLE:
 - Conversational and friendly
-- No excessive praise or filler
-- Concrete and specific
+- No excessive praise, filler, or sycophancy
+- Concrete and specific - use real examples
 - If you don't know something, say so
+- If they ask to adjust the learning path, accommodate their request
 """
 
         # Build messages
         messages = [{"role": "system", "content": system_prompt}]
         
-        # Add conversation history
+        # Add teaching conversation history
         for msg in request.conversation_history:
             messages.append({
                 "role": msg["role"],

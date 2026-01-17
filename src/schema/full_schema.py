@@ -354,6 +354,8 @@ class InterviewState(BaseModel):
     proposed_goal: Optional[str] = None  # Goal proposed to user but not yet confirmed
     proposed_goal_id: Optional[int] = None  # ID of the proposed goal candidate
     rejected_goal_ids: List[int] = Field(default_factory=list)  # Goal candidates user rejected
+    accepted_goal_ids: List[int] = Field(default_factory=list)  # Goal candidates user already accepted (don't re-propose)
+    last_goal_accepted_turn: Optional[int] = None  # Turn number when last goal was accepted (for cooldown)
     
     # Teaching candidate tracking (Phase 2)
     teaching_candidate_identified: bool = False  # Has a teaching candidate been selected?

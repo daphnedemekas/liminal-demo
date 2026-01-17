@@ -142,7 +142,7 @@ class GoalDiscoveryRanker(RankerAgentBase):
         Check if any goal candidate is ready for confirmation.
 
         Uses explicit dimension criteria rather than LLM-determined readiness.
-        Skips previously rejected goals and tries alternatives.
+        Skips previously rejected AND accepted goals.
 
         Returns:
             Dict with 'ready' boolean and 'best_goal' if ready
@@ -158,6 +158,7 @@ class GoalDiscoveryRanker(RankerAgentBase):
         # Sort all goals by score, highest first
         sorted_goals = sorted(schema.goal_candidates, key=goal_score, reverse=True)
         rejected_ids = set(schema.interview_state.rejected_goal_ids)
+        accepted_ids = set(schema.interview_state.accepted_goal_ids)
         
         # How many goals have been rejected? Lower threshold after rejections
         num_rejections = len(rejected_ids)
@@ -167,6 +168,11 @@ class GoalDiscoveryRanker(RankerAgentBase):
             # Skip already-rejected goals
             if goal.id in rejected_ids:
                 print(f"[GOAL_DISCOVERY] Skipping rejected goal: '{goal.goal}'")
+                continue
+            
+            # Skip already-accepted goals (don't re-propose)
+            if goal.id in accepted_ids:
+                print(f"[GOAL_DISCOVERY] Skipping already-accepted goal: '{goal.goal}'")
                 continue
             
             ready, reason = self._is_goal_ready(goal)
@@ -303,8 +309,18 @@ class GoalDiscoveryRanker(RankerAgentBase):
         min_turns_for_goal = 2
         current_turn = current_schema.interview_state.turns_elapsed + 1  # +1 because we're about to increment
         
+        # COOLDOWN AFTER ACCEPTING A GOAL: Require at least 2 turns of exploration before proposing another
+        # This ensures we explore new threads instead of immediately proposing the next ready goal
+        goal_acceptance_cooldown = 2
+        last_accepted_turn = current_schema.interview_state.last_goal_accepted_turn
+        turns_since_acceptance = (current_turn - last_accepted_turn) if last_accepted_turn is not None else float('inf')
+        
         if current_turn < min_turns_for_goal:
             print(f"[GOAL_DISCOVERY] Too early to propose goal (turn {current_turn} < {min_turns_for_goal})")
+            goal_readiness = {"ready": False, "best_goal": None}
+        elif turns_since_acceptance < goal_acceptance_cooldown:
+            print(f"[GOAL_DISCOVERY] In cooldown after goal acceptance ({turns_since_acceptance} < {goal_acceptance_cooldown} turns)")
+            print(f"[GOAL_DISCOVERY] Will explore new threads before proposing another goal")
             goal_readiness = {"ready": False, "best_goal": None}
         else:
             goal_readiness = self._check_goal_readiness(temp_schema)
@@ -333,10 +349,14 @@ class GoalDiscoveryRanker(RankerAgentBase):
             if temp_schema.goal_candidates:
                 # Show best non-rejected candidate
                 rejected_ids = set(temp_schema.interview_state.rejected_goal_ids)
-                non_rejected = [g for g in temp_schema.goal_candidates if g.id not in rejected_ids]
-                if non_rejected:
-                    best = max(non_rejected, key=lambda g: g.readiness_score)
-                    print(f"[GOAL_DISCOVERY] Best non-rejected candidate: '{best.goal}' ({best.readiness_score:.2f})")
+                accepted_ids = set(temp_schema.interview_state.accepted_goal_ids)
+                available = [g for g in temp_schema.goal_candidates 
+                            if g.id not in rejected_ids and g.id not in accepted_ids]
+                if available:
+                    best = max(available, key=lambda g: g.readiness_score)
+                    print(f"[GOAL_DISCOVERY] Best available candidate: '{best.goal}' ({best.readiness_score:.2f})")
+                else:
+                    print(f"[GOAL_DISCOVERY] No available candidates (all rejected or accepted)")
 
         # ===== PHASE 3: Controller (uses all updates) =====
         print("[TIMING] Phase 3: controller generation...")

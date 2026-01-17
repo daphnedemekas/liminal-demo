@@ -153,6 +153,10 @@ class DiscoveryOrchestrator:
                 "content": opening_question
             })
 
+            # Save conversation history to database (so it persists across navigations)
+            print("[DB] Saving opening question to conversation history...")
+            self.db.save_conversation_history(self.session_id, self.conversation_history)
+
             return opening_question
 
         # Step 1: Select appropriate ranker and update schema
@@ -309,6 +313,11 @@ class DiscoveryOrchestrator:
                 "role": "assistant",
                 "content": opening_question
             })
+            
+            # Save conversation history to database (so it persists across navigations)
+            print("[DB] Saving opening question to conversation history...")
+            self.db.save_conversation_history(self.session_id, self.conversation_history)
+            
             yield opening_question
             return
 
@@ -494,6 +503,13 @@ class DiscoveryOrchestrator:
 
         goal = self.schema.interview_state.proposed_goal
         goal_id = self.schema.interview_state.proposed_goal_id
+
+        # Track this goal as accepted so we don't re-propose it
+        if goal_id is not None:
+            self.schema.interview_state.accepted_goal_ids.append(goal_id)
+        
+        # Record turn number for cooldown (don't propose another goal immediately)
+        self.schema.interview_state.last_goal_accepted_turn = self.schema.interview_state.turns_elapsed
 
         # Clear proposal but stay in Phase 1 (exploration continues)
         self.schema.interview_state.proposed_goal = None

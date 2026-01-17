@@ -70,7 +70,13 @@ export default function DiscoveryChat({ sessionId: _initialSessionId, modelConfi
       // If resuming, load the conversation history
       if (response.is_resumed && response.conversation_history?.length > 0) {
         console.log('[DiscoveryChat] Resuming with', response.conversation_history.length, 'messages')
-        const restoredMessages = response.conversation_history.map((msg: any, idx: number) => ({
+        // Skip the first user message if it's the onboarding/background info
+        // (the AI's first response already incorporates this context)
+        let historyToRestore = response.conversation_history
+        if (historyToRestore.length > 0 && historyToRestore[0].role === 'user') {
+          historyToRestore = historyToRestore.slice(1)
+        }
+        const restoredMessages = historyToRestore.map((msg: any, idx: number) => ({
           id: `restored-${idx}`,
           role: msg.role as 'user' | 'assistant',
           content: msg.content,
@@ -86,7 +92,12 @@ export default function DiscoveryChat({ sessionId: _initialSessionId, modelConfi
             const freshData = await api.startDiscoverySession(modelConfig, undefined, userId)
             if (freshData.conversation_history?.length > response.conversation_history.length) {
               console.log('[DiscoveryChat] Found newer history:', freshData.conversation_history.length, 'messages')
-              const freshMessages = freshData.conversation_history.map((msg: any, idx: number) => ({
+              // Skip first user message (onboarding context)
+              let freshHistory = freshData.conversation_history
+              if (freshHistory.length > 0 && freshHistory[0].role === 'user') {
+                freshHistory = freshHistory.slice(1)
+              }
+              const freshMessages = freshHistory.map((msg: any, idx: number) => ({
                 id: `restored-fresh-${idx}`,
                 role: msg.role as 'user' | 'assistant',
                 content: msg.content,

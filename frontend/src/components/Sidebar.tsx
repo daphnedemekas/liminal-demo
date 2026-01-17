@@ -80,7 +80,7 @@ export default function Sidebar({
               className={`sidebar-exploration-btn ${isExplorationActive ? 'active' : ''}`}
               onClick={onNewExploration}
             >
-              <span className="sidebar-exploration-icon">🔭</span>
+              <span className="sidebar-exploration-icon"></span>
               <span>Current Exploration</span>
             </button>
           </div>
@@ -104,7 +104,7 @@ export default function Sidebar({
                         className="sidebar-session-main"
                         onClick={() => onSelectSession(session.id)}
                       >
-                        <span className="sidebar-session-icon">🎯</span>
+                        <span className="sidebar-session-icon"></span>
                         <div className="sidebar-session-info">
                           <span className="sidebar-session-goal">{session.goal}</span>
                           <span className="sidebar-session-date">
@@ -134,7 +134,7 @@ export default function Sidebar({
                             className={`sidebar-teaching-item ${activeTeachingId === tc.id ? 'active' : ''}`}
                             onClick={() => onSelectTeaching(session.id, tc.id)}
                           >
-                            <span className="sidebar-teaching-icon">📚</span>
+                            <span className="sidebar-teaching-icon"></span>
                             <span className="sidebar-teaching-topic">{tc.topic}</span>
                           </button>
                         ))}

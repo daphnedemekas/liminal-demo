@@ -17,10 +17,10 @@ const getReadinessLabel = (score: number | undefined): { label: string; level: s
 }
 
 const getDominantEntryMode = (entryMode: any): { mode: string; icon: string } => {
-  if (!entryMode) return { mode: 'Exploring', icon: '🔍' }
+  if (!entryMode) return { mode: 'Exploring', icon: '' }
   const { people = 0, problems = 0, ideas = 0 } = entryMode
   const max = Math.max(people, problems, ideas)
-  if (max < 0.3) return { mode: 'Exploring', icon: '🔍' }
+  if (max < 0.3) return { mode: 'Exploring', icon: '' }
   if (people === max) return { mode: 'People-oriented', icon: '👥' }
   if (problems === max) return { mode: 'Problem-solver', icon: '🎯' }
   return { mode: 'Ideas-driven', icon: '💡' }
@@ -187,23 +187,23 @@ export default function ProfilePanel({ sessionId, isConnected, initialSummary }:
               <span className="trait-value">{entryMode.mode}</span>
             </div>
             <div className="trait-item">
-              <span className="trait-icon">🔮</span>
+              <span className="trait-icon"></span>
               <span className="trait-label">Curiosity</span>
               <span className="trait-value">{curiosity.value}</span>
               {curiosity.confidence && <span className="trait-confidence">{curiosity.confidence}</span>}
             </div>
             <div className="trait-item">
-              <span className="trait-icon">⚡</span>
+              <span className="trait-icon"></span>
               <span className="trait-label">Pacing</span>
               <span className="trait-value">{pacing.value}</span>
             </div>
             <div className="trait-item">
-              <span className="trait-icon">🌊</span>
+              <span className="trait-icon"></span>
               <span className="trait-label">Uncertainty</span>
               <span className="trait-value">{uncertainty.value}</span>
             </div>
             <div className="trait-item">
-              <span className="trait-icon">🔥</span>
+              <span className="trait-icon"></span>
               <span className="trait-label">Driver</span>
               <span className="trait-value">{motivation}</span>
             </div>

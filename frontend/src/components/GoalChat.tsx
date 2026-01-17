@@ -70,7 +70,13 @@ export default function GoalChat({
       // If resuming, load the conversation history
       if (response.is_resumed && response.conversation_history?.length > 0) {
         console.log('[GoalChat] Resuming with', response.conversation_history.length, 'messages')
-        const restoredMessages: Message[] = response.conversation_history.map((msg: any, idx: number) => ({
+        // Skip the first user message if it's the onboarding/background info
+        // (the AI's first response already incorporates this context)
+        let historyToRestore = response.conversation_history
+        if (historyToRestore.length > 0 && historyToRestore[0].role === 'user') {
+          historyToRestore = historyToRestore.slice(1)
+        }
+        const restoredMessages: Message[] = historyToRestore.map((msg: any, idx: number) => ({
           id: `restored-${idx}`,
           role: msg.role as 'user' | 'assistant',
           content: msg.content,
@@ -84,7 +90,12 @@ export default function GoalChat({
             const freshData = await api.startDiscoverySession(modelConfig, goal, userId, goalId)
             if (freshData.conversation_history?.length > response.conversation_history.length) {
               console.log('[GoalChat] Found newer history:', freshData.conversation_history.length, 'messages')
-              const freshMessages: Message[] = freshData.conversation_history.map((msg: any, idx: number) => ({
+              // Skip first user message (onboarding context)
+              let freshHistory = freshData.conversation_history
+              if (freshHistory.length > 0 && freshHistory[0].role === 'user') {
+                freshHistory = freshHistory.slice(1)
+              }
+              const freshMessages: Message[] = freshHistory.map((msg: any, idx: number) => ({
                 id: `restored-fresh-${idx}`,
                 role: msg.role as 'user' | 'assistant',
                 content: msg.content,

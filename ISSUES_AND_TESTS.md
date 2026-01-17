@@ -78,7 +78,32 @@ def test_resumed_session_with_history_no_opening():
     # Assert opening_message is empty (use existing history)
 ```
 
-### Issue 3: WebSocket Reconnection Timing (Observed - Not Fixed)
+### Issue 3: TeachingChat playAudio Not Defined (FIXED)
+**File:** `frontend/src/components/TeachingChat.tsx`
+**Severity:** Critical
+**Description:** When accepting a teaching candidate and opening TeachingChat, the page crashes with `ReferenceError: playAudio is not defined`.
+
+**Root Cause:**
+- `playAudio` was used in useEffect but not destructured from `useAudio()` hook
+
+**Fix Applied:**
+```typescript
+// Changed from:
+const { isAudioMode, isPlaying, toggleAudioMode } = useAudio()
+
+// To:
+const { isAudioMode, isPlaying, toggleAudioMode, playAudio } = useAudio()
+```
+
+**Suggested Unit Tests:**
+```typescript
+test('TeachingChat renders without crashing', () => {
+  render(<TeachingChat candidate={mockCandidate} goalId={1} ... />)
+  // Should not throw ReferenceError
+})
+```
+
+### Issue 4: WebSocket Reconnection Timing (Observed - Not Fixed)
 **File:** `frontend/src/hooks/useWebSocket.ts`
 **Severity:** Medium
 **Description:** When navigating between Discovery and Goal panels, WebSocket disconnect/reconnect can be slow. The "Connecting..." state persists for several seconds.
@@ -115,7 +140,7 @@ describe('useWebSocket', () => {
 });
 ```
 
-### Issue 4: Profile Summary Prompt Too Sycophantic (FIXED)
+### Issue 5: Profile Summary Prompt Too Sycophantic (FIXED)
 **File:** `backend/main.py`
 **Severity:** Low (UX)
 **Description:** Profile summary prompt encouraged flowery language like "passionate", "unique blend", etc.

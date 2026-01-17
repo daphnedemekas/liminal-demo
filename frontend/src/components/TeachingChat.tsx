@@ -61,7 +61,7 @@ export default function TeachingChat({
   const wsRef = useRef<WebSocket | null>(null)
   const initRef = useRef(false)
 
-  const { isAudioMode, isPlaying, toggleAudioMode } = useAudio()
+  const { isAudioMode, isPlaying, toggleAudioMode, playAudio } = useAudio()
   const {
     isListening,
     transcript,

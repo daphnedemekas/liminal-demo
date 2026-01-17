@@ -134,37 +134,19 @@ class TeachingCandidateRanker(RankerAgentBase):
 
     def _is_teaching_ready(self, candidate: TeachingCandidate) -> Tuple[bool, str]:
         """
-        Check if a teaching candidate is ready based on explicit criteria.
+        Check if a teaching candidate is ready based on readiness_score.
         
-        Criteria:
-        - Must have identified gap
-        - Must have appropriate scope (not too_broad)
-        - Must be in ZPD (proximal or unknown, not too_hard/too_easy)
-        - Stakes should be clarified for quality
+        Simple threshold: propose when score >= 0.7
         
         Returns:
             Tuple of (ready: bool, reason: str)
         """
-        # Must have identified gap
-        if not candidate.identified_gap:
-            return False, "No identified gap"
+        READINESS_THRESHOLD = 0.7
         
-        # Must have appropriate scope
-        if candidate.pedagogical_scope == "too_broad":
-            return False, "Scope too broad"
+        if candidate.readiness_score >= READINESS_THRESHOLD:
+            return True, f"Score {candidate.readiness_score:.2f} >= {READINESS_THRESHOLD}"
         
-        # Must be in ZPD (proximal or unknown is ok)
-        rpl_fit = candidate.estimated_RPL_fit.value if hasattr(candidate.estimated_RPL_fit, 'value') else str(candidate.estimated_RPL_fit)
-        if rpl_fit == "too_hard":
-            return False, "Too hard for user"
-        if rpl_fit == "too_easy":
-            return False, "Too easy for user"
-        
-        # Stakes should be clarified for quality
-        if not candidate.stakes_clarified:
-            return False, "Stakes not clarified"
-        
-        return True, "All criteria met"
+        return False, f"Score {candidate.readiness_score:.2f} < {READINESS_THRESHOLD}"
 
     def _check_teaching_readiness(self, schema: DiscoverySchema) -> Dict[str, Any]:
         """
@@ -183,12 +165,9 @@ class TeachingCandidateRanker(RankerAgentBase):
             # Find the best candidate by readiness_score (still useful as a ranking metric)
             best = max(schema.teaching_candidates, key=lambda c: c.readiness_score)
 
-            # Use explicit criteria to determine readiness
+            # Check readiness based on score threshold
             ready, reason = self._is_teaching_ready(best)
             print(f"[TEACHING_DISCOVERY] Candidate '{best.topic}': ready={ready}, reason={reason}")
-            print(f"[TEACHING_DISCOVERY]   identified_gap={bool(best.identified_gap)}, pedagogical_scope={best.pedagogical_scope}")
-            rpl_fit = best.estimated_RPL_fit.value if hasattr(best.estimated_RPL_fit, 'value') else str(best.estimated_RPL_fit)
-            print(f"[TEACHING_DISCOVERY]   estimated_RPL_fit={rpl_fit}, stakes_clarified={best.stakes_clarified}")
 
             if not ready:
                 return self._not_ready_recommendation()
@@ -346,10 +325,7 @@ class TeachingCandidateRanker(RankerAgentBase):
         phase3_start = time.time()
 
         def _teaching_rec_task() -> Dict[str, Any]:
-            # Skip before turn 3
-            if current_schema.interview_state.turns_elapsed < 3:
-                print("[TIMING] Skipping teaching readiness check (too early)")
-                return self._not_ready_recommendation()
+            # Check teaching readiness (no minimum turn requirement)
             return self._check_teaching_readiness(temp_schema)
 
         with ThreadPoolExecutor(max_workers=2) as executor:

@@ -35,12 +35,21 @@ const getConfidenceLabel = (confidence: number | undefined): string => {
 
 const formatTraitValue = (trait: any): { value: string; confidence: string } => {
   if (!trait) return { value: '—', confidence: '' }
-  if (typeof trait === 'object' && trait.value) {
-    return { 
-      value: trait.value || '—', 
-      confidence: getConfidenceLabel(trait.confidence) 
+  
+  // Handle object with value/confidence structure (like CuriosityTypeField, PacingPreferenceField, etc.)
+  if (typeof trait === 'object') {
+    // Check if it has the expected structure (value can be null)
+    if ('value' in trait) {
+      return { 
+        value: trait.value || '—', 
+        confidence: getConfidenceLabel(trait.confidence) 
+      }
     }
+    // Unknown object structure - show placeholder instead of [object Object]
+    return { value: '—', confidence: '' }
   }
+  
+  // Simple string value
   return { value: String(trait), confidence: '' }
 }
 

@@ -53,16 +53,6 @@ const formatTraitValue = (trait: any): { value: string; confidence: string } => 
   return { value: String(trait), confidence: '' }
 }
 
-const getThemeIcon = (themeType: string): string => {
-  switch (themeType) {
-    case 'abstract_goal': return '🎯'
-    case 'concrete_topic': return '📚'
-    case 'metacognitive_pattern': return '🧠'
-    case 'preference': return '⚙️'
-    default: return '💬'
-  }
-}
-
 export default function ProfilePanel({ sessionId, isConnected, initialSummary }: ProfilePanelProps) {
   const [schema, setSchema] = useState<any>(null)
   const [summary, setSummary] = useState<string>(initialSummary || '')
@@ -283,7 +273,6 @@ export default function ProfilePanel({ sessionId, isConnected, initialSummary }:
             <div className="theme-tags">
               {themes.slice(0, 8).map((theme: any, idx: number) => (
                 <span key={idx} className="theme-tag">
-                  <span className="theme-icon">{getThemeIcon(theme.theme_type)}</span>
                   {theme.theme_seed}
                 </span>
               ))}

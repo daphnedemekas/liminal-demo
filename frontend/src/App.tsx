@@ -319,6 +319,7 @@ function App() {
                   goalText={activeGoalSession.goal}
                   userId={user.id}
                   onboardingInfo={onboardingInfo}
+                  modelConfig={modelConfig}
                 />
               </div>
             )}

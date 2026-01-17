@@ -76,56 +76,71 @@ If the same intent appears 2+ times, choose a DIFFERENT branch.
 Every question must relate to: "{user_goal}".
 You are not discovering what they want to learn; you are locating their position within the goal.
 
-1) IF NO TEACHING_CANDIDATES YET:
+**CRITICAL: ASSESSMENT BEFORE TEACHING CANDIDATES**
+Before creating teaching candidates, you MUST first understand:
+- What does the user already know about this topic?
+- What is their experience level (beginner/intermediate/advanced)?
+- Have they tried learning this before? What worked/didn't work?
+
+DO NOT rush to teaching candidates. Spend at least 2-3 turns understanding their current level.
+
+1) IF TURN <= 2 (EARLY ASSESSMENT PHASE):
+   - next_action: "assess_current_level"
+   - question_intent: "probe_prior_knowledge"
+   - target_ambiguity: "T2_model"
+   - conversation_mode: "calibration"
+   - focus_instruction: "Before identifying what to teach, understand WHERE they currently are in {user_goal}. Ask about their prior experience, what they've tried, or what they already understand."
+
+2) IF NO TEACHING_CANDIDATES YET AND TURN > 2:
    - next_action: "explore_within_goal"
    - question_intent: "locate_current_understanding"
    - target_ambiguity: "T2_model"
    - conversation_mode: "grounded_offer"
-   - focus_instruction: "Offer distinct entry points into {user_goal} and locate their current understanding."
+   - focus_instruction: "Based on their assessed level, offer distinct entry points into {user_goal} that match where they are."
 
-2) IF TEACHING_CANDIDATES EXIST BUT NO IDENTIFIED_GAP:
+3) IF TEACHING_CANDIDATES EXIST BUT NO IDENTIFIED_GAP:
    - next_action: "probe_candidate"
    - question_intent: "extract_gap"
    - target_ambiguity: "T3_gap"
    - conversation_mode: "hypothesis_correct"
    - focus_instruction: "Hypothesize their understanding and ask where it breaks down."
 
-3) IF TEACHING_CANDIDATE HAS IDENTIFIED_GAP BUT SCOPE IS TOO_BROAD:
+4) IF TEACHING_CANDIDATE HAS IDENTIFIED_GAP BUT SCOPE IS TOO_BROAD:
    - next_action: "narrow_scope"
    - question_intent: "reduce_scope"
    - target_ambiguity: "T4_scope"
    - conversation_mode: "direct_probe"
    - focus_instruction: "Ask for the smallest atomic piece they want to unlock first."
 
-4) IF TEACHING_CANDIDATE HAS GAP + SCOPE BUT stakes_clarified = false:
+5) IF TEACHING_CANDIDATE HAS GAP + SCOPE BUT stakes_clarified = false:
    - next_action: "clarify_stakes"
    - question_intent: "understand_why_this_matters"
    - target_ambiguity: "T5_stakes"
    - conversation_mode: "direct_probe"
    - focus_instruction: "Clarify whether this is for immediate utility or foundational understanding."
 
-5) IF TEACHING_CANDIDATE READY (readiness >= 0.65 AND stakes_clarified):
+6) IF TEACHING_CANDIDATE READY (readiness >= 0.65 AND stakes_clarified):
    - next_action: "confirm_target"
    - question_intent: "validate_starting_point"
    - target_ambiguity: null (all resolved)
    - conversation_mode: "direct_probe"
    - focus_instruction: "Confirm the teaching target and readiness."
 
-6) IF MULTIPLE TEACHING_CANDIDATES (readiness >= 0.5):
+7) IF MULTIPLE TEACHING_CANDIDATES (readiness >= 0.5):
    - next_action: "prioritize_candidates"
    - question_intent: "choose_starting_point"
    - target_ambiguity: "T1_hook" or "T2_model"
    - conversation_mode: "calibration"
    - focus_instruction: "Ask them to prioritize between Candidate A and Candidate B."
 
-7) IF USER DEFLECTING OR CONFUSED:
+8) IF USER DEFLECTING OR CONFUSED:
    - next_action: "provide_scaffolding"
    - question_intent: "reduce_cost"
    - target_ambiguity: "T2_model" or "T3_gap"
    - conversation_mode: "grounded_offer"
    - focus_instruction: "Offer concrete options within the goal to reduce cognitive load."
 
-8) IF USER ASKED A QUESTION:
+9) IF USER ASKED A QUESTION:
    - next_action: "answer_question"
    - question_intent: "clarify_and_locate"
    - target_ambiguity: "T2_model" or "T3_gap"

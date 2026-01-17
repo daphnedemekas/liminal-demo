@@ -505,6 +505,7 @@ class TeachingStartRequest(BaseModel):
     user_background: str = ""
     current_model_summary: Optional[str] = None
     stakes_summary: Optional[str] = None
+    llm_config: Optional[dict] = None  # Model configuration (e.g., {"ranker": "openai:gpt-4o"})
 
 
 class TeachingStartResponse(BaseModel):
@@ -549,6 +550,7 @@ async def start_teaching(request: TeachingStartRequest):
                 goal_text=request.goal_text,
                 user_background=request.user_background,
                 goal_conversation_history=request.goal_conversation_history,
+                model_config=request.llm_config,
                 session_id=session_id,
                 conversation_history=conversation_history,
                 schema_state=schema_state
@@ -581,7 +583,8 @@ async def start_teaching(request: TeachingStartRequest):
             teaching_candidate=teaching_candidate,
             goal_text=request.goal_text,
             user_background=request.user_background,
-            goal_conversation_history=request.goal_conversation_history
+            goal_conversation_history=request.goal_conversation_history,
+            model_config=request.llm_config
         )
         
         session_id = orchestrator.session_id

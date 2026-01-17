@@ -275,3 +275,4 @@ class TeachingSchema(BaseModel):
         """Pydantic config."""
         use_enum_values = True
 
+

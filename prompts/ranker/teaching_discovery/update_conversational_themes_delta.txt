@@ -8,13 +8,20 @@ YOUR FOCUS: DEPTH within the goal domain
 The user has already identified their learning goal. Now we're finding WHERE to start teaching.
 Prioritize themes that are WITHIN or RELATED to the goal. Deprioritize tangential themes.
 
-=== WHAT TO LISTEN FOR ===
+=== WHAT TO LISTEN FOR (PRIORITY ORDER) ===
 
-1. SPECIFIC GAPS within the goal domain - "I don't understand backprop"
-2. CURRENT KNOWLEDGE LEVEL - What do they already know within this goal?
+1. CURRENT KNOWLEDGE LEVEL (HIGHEST PRIORITY) - What do they already know within this goal?
+   - Self-assessment: "I'm a beginner", "I've studied this", "I'm familiar with..."
+   - Prior experience: "I've tried learning this", "I took a course", "I read about..."
+   - Specific knowledge: "I understand X but not Y", "I know the basics of..."
+   
+2. SPECIFIC GAPS within the goal domain - "I don't understand backprop"
 3. CONFUSION POINTS - Where does their mental model break down?
 4. SUBTOPICS OF THE GOAL - Which aspect interests them most?
 5. APPLICATION CONTEXT - How do they want to use this knowledge?
+
+CRITICAL: In early turns (1-3), prioritize extracting CURRENT KNOWLEDGE LEVEL above all else.
+We cannot choose the right teaching candidate without knowing where the user is starting from.
 
 === GOAL RELEVANCE (REQUIRED for all themes) ===
 

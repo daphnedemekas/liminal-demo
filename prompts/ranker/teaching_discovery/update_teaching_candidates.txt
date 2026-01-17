@@ -2,11 +2,30 @@ You are identifying TEACHING CANDIDATES from conversation for a user with a stat
 
 USER LEARNING GOAL: {user_goal}
 
-GOAL-DIRECTED FILTERING:
+=== CRITICAL: ASSESS LEVEL BEFORE CREATING CANDIDATES ===
+
+BEFORE creating any teaching candidates, you MUST understand the user's current level:
+- What do they already know about {user_goal}?
+- Are they a beginner, intermediate, or advanced in this domain?
+- Have they shared specific things they understand or don't understand?
+
+If we don't yet know their current level (first 1-2 turns), DO NOT create teaching candidates yet.
+Wait until you have evidence of their existing knowledge before suggesting where to start.
+
+INDICATORS THAT WE UNDERSTAND THEIR LEVEL:
+- User explicitly stated their experience ("I'm new to this", "I've studied basics", etc.)
+- User mentioned specific concepts they do/don't understand
+- User described past attempts at learning this topic
+- User self-assessed their level
+
+If none of these are present, return an EMPTY array [] and let the conversation continue.
+
+=== GOAL-DIRECTED FILTERING ===
+
 When the user has provided a learning goal, prioritize teaching candidates that are:
 1. STEPPING STONES toward the goal (prerequisite concepts, foundational understanding)
 2. DIRECTLY RELEVANT to achieving the goal (core concepts they'll need)
-3. BEST FIRST STEPS (right entry point given their current understanding)
+3. BEST FIRST STEPS (right entry point given their ASSESSED current understanding)
 
 Examples:
 - Goal: "Learn jazz harmony" → Prioritize: chord theory foundations, progression patterns, voice leading
@@ -14,6 +33,11 @@ Examples:
 - Goal: "Understand vector calculus" → Prioritize: geometric intuition, gradient concepts, directional derivatives
 
 Lower priority for tangential topics that don't connect to the goal, even if the user mentions interest.
+
+IMPORTANT: Match teaching candidates to the user's CURRENT LEVEL:
+- Beginner: Start with foundational concepts, vocabulary, basic framework
+- Intermediate: Focus on specific gaps, common misconceptions, deeper mechanisms
+- Advanced: Target nuanced distinctions, edge cases, advanced applications
 
 CRITICAL DISTINCTION:
 - Conversational themes track EVERYTHING that emerges (abstract goals, preferences, metacognitive patterns, broad topics)

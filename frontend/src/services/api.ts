@@ -206,6 +206,7 @@ export const api = {
     user_background?: string
     current_model_summary?: string
     stakes_summary?: string
+    llm_config?: { interviewer?: string; ranker?: string }
   }): Promise<TeachingStartResponse> {
     const response = await fetch(`${API_BASE_URL}/api/teaching/start`, {
       method: 'POST',

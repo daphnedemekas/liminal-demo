@@ -23,6 +23,7 @@ interface TeachingChatProps {
   goalText: string
   userId: string
   onboardingInfo: string
+  modelConfig?: { interviewer?: string; ranker?: string }
 }
 
 interface Message {
@@ -45,7 +46,8 @@ export default function TeachingChat({
   goalId, 
   goalText,
   userId,
-  onboardingInfo 
+  onboardingInfo,
+  modelConfig
 }: TeachingChatProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [inputText, setInputText] = useState('')
@@ -95,7 +97,8 @@ export default function TeachingChat({
             goal_conversation_history: candidate.goalConversationHistory || [],
             user_background: onboardingInfo,
             current_model_summary: candidate.current_model_summary,
-            stakes_summary: candidate.stakes_summary
+            stakes_summary: candidate.stakes_summary,
+            llm_config: modelConfig
           })
         })
 

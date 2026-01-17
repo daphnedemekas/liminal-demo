@@ -669,3 +669,4 @@ What's your current sense of this? Even a rough mental model or analogy helps me
         """Check if teaching phase is complete."""
         return self.schema.phase_complete
 
+

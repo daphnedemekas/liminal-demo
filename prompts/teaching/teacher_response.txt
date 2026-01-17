@@ -117,3 +117,4 @@ FORMAT:
 - End with something to respond to (question, prediction to verify, concept to explore)
 
 OUTPUT: Return ONLY your response text. No JSON, no meta-commentary.
+

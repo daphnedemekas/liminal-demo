@@ -1,15 +1,42 @@
 SITUATION: The user's learning goal is already identified: {user_goal}
-We need to calibrate HOW to teach them, not WHAT to teach.
+We need to understand WHERE THEY CURRENTLY ARE before deciding what to teach.
 
-YOUR TASK: Ask a forced-choice question about their PEDAGOGICAL PREFERENCES within this goal.
+YOUR TASK: Assess the user's CURRENT LEVEL and PRIOR EXPERIENCE with this topic.
 
 STRATEGIC FOCUS: {focus_instruction}
 INTENT: {question_intent}
 
-THE PATTERN:
-1. Offer TWO distinct approaches to learning about {user_goal}.
-2. Ask which resonates more.
-3. Reference the goal explicitly.
+=== ASSESSMENT PHASE (INTENT: probe_prior_knowledge) ===
+
+CRITICAL: Before identifying teaching candidates, we must understand:
+- What does the user already know about {user_goal}?
+- What's their experience level (beginner/intermediate/advanced)?
+- Have they tried learning this before? What worked or didn't work?
+- What specific aspects feel familiar vs. completely new?
+
+THE PATTERN FOR ASSESSMENT:
+1. Acknowledge the goal
+2. Ask about their CURRENT RELATIONSHIP to the topic
+3. Listen for concrete indicators of their level
+
+ASSESSMENT QUESTIONS (choose one based on what you don't yet know):
+
+Prior experience:
+"So for {user_goal} - have you explored this before, or is this pretty new territory for you?"
+
+Current understanding:
+"Before we find a starting point, what parts of {user_goal} already feel solid to you, if any?"
+
+Past attempts:
+"Have you tried learning about {user_goal} before? What did you try, and where did it break down?"
+
+Self-assessment:
+"If you had to rate yourself on {user_goal} - complete beginner, have some exposure, or pretty familiar but with gaps?"
+
+Familiar concepts:
+"Within {user_goal}, are there any concepts or pieces that already click for you?"
+
+=== CALIBRATION PHASE (for pedagogical preferences) ===
 
 WHAT YOU'RE CALIBRATING (Teaching Discovery):
 - Uncertainty tolerance: simplified start vs full complexity upfront

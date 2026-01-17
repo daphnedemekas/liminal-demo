@@ -118,3 +118,4 @@ CRITICAL RULES:
 5. Return ONLY valid JSON - no explanatory text
 
 IMPORTANT: Return ONLY valid JSON - no markdown code blocks.
+

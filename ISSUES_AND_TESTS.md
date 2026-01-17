@@ -103,7 +103,59 @@ test('TeachingChat renders without crashing', () => {
 })
 ```
 
-### Issue 4: WebSocket Reconnection Timing (Observed - Not Fixed)
+### Issue 4: Session Initialization Fails with Corrupted DB State (FIXED)
+**File:** Database state / session management
+**Severity:** High
+**Description:** When the database contains corrupted or inconsistent session data, new login attempts can fail with "retry connection" loop where clicking retry doesn't help.
+
+**Root Cause:**
+- Corrupted database state from previous sessions (interrupted sessions, server restarts during writes)
+- The `initRef.current` guard combined with stale session records can cause initialization to fail silently
+
+**Fix Applied:**
+- Clean database and restart backend resolves the issue
+- For production: add database migration/cleanup scripts, better error recovery
+
+**Suggested Prevention:**
+```python
+# Add to backend startup
+def cleanup_stale_sessions():
+    """Remove sessions older than 24 hours or with invalid state"""
+    db.execute("DELETE FROM sessions WHERE updated_at < datetime('now', '-1 day')")
+```
+
+**Suggested Unit Tests:**
+```typescript
+test('session initialization handles corrupted DB gracefully', async () => {
+  // Mock API to return invalid session data
+  // Verify error message shown and retry works
+})
+```
+
+### Issue 5: Teaching Session Not Receiving Model Config (FIXED)
+**File:** `backend/main.py`, `frontend/src/components/TeachingChat.tsx`, `frontend/src/App.tsx`
+**Severity:** High
+**Description:** Teaching session was not receiving the model_config from the frontend, causing it to fall back to default Anthropic Claude models which failed due to API credit issues.
+
+**Root Cause:**
+- `TeachingStartRequest` in backend didn't have `model_config` field
+- `TeachingOrchestrator` instantiation didn't pass `model_config`
+- Frontend `TeachingChat` didn't receive or send `modelConfig`
+
+**Fix Applied:**
+1. Added `model_config: Optional[dict] = None` to `TeachingStartRequest`
+2. Pass `model_config=request.model_config` to `TeachingOrchestrator`
+3. Added `modelConfig` prop to `TeachingChat` component
+4. Pass `modelConfig` from App.tsx to TeachingChat
+
+**Suggested Unit Tests:**
+```typescript
+test('TeachingChat sends model_config in API request', async () => {
+  // Mock fetch and verify model_config is included
+})
+```
+
+### Issue 6: WebSocket Reconnection Timing (Observed - Not Fixed)
 **File:** `frontend/src/hooks/useWebSocket.ts`
 **Severity:** Medium
 **Description:** When navigating between Discovery and Goal panels, WebSocket disconnect/reconnect can be slow. The "Connecting..." state persists for several seconds.
@@ -140,7 +192,38 @@ describe('useWebSocket', () => {
 });
 ```
 
-### Issue 5: Profile Summary Prompt Too Sycophantic (FIXED)
+### Issue 7: Exploration Chat Missing Recent Messages After Panel Switch (OBSERVED)
+**File:** `frontend/src/components/DiscoveryChat.tsx` or `backend/main.py`
+**Severity:** Medium
+**Description:** When switching from exploration → goal → teaching → exploration, the most recent messages in exploration chat are missing. The Turn counter shows Turn 2, but only 3 messages are displayed instead of 5.
+
+**Symptoms:**
+- Chat shows older messages correctly
+- Most recent user message and AI response (goal proposal) are missing
+- Profile data shows correct Turn count
+- Discovery State shows the proposed goal, but proposal UI is not visible
+
+**Possible Causes:**
+- Backend session may not be returning full conversation history
+- Frontend may be loading stale cached data
+- WebSocket reconnection might fetch truncated history
+
+**Suggested Fix:**
+- Verify backend `/api/discovery/start` returns complete `conversation_history`
+- Check if frontend caches messages and doesn't update properly on reconnect
+- Add debug logging to track message count before/after panel switch
+
+**Suggested Unit Tests:**
+```typescript
+test('Exploration chat preserves all messages after panel switch', async () => {
+  // Send 3 messages in exploration
+  // Switch to goal panel
+  // Switch back to exploration
+  // Verify all 3 messages + AI responses are visible
+})
+```
+
+### Issue 8: Profile Summary Prompt Too Sycophantic (FIXED)
 **File:** `backend/main.py`
 **Severity:** Low (UX)
 **Description:** Profile summary prompt encouraged flowery language like "passionate", "unique blend", etc.
@@ -212,6 +295,61 @@ describe('Session Persistence', () => {
     // 3. Assert profile attributes are preserved
   });
 });
+```
+
+---
+
+## Feature Improvements
+
+### Improvement 1: Goal Chat Now Assesses User Level Before Proposing Teaching Candidates (IMPLEMENTED)
+**Files:** 
+- `prompts/ranker/teaching_discovery/generate_controller.txt`
+- `prompts/ranker/teaching_discovery/update_teaching_candidates.txt`
+- `prompts/ranker/teaching_discovery/update_conversational_themes_delta.txt`
+- `prompts/interviewer/teaching_discovery/calibration.txt`
+
+**Description:** Goal Chat was jumping too quickly to identifying teaching candidates without first understanding the user's current level of understanding. This could lead to mismatched teaching targets.
+
+**Changes Applied:**
+1. **Controller prompt:** Added new Step 1 "EARLY ASSESSMENT PHASE" for turns 1-2
+   - New action: `assess_current_level`
+   - New intent: `probe_prior_knowledge`
+   - Focuses on understanding user's current knowledge before suggesting where to start
+
+2. **Teaching candidates prompt:** Added requirement to assess level before creating candidates
+   - Lists specific indicators that we understand their level
+   - Instructs to return empty array if level not yet assessed
+   - Added guidance on matching candidates to user's level (beginner/intermediate/advanced)
+
+3. **Conversational themes prompt:** Prioritized "CURRENT KNOWLEDGE LEVEL" as highest priority
+   - Lists specific signals to look for (self-assessment, prior experience, specific knowledge)
+   - Emphasizes importance in early turns
+
+4. **Calibration interviewer prompt:** Added assessment phase questions
+   - Questions about prior experience, current understanding, past attempts
+   - Pattern for acknowledging goal then assessing current relationship to topic
+
+**Expected Behavior:**
+- Turns 1-2: System asks about user's current level ("Have you explored this before?", "What parts feel solid?")
+- Turn 3+: Once level is understood, system can propose appropriate teaching candidates
+- Teaching candidates should match user's assessed level
+
+**Suggested Tests:**
+```python
+def test_goal_chat_assesses_level_first():
+    """Goal chat should ask about current level before proposing teaching candidates."""
+    # Start new goal session
+    # Send onboarding info
+    # First AI question should probe prior knowledge/experience
+    # Not immediately jump to teaching candidates
+
+def test_teaching_candidates_not_created_without_level():
+    """Teaching candidates should not be created until user level is assessed."""
+    # Start goal session
+    # Send vague response ("sounds interesting")
+    # Check teaching_candidates should be empty
+    # Send level info ("I'm a complete beginner")
+    # Now teaching_candidates can be created
 ```
 
 ---

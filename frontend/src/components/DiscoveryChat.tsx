@@ -151,7 +151,19 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, retryCount]) // Reinitialize if userId changes or retry requested
 
-  // Send onboarding info automatically once connected
+  // Show background prompt when waiting for user to provide background
+  useEffect(() => {
+    if (isConnected && awaitingBackground && queuedOpening?.content && messages.length === 0) {
+      console.log('[DiscoveryChat] Showing background prompt to user')
+      addMessage({
+        id: 'background-prompt',
+        role: 'assistant',
+        content: queuedOpening.content,
+      })
+    }
+  }, [isConnected, awaitingBackground, queuedOpening, messages.length, addMessage])
+
+  // Send onboarding info automatically once connected (when we have background info)
   useEffect(() => {
     console.log('[DiscoveryChat] Onboarding effect check:', {
       isConnected,
@@ -173,8 +185,9 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
         // The AI will use this context and respond with a contextual opening
         sendCommand(onboardingInfo)
 
-        // Only add opening message if there's content (we skip the generic opener)
-        if (queuedOpening.content && queuedOpening.content.trim()) {
+        // Only add opening message if there's content AND we're not awaiting background
+        // (if awaiting background, the prompt was already shown)
+        if (queuedOpening.content && queuedOpening.content.trim() && !awaitingBackground) {
           addMessage({
             id: crypto.randomUUID(),
             role: 'assistant',
@@ -189,7 +202,7 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
         }
       }, 100)
     }
-  }, [isConnected, onboardingInfo, onboardingSent, queuedOpening, sendCommand, sendMessage, addMessage, isAudioMode, playAudio, actualSessionId])
+  }, [isConnected, onboardingInfo, onboardingSent, queuedOpening, sendCommand, sendMessage, addMessage, isAudioMode, playAudio, actualSessionId, awaitingBackground])
 
   // Check for topic found
   useEffect(() => {
@@ -355,8 +368,8 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
 
   return (
     <div className="discovery-with-feed">
-      {/* Feed Panel */}
-      {userId && (
+      {/* Feed Panel - only show after user provides background */}
+      {userId && onboardingInfo && (
         <FeedPanel
           userId={userId}
           contextType="exploration"
@@ -489,17 +502,19 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
         )}
       </div>
 
-        {/* Profile Panel */}
-        <ProfilePanel 
-          sessionId={actualSessionId} 
-          isConnected={isConnected} 
-          initialSummary={profileSummary}
-          onGoalSelected={onGoalAccepted ? (goalText) => {
-            if (actualSessionId) {
-              onGoalAccepted(goalText, actualSessionId)
-            }
-          } : undefined}
-        />
+        {/* Profile Panel - only show after user provides background */}
+        {onboardingInfo && (
+          <ProfilePanel 
+            sessionId={actualSessionId} 
+            isConnected={isConnected} 
+            initialSummary={profileSummary}
+            onGoalSelected={onGoalAccepted ? (goalText) => {
+              if (actualSessionId) {
+                onGoalAccepted(goalText, actualSessionId)
+              }
+            } : undefined}
+          />
+        )}
       </div>
     </div>
   )

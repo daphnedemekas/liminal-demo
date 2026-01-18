@@ -16,9 +16,10 @@ interface DiscoveryChatProps {
   userId?: string  // For persistent sessions
   onTopicFound: (topic: any) => void
   onGoalAccepted?: (goal: string, sessionId: string) => void
+  onBackgroundCollected?: (info: string) => void  // Called when user provides background in chat
 }
 
-export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onTopicFound, onGoalAccepted }: DiscoveryChatProps) {
+export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onTopicFound, onGoalAccepted, onBackgroundCollected }: DiscoveryChatProps) {
   const [inputText, setInputText] = useState('')
   const [actualSessionId, setActualSessionId] = useState<string | null>(null)
   const [onboardingSent, setOnboardingSent] = useState(false)
@@ -26,6 +27,7 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
   const [queuedOpening, setQueuedOpening] = useState<{ content: string; audio_url?: string } | null>(null)
   const [sessionError, setSessionError] = useState<string | null>(null)
   const [retryCount, setRetryCount] = useState(0)
+  const [awaitingBackground, setAwaitingBackground] = useState(false)  // True when we're waiting for user's background info
   const initRef = useRef(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -41,13 +43,31 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
   } = useSpeechRecognition()
 
   // handleSend must be defined before any useEffect that depends on it
-  const handleSend = useCallback((text?: string) => {
+  const handleSend = useCallback(async (text?: string) => {
     const messageText = text || inputText.trim()
     if (!messageText || !isConnected) return
 
+    // If we're awaiting background info, treat the first message specially
+    if (awaitingBackground) {
+      setAwaitingBackground(false)
+      // Save background info via API
+      if (userId) {
+        try {
+          await api.updateOnboarding(userId, messageText)
+          console.log('[DiscoveryChat] Saved background info')
+        } catch (err) {
+          console.error('[DiscoveryChat] Failed to save background info:', err)
+        }
+      }
+      // Notify parent component
+      if (onBackgroundCollected) {
+        onBackgroundCollected(messageText)
+      }
+    }
+
     sendMessage(messageText)
     setInputText('')
-  }, [inputText, isConnected, sendMessage])
+  }, [inputText, isConnected, sendMessage, awaitingBackground, userId, onBackgroundCollected])
 
   // Reset initRef when component unmounts to allow re-initialization on remount
   useEffect(() => {
@@ -104,6 +124,13 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
         setMessages(restoredMessages)
         setOnboardingSent(true)  // Don't re-send onboarding for resumed sessions
         setQueuedOpening({ content: '', audio_url: undefined })  // No need for opening
+      } else if (!onboardingInfo) {
+        // No onboarding info yet - show prompt asking for background
+        const backgroundPrompt = "Before we begin exploring, tell me a bit about yourself - what do you do, what are you interested in, and what's been on your mind lately?"
+        setAwaitingBackground(true)
+        setOnboardingSent(true)  // Don't trigger automatic onboarding send
+        setQueuedOpening({ content: backgroundPrompt, audio_url: undefined })
+        console.log('[DiscoveryChat] No onboarding info, showing background prompt')
       } else if (response.opening_message && response.opening_message.trim()) {
         // New session with opening message
         setQueuedOpening({
@@ -301,20 +328,6 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
   const lastGoalPanelIndex = findLastIdx(messages, m => m.type === 'create_goal_panel' || m.type === 'goal_accepted')
   const hasPendingGoal = lastGoalProposedIndex > lastGoalPanelIndex && lastGoalProposedIndex >= 0
 
-  // Track if we just accepted a goal (show continuation options)
-  const lastGoalAcceptedIndex = findLastIdx(messages, m => 
-    m.type === 'create_goal_panel' || m.content?.includes('[Accepted goal]') || m.content?.includes('in a new panel')
-  )
-  const hasRecentGoalAccepted = lastGoalAcceptedIndex >= 0 && lastGoalAcceptedIndex === messages.length - 1
-  const [showContinuationOptions, setShowContinuationOptions] = useState(false)
-  
-  // Show continuation options after goal accepted
-  useEffect(() => {
-    if (hasRecentGoalAccepted) {
-      setShowContinuationOptions(true)
-    }
-  }, [hasRecentGoalAccepted])
-
   // Handle goal accept/reject
   const handleAcceptGoal = () => {
     if (isConnected) {
@@ -326,29 +339,6 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
     if (isConnected) {
       sendCommand('__REJECT_GOAL__')
     }
-  }
-
-  // Handle continuation options after goal accepted
-  const handleContinueThread = () => {
-    setShowContinuationOptions(false)
-    // Ask AI to continue exploring the current thread
-    sendMessage("Let's continue exploring this thread further. What else can we uncover here?")
-  }
-
-  const handleProposeDirection = () => {
-    setShowContinuationOptions(false)
-    // Focus the input so user can type their new direction
-    const input = document.querySelector('.text-input') as HTMLInputElement
-    if (input) {
-      input.focus()
-      input.placeholder = "What would you like to explore next?"
-    }
-  }
-
-  const handleAIPropose = () => {
-    setShowContinuationOptions(false)
-    // Send command to AI to propose a DIFFERENT topic - not related to already-accepted goals
-    sendMessage("Suggest something completely different to explore - look at my background and interests for a topic that's unrelated to the goals I've already accepted. I want diverse learning areas, not variations of the same theme.")
   }
 
   // Auto-scroll to bottom
@@ -455,33 +445,6 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
             <div className="status-indicator">
               <div className="status-spinner"></div>
               <span>{status}</span>
-            </div>
-          )}
-
-          {/* Continuation options after goal accepted */}
-          {showContinuationOptions && (
-            <div className="continuation-options">
-              <p className="continuation-prompt">What would you like to do next?</p>
-              <div className="continuation-buttons">
-                <button 
-                  className="continuation-btn continue-thread"
-                  onClick={handleContinueThread}
-                >
-                  Continue this thread
-                </button>
-                <button 
-                  className="continuation-btn propose-direction"
-                  onClick={handleProposeDirection}
-                >
-                  I'll propose a new direction
-                </button>
-                <button 
-                  className="continuation-btn ai-propose"
-                  onClick={handleAIPropose}
-                >
-                  AI suggestion
-                </button>
-              </div>
             </div>
           )}
 

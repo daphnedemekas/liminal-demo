@@ -73,3 +73,4 @@ Onboarding → Exploration Chat → Goal Discovery → Goal Chat (Assessment) �
 4. ✅ KeyError in prompts with unescaped curly braces
 5. ✅ GPT-5 model compatibility issues (max_tokens, temperature)
 
+

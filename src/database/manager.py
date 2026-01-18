@@ -644,13 +644,26 @@ class DatabaseManager:
             session.close()
 
     def update_goal_teaching_candidate(self, goal_id: int, teaching_candidate: Dict[str, Any]):
-        """Update goal with teaching candidate info."""
+        """Update goal with teaching candidate info (legacy single candidate)."""
         session = self._get_session()
         try:
             goal = session.query(UserGoal).filter_by(id=goal_id).first()
             if goal:
                 goal.teaching_candidate = teaching_candidate
                 goal.has_teaching_candidate = 1
+                session.commit()
+        finally:
+            session.close()
+
+    def set_goal_teaching_candidates(self, goal_id: int, teaching_candidates: list[Dict[str, Any]]):
+        """Set all teaching candidates for a goal (replaces existing)."""
+        session = self._get_session()
+        try:
+            goal = session.query(UserGoal).filter_by(id=goal_id).first()
+            if goal:
+                # Store as array in teaching_candidate JSON field
+                goal.teaching_candidate = teaching_candidates
+                goal.has_teaching_candidate = 1 if teaching_candidates else 0
                 session.commit()
         finally:
             session.close()

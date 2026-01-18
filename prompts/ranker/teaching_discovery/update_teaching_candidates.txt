@@ -235,23 +235,72 @@ Return a JSON object with teaching candidates AND task curriculum proposal:
     "tasks": [
       {{
         "id": 1,
-        "topic": "Transformer Circuits Framework",
-        "justification": "You understand attention but haven't looked inside - this gives you the conceptual vocabulary",
+        "topic": "Transformer Architecture Foundations",
+        "justification": "You know ML basics but haven't dug into transformer internals - this gives you the vocabulary for everything else",
         "prerequisites": [],
         "status": "available"
       }},
       {{
         "id": 2,
-        "topic": "Induction Heads",
-        "justification": "A concrete example of finding and understanding a circuit, building on the framework",
+        "topic": "Attention Mechanism Deep Dive",
+        "justification": "Building on the architecture, this is where the interpretable behavior actually lives",
         "prerequisites": [1],
         "status": "locked"
       }},
       {{
         "id": 3,
-        "topic": "Activation Patching",
-        "justification": "The hands-on technique you'll use to actually do interpretability",
-        "prerequisites": [1],
+        "topic": "Transformer Circuits Framework",
+        "justification": "Now you can learn the conceptual vocabulary for describing what circuits do",
+        "prerequisites": [2],
+        "status": "locked"
+      }},
+      {{
+        "id": 4,
+        "topic": "Induction Heads as a Case Study",
+        "justification": "A concrete example of finding and understanding a circuit in the wild",
+        "prerequisites": [3],
+        "status": "locked"
+      }},
+      {{
+        "id": 5,
+        "topic": "Activation Patching Techniques",
+        "justification": "The hands-on technique you'll use to actually probe model internals",
+        "prerequisites": [3],
+        "status": "locked"
+      }},
+      {{
+        "id": 6,
+        "topic": "Feature Visualization Methods",
+        "justification": "Another key tool - how to see what features neurons represent",
+        "prerequisites": [4, 5],
+        "status": "locked"
+      }},
+      {{
+        "id": 7,
+        "topic": "Superposition and Polysemanticity",
+        "justification": "The key challenge in interpretability - why it's harder than it seems",
+        "prerequisites": [6],
+        "status": "locked"
+      }},
+      {{
+        "id": 8,
+        "topic": "Sparse Autoencoders for Decomposition",
+        "justification": "The cutting-edge approach to dealing with superposition",
+        "prerequisites": [7],
+        "status": "locked"
+      }},
+      {{
+        "id": 9,
+        "topic": "Mechanistic Interpretability Workflows",
+        "justification": "Putting it all together - how to run an interpretability investigation",
+        "prerequisites": [5, 6, 8],
+        "status": "locked"
+      }},
+      {{
+        "id": 10,
+        "topic": "Open Problems and Research Frontiers",
+        "justification": "What's still unknown and where you could contribute",
+        "prerequisites": [9],
         "status": "locked"
       }}
     ],

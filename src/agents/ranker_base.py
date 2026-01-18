@@ -535,9 +535,13 @@ Respond with ONLY the category name, nothing else."""
                 json_top_level="array",
             )
 
-            # Ensure response is a list
+            # Handle response - LLM may return either array or object with teaching_candidates + task_curriculum
+            task_curriculum_data = None
             if isinstance(response, dict):
-                # Check if LLM returned nested format like {'teaching_candidates': [...]}
+                # Check if LLM returned nested format like {'teaching_candidates': [...], 'task_curriculum': {...}}
+                if 'task_curriculum' in response:
+                    task_curriculum_data = response['task_curriculum']
+                    print(f"[DEBUG] LLM returned task_curriculum: proposed={task_curriculum_data.get('proposed')}, tasks={len(task_curriculum_data.get('tasks', []))}")
                 if 'teaching_candidates' in response:
                     response = response['teaching_candidates']
                 else:
@@ -545,6 +549,17 @@ Respond with ONLY the category name, nothing else."""
                     response = [response]
             if not isinstance(response, list):
                 response = []
+            
+            # Update task_curriculum in schema if provided
+            if task_curriculum_data and task_curriculum_data.get('tasks'):
+                from src.schema.full_schema import ProposedTask, TaskCurriculum
+                schema.task_curriculum = TaskCurriculum(
+                    proposed=task_curriculum_data.get('proposed', True),
+                    accepted=task_curriculum_data.get('accepted', False),
+                    tasks=[ProposedTask(**t) for t in task_curriculum_data.get('tasks', [])],
+                    modification_history=task_curriculum_data.get('modification_history', [])
+                )
+                print(f"[DEBUG] Updated schema.task_curriculum with {len(schema.task_curriculum.tasks)} tasks")
 
             sanitized: List[Dict[str, Any]] = []
             for c in response:

@@ -52,7 +52,7 @@ def read_root():
 
 from src.database.manager import DatabaseManager
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Union
 
 # Initialize database
 db = DatabaseManager()
@@ -73,7 +73,7 @@ class GoalResponse(BaseModel):
     created_at: Optional[str]
     status: str
     has_teaching_candidate: bool
-    teaching_candidate: Optional[dict] = None  # The accepted teaching candidate
+    teaching_candidate: Optional[Union[dict, List[dict]]] = None  # Single candidate or list of curriculum tasks
 
 class UserDataResponse(BaseModel):
     user_id: str
@@ -229,6 +229,96 @@ async def save_profile_summary(request: SaveSummaryRequest):
         return {"success": True}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/profile/reasoning")
+async def generate_ai_reasoning(request: ProfileSummaryRequest):
+    """Generate the AI tutor's inner monologue / chain of thought reasoning."""
+    try:
+        from src.llm_client import LLMClient
+        
+        schema = request.schema
+        controller = schema.get("controller", {})
+        prior_knowledge = schema.get("prior_knowledge_assessment", {})
+        interview_state = schema.get("interview_state", {})
+        teaching_candidates = schema.get("teaching_candidates", [])
+        goals = schema.get("goal_candidates", [])
+        
+        # Build context for the reasoning
+        context_parts = []
+        
+        # What we just learned from the last exchange
+        if prior_knowledge.get("evidence"):
+            latest_evidence = prior_knowledge["evidence"][-1] if prior_knowledge["evidence"] else None
+            if latest_evidence:
+                context_parts.append(f"Last insight: {latest_evidence.get('revealed', '')}")
+        
+        if controller.get("focus_instruction"):
+            context_parts.append(f"Current focus: {controller['focus_instruction']}")
+        
+        # What we're trying to figure out
+        if controller.get("question_intent"):
+            context_parts.append(f"Trying to understand: {controller['question_intent'].replace('_', ' ')}")
+        
+        if controller.get("target_ambiguity"):
+            target = controller['target_ambiguity'].replace('_', ' ')
+            context_parts.append(f"Resolving ambiguity about: {target}")
+        
+        # Knowledge gaps identified
+        concepts_unclear = prior_knowledge.get("concepts_unclear", [])
+        if concepts_unclear:
+            context_parts.append(f"Unclear concepts: {', '.join(concepts_unclear[:3])}")
+        
+        # Assessment level
+        if prior_knowledge.get("assessed_level"):
+            context_parts.append(f"User's level appears to be: {prior_knowledge['assessed_level']}")
+        
+        # Goals context
+        if interview_state.get("proposed_goal"):
+            context_parts.append(f"Considering proposing goal: {interview_state['proposed_goal']}")
+        elif goals:
+            top_goals = [g.get("goal", "") for g in goals[:2] if g.get("goal")]
+            if top_goals:
+                context_parts.append(f"Emerging goals: {'; '.join(top_goals)}")
+        
+        # Teaching candidates context
+        if teaching_candidates:
+            topics = [tc.get("topic", "") for tc in teaching_candidates[:2] if tc.get("topic")]
+            if topics:
+                context_parts.append(f"Potential teaching topics: {', '.join(topics)}")
+        
+        if not context_parts:
+            return {"reasoning": "Getting to know this learner... I'll ask some questions to understand their interests and background."}
+        
+        # Generate inner monologue with LLM
+        llm = LLMClient()
+        prompt = f"""You are an AI tutor. Write your INNER MONOLOGUE - your private thoughts about this learner after the last exchange. Write in first person, as if thinking to yourself.
+
+Context from the conversation:
+{chr(10).join(f"- {p}" for p in context_parts)}
+
+RULES:
+- Write 2-4 sentences of natural inner monologue
+- First person, present tense ("I notice...", "I'm wondering...", "I think I should...")
+- Be genuine and thoughtful, like a tutor reflecting between exchanges
+- Focus on: what you learned, what's still unclear, what you want to explore next
+- NO meta-commentary, just the thoughts themselves
+- Maximum 60 words
+
+Example: "Interesting - they clearly understand the basics of RAG but seem fuzzy on how vector similarity actually works. I should probe that more. Their mention of 'production systems' suggests practical experience, so maybe concrete examples would resonate better than theory."
+
+Write the inner monologue:"""
+
+        reasoning = llm.chat(
+            messages=[{"role": "user", "content": prompt}],
+            model="openai:gpt-4o-mini",
+            max_tokens=150
+        )
+        
+        return {"reasoning": reasoning.strip()}
+    except Exception as e:
+        print(f"[API] Error generating reasoning: {e}")
+        return {"reasoning": "Processing the conversation..."}
 
 
 @app.post("/api/profile/summary")
@@ -536,6 +626,8 @@ class TeachingStartResponse(BaseModel):
     conversation_history: list = []
     is_resumed: bool = False
     curriculum_plan: Optional[dict] = None
+    phase: Optional[str] = None  # e.g., "assessment", "curriculum_proposal", "teaching"
+    message_type: Optional[str] = None  # e.g., "assessment_question", "curriculum_proposed"
 
 
 @app.post("/api/teaching/start", response_model=TeachingStartResponse)
@@ -627,13 +719,15 @@ async def start_teaching(request: TeachingStartRequest):
         teaching_sessions[session_id] = orchestrator
         
         print(f"[Teaching] Created new session: {session_id[:8]}... for topic: {request.topic} (phase: {start_result.get('phase', 'unknown')})")
-        
+
         return TeachingStartResponse(
             session_id=session_id,
             opening_message=start_result.get("message", ""),
             conversation_history=orchestrator.conversation_history,
             is_resumed=False,
-            curriculum_plan=orchestrator.schema.curriculum_plan.model_dump() if orchestrator.schema.curriculum_plan.steps else None
+            curriculum_plan=orchestrator.schema.curriculum_plan.model_dump() if orchestrator.schema.curriculum_plan.steps else None,
+            phase=start_result.get("phase"),
+            message_type=start_result.get("type")
         )
         
     except Exception as e:
@@ -1029,8 +1123,11 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
                 # Check if there's a pending goal proposal
                 has_pending_goal = session_data.discovery_session.schema.interview_state.proposed_goal is not None
                 
-                # Check if there's a pending teaching proposal
-                has_pending_teaching = session_data.discovery_session.schema.interview_state.proposed_teaching_id is not None
+                # Check if there's a pending teaching proposal (batch mode)
+                has_pending_teaching = (
+                    len(session_data.discovery_session.schema.interview_state.proposed_teaching_ids) > 0 or
+                    session_data.discovery_session.schema.interview_state.batch_proposal_pending
+                )
                 
                 # Detect voice commands for acceptance
                 accept_phrases = ['yes', 'yeah', 'yep', 'sounds good', 'sounds great', 'accept', 'let\'s do it', 
@@ -1148,6 +1245,45 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
                     _maybe_checkpoint()
                     continue
 
+                # Check for curriculum accept command (batch task proposal)
+                if user_message == "__ACCEPT_CURRICULUM__":
+                    result = session_data.discovery_session.accept_proposed_curriculum()
+
+                    if not result.get("success"):
+                        await websocket.send_json({
+                            "type": "error",
+                            "message": result.get("message", "Failed to accept curriculum")
+                        })
+                        continue
+
+                    # Save all tasks to the goal in database as an array
+                    try:
+                        session_info = db.get_session_by_id(session_id)
+                        if session_info and session_info.get("goal_id"):
+                            tasks = result.get("tasks", [])
+                            # Save entire task list as teaching candidates array
+                            db.set_goal_teaching_candidates(
+                                session_info["goal_id"],
+                                tasks
+                            )
+                            print(f"[Curriculum] Saved {len(tasks)} tasks to goal {session_info['goal_id']}")
+                    except Exception as e:
+                        print(f"[Curriculum] Failed to save tasks to DB: {e}")
+
+                    # Send data for frontend - first task is available, others locked
+                    tasks = result.get("tasks", [])
+                    first_task = tasks[0] if tasks else None
+                    
+                    await websocket.send_json({
+                        "type": "task_curriculum_accepted",
+                        "tasks": tasks,
+                        "first_task": first_task,
+                        "content": f"Great! Let's start with: **{first_task['topic']}**" if first_task else "Curriculum accepted!",
+                        "message": result.get("message", "Curriculum accepted")
+                    })
+                    _maybe_checkpoint()
+                    continue
+
                 # Process message in thread pool to avoid blocking the event loop
                 # (blocking calls can cause WebSocket timeouts)
                 import asyncio
@@ -1181,7 +1317,38 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
                     _maybe_checkpoint()
                     continue
 
-                # Check if a teaching candidate was proposed (needs user confirmation)
+                # Check if a task curriculum was proposed (needs user confirmation)
+                if response.startswith("__TASK_CURRICULUM_PROPOSED__:"):
+                    import json as json_module
+                    curriculum_json = response.split(":", 1)[1]
+                    curriculum = json_module.loads(curriculum_json)
+                    
+                    # Build a message showing the proposed learning path
+                    tasks = curriculum.get('tasks', [])
+                    overall_justification = curriculum.get('overall_justification', "Here's the learning path I've designed for you:")
+                    task_list = "\n\n".join([f"**{i+1}. {t['topic']}**\n{t['justification']}" for i, t in enumerate(tasks)])
+                    curriculum_message = f"{overall_justification}\n\n{task_list}\n\n---\n\nThis is my best guess at the complete journey. We can adjust this as we learn more about what works for you."
+                    
+                    # Generate TTS for curriculum proposal
+                    curriculum_audio_url = None
+                    try:
+                        short_message = f"I've designed a learning path with {len(tasks)} topics. The first is {tasks[0]['topic'] if tasks else 'available'} to start."
+                        audio_path = audio_service.text_to_speech(short_message)
+                        curriculum_audio_url = f"/audio/{audio_path.name}"
+                    except Exception as e:
+                        print(f"[Audio] TTS for curriculum proposal failed: {e}")
+                    
+                    await websocket.send_json({
+                        "type": "task_curriculum_proposed",
+                        "curriculum": curriculum,
+                        "content": curriculum_message,
+                        "audio_url": curriculum_audio_url,
+                        "message": curriculum_message
+                    })
+                    _maybe_checkpoint()
+                    continue
+
+                # Check if a teaching candidate was proposed (needs user confirmation) - legacy single candidate
                 if response.startswith("__TEACHING_PROPOSED__:"):
                     import json as json_module
                     candidate_json = response.split(":", 1)[1]

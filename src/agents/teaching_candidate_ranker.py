@@ -561,32 +561,6 @@ class TeachingCandidateRanker(RankerAgentBase):
             summaries.append(controller_dict["focus_instruction"][:100])
             final_schema.interview_state.recent_question_summaries = summaries[-5:]
 
-        # ===== Teaching candidate proposal logic =====
-        if teaching_rec_dict.get("ready") and final_schema.teaching_candidates:
-            best_candidate = next(
-                (c for c in final_schema.teaching_candidates 
-                 if c.id == teaching_rec_dict.get("target_topic_id")),
-                None
-            )
-            if best_candidate:
-                # Check if this candidate was already rejected
-                if best_candidate.id in final_schema.interview_state.rejected_teaching_ids:
-                    print(f"[TEACHING_DISCOVERY] Candidate '{best_candidate.topic}' was previously rejected, skipping...")
-                # Check if we already proposed this candidate (waiting for user response)
-                elif final_schema.interview_state.proposed_teaching_id == best_candidate.id:
-                    print(f"[TEACHING_DISCOVERY] Candidate '{best_candidate.topic}' already proposed, waiting for user response...")
-                else:
-                    # Propose the teaching candidate to the user (don't auto-confirm)
-                    print(f"\n[TEACHING_DISCOVERY] ===== TEACHING CANDIDATE PROPOSED =====")
-                    print(f"[TEACHING_DISCOVERY] Topic: '{best_candidate.topic}'")
-                    print(f"[TEACHING_DISCOVERY] Readiness: {best_candidate.readiness_score:.2f}")
-                    final_schema.interview_state.proposed_teaching_id = best_candidate.id
-        else:
-            # Clear any pending proposal if candidate no longer qualifies
-            if final_schema.interview_state.proposed_teaching_id:
-                print(f"[TEACHING_DISCOVERY] Clearing stale teaching proposal")
-                final_schema.interview_state.proposed_teaching_id = None
-
         # Debug output
         if final_schema.teaching_candidates:
             best = max(final_schema.teaching_candidates, key=lambda c: c.readiness_score)

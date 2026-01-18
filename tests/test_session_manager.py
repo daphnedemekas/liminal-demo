@@ -111,3 +111,4 @@ class TestSessionData:
         assert session_data.learning_conversation == []
         assert session_data.learning_state == 'not_started'
 
+

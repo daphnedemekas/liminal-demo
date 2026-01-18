@@ -206,3 +206,4 @@ class TestSessionPersistence:
             # Should have opening message even though is_resumed
             assert data['opening_message'] == 'Welcome!'
 
+

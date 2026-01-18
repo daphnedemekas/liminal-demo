@@ -69,6 +69,11 @@ export default function ProfilePanel({ sessionId, isConnected, initialSummary, i
   const [summary, setSummary] = useState<string>(initialSummary || '')
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false)
   const [lastSummaryTurn, setLastSummaryTurn] = useState(initialSummary ? 0 : -1)
+  
+  // AI Reasoning / Inner Monologue
+  const [aiReasoning, setAiReasoning] = useState<string>('')
+  const [isGeneratingReasoning, setIsGeneratingReasoning] = useState(false)
+  const [lastReasoningTurn, setLastReasoningTurn] = useState(-1)
 
   useEffect(() => {
     if (initialSummary) {
@@ -152,6 +157,44 @@ export default function ProfilePanel({ sessionId, isConnected, initialSummary, i
       }
     }
   }, [schema, isTeachingSession]) // Intentionally exclude summary and lastSummaryTurn to allow re-generation
+
+  // Generate AI reasoning / inner monologue
+  const generateReasoning = useCallback(async () => {
+    if (isTeachingSession || !schema || !sessionId || isGeneratingReasoning) return
+    
+    const currentTurn = schema.interview_state?.turns_elapsed || 0
+    // Generate every turn (more frequent than summary)
+    if (aiReasoning && currentTurn === lastReasoningTurn) return
+    
+    setIsGeneratingReasoning(true)
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const response = await fetch(`${apiUrl}/api/profile/reasoning`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ schema })
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setAiReasoning(data.reasoning)
+        setLastReasoningTurn(currentTurn)
+      }
+    } catch (err) {
+      console.error('Failed to generate reasoning:', err)
+    } finally {
+      setIsGeneratingReasoning(false)
+    }
+  }, [schema, sessionId, aiReasoning, lastReasoningTurn, isGeneratingReasoning, isTeachingSession])
+
+  // Auto-generate reasoning on schema change
+  useEffect(() => {
+    if (schema && !isTeachingSession) {
+      const currentTurn = schema.interview_state?.turns_elapsed || 0
+      if (!aiReasoning || currentTurn !== lastReasoningTurn) {
+        generateReasoning()
+      }
+    }
+  }, [schema, isTeachingSession]) // Intentionally minimal deps for re-generation
 
   // Render teaching session panel
   if (isTeachingSession) {
@@ -327,20 +370,12 @@ export default function ProfilePanel({ sessionId, isConnected, initialSummary, i
     )
   }
 
-  const profile = schema.user_profile || {}
   const goalCandidates = schema.goal_candidates || []
   const teachingCandidates = schema.teaching_candidates || []
   const themes = schema.conversational_themes || []
   const interviewState = schema.interview_state || {}
   const controller = schema.controller || {}
   const priorKnowledgeAssessment = schema.prior_knowledge_assessment || {}
-  const taskCurriculum = schema.task_curriculum || {}
-
-  const entryMode = getDominantEntryMode(profile.entry_mode)
-  const curiosity = formatTraitValue(profile.curiosity_type)
-  const uncertainty = formatTraitValue(profile.uncertainty_tolerance)
-  const pacing = formatTraitValue(profile.pacing_preference)
-  const motivation = profile.motivation_profile?.primary_driver || '—'
 
   return (
     <div className="profile-panel">
@@ -441,41 +476,6 @@ export default function ProfilePanel({ sessionId, isConnected, initialSummary, i
           </div>
         )}
 
-        {/* Learning Style Traits */}
-        <div className="profile-card">
-          <div className="card-header">
-            <span className="card-title">How You Learn</span>
-          </div>
-          <div className="trait-grid">
-            <div className="trait-item">
-              <span className="trait-icon">{entryMode.icon}</span>
-              <span className="trait-label">Entry</span>
-              <span className="trait-value">{entryMode.mode}</span>
-            </div>
-            <div className="trait-item">
-              <span className="trait-icon">🔮</span>
-              <span className="trait-label">Curiosity</span>
-              <span className="trait-value">{curiosity.value}</span>
-              {curiosity.confidence && <span className="trait-confidence">{curiosity.confidence}</span>}
-            </div>
-            <div className="trait-item">
-              <span className="trait-icon">⚡</span>
-              <span className="trait-label">Pacing</span>
-              <span className="trait-value">{pacing.value}</span>
-            </div>
-            <div className="trait-item">
-              <span className="trait-icon">🌊</span>
-              <span className="trait-label">Uncertainty</span>
-              <span className="trait-value">{uncertainty.value}</span>
-            </div>
-            <div className="trait-item">
-              <span className="trait-icon">🔥</span>
-              <span className="trait-label">Driver</span>
-              <span className="trait-value">{motivation}</span>
-            </div>
-          </div>
-        </div>
-
         {/* Goal Candidates */}
         {goalCandidates.length > 0 && (
           <div className="profile-card">
@@ -543,6 +543,21 @@ export default function ProfilePanel({ sessionId, isConnected, initialSummary, i
           </div>
         )}
 
+        {/* AI Inner Monologue */}
+        <div className="profile-card inner-monologue-card">
+          <div className="card-header">
+            <span className="card-title">AI Thinking</span>
+            {isGeneratingReasoning && <span className="generating-indicator">...</span>}
+          </div>
+          <div className="inner-monologue">
+            <p className="monologue-text">
+              {isGeneratingReasoning && !aiReasoning 
+                ? 'Processing...' 
+                : aiReasoning || 'Getting to know you...'}
+            </p>
+          </div>
+        </div>
+
         {/* Conversational Themes */}
         {themes.length > 0 && (
           <div className="profile-card">
@@ -561,54 +576,6 @@ export default function ProfilePanel({ sessionId, isConnected, initialSummary, i
             </div>
           </div>
         )}
-
-        {/* Current Focus */}
-        <div className="profile-card focus-card">
-          <div className="card-header">
-            <span className="card-title">Current Focus</span>
-          </div>
-          <div className="focus-details">
-            {controller.conversation_mode && (
-              <div className="focus-item">
-                <span className="focus-label">Mode</span>
-                <span className="focus-value mode-badge">
-                  {controller.conversation_mode.replace(/_/g, ' ')}
-                </span>
-              </div>
-            )}
-            {controller.question_intent && (
-              <div className="focus-item">
-                <span className="focus-label">Intent</span>
-                <span className="focus-value">{controller.question_intent.replace(/_/g, ' ')}</span>
-              </div>
-            )}
-            {controller.target_ambiguity && (
-              <div className="focus-item">
-                <span className="focus-label">Target</span>
-                <span className="focus-value target-badge">{controller.target_ambiguity}</span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Interview State */}
-        <div className="profile-card state-card">
-          <div className="card-header">
-            <span className="card-title">Discovery State</span>
-          </div>
-          <div className="state-indicators">
-            <div className={`state-indicator ${interviewState.goal_identified ? 'active' : ''}`}>
-              <span className="state-dot"></span>
-              <span className="state-label">Goal {interviewState.goal_identified ? 'Found' : 'Searching'}</span>
-            </div>
-            {interviewState.user_goal && (
-              <p className="confirmed-goal">{interviewState.user_goal}</p>
-            )}
-            {interviewState.proposed_goal && !interviewState.goal_identified && (
-              <p className="proposed-goal">Proposed: {interviewState.proposed_goal}</p>
-            )}
-          </div>
-        </div>
       </div>
     </div>
   )

@@ -73,8 +73,7 @@ class TrajectoryUpdater:
         print(f"[TrajectoryUpdater] LLM returned insights: '{updated.get('insights', '(missing)')[:100]}...'")
 
         if not isinstance(updated, dict):
-            # Fallback: keep existing, but bump updated_at and advance checkpoint pointer
-            updated = dashboard_state or {"user_id": user_id}
+            raise ValueError(f"LLM returned non-dict response: {type(updated)}")
 
         # Enforce required fields + stable shape
         updated["user_id"] = user_id
@@ -89,7 +88,9 @@ class TrajectoryUpdater:
 
     def _build_prompt(self, *, user_id: str, previous_dashboard: Dict[str, Any], new_checkpoints: list, context: Dict[str, Any] = None) -> str:
         prompt_path = Path(__file__).parent.parent.parent / "prompts" / "trajectory" / "update_trajectory.txt"
-        template = prompt_path.read_text() if prompt_path.exists() else self._fallback_prompt_template()
+        if not prompt_path.exists():
+            raise FileNotFoundError(f"Required prompt file missing: {prompt_path}")
+        template = prompt_path.read_text()
 
         context = context or {}
         return template.format(
@@ -101,23 +102,6 @@ class TrajectoryUpdater:
 
     def _safe_json(self, obj: Any) -> str:
         import json
-
-        try:
-            return json.dumps(obj, ensure_ascii=False, indent=2, default=str)
-        except Exception:
-            return json.dumps({"error": "failed_to_serialize"}, ensure_ascii=False)
-
-    def _fallback_prompt_template(self) -> str:
-        # Used only if the prompt file is missing; keep it short and strict.
-        return (
-            "You are updating a learner trajectory dashboard JSON for user_id={user_id}.\n\n"
-            "Return ONLY valid JSON.\n\n"
-            "Previous dashboard JSON:\n{previous_dashboard_json}\n\n"
-            "New checkpoints JSON:\n{new_checkpoints_json}\n\n"
-            "Update the dashboard incrementally:\n"
-            "- Keep existing fields unless evidence suggests updating them.\n"
-            "- Append highlights only for meaningful deltas.\n"
-            "- Maintain stable shape: version,user_id,updated_at,highlights,goals,engagement,learner_model.\n"
-        )
+        return json.dumps(obj, ensure_ascii=False, indent=2, default=str)
 
 

@@ -123,11 +123,12 @@ export default function TeachingChat({
           setMessages(restoredMessages)
           console.log(`[TeachingChat] Restored ${restoredMessages.length} messages`)
         } else if (data.opening_message) {
-          // New session - add opening message
+          // New session - add opening message with type
           setMessages([{
             id: 'opening',
             role: 'assistant',
-            content: data.opening_message
+            content: data.opening_message,
+            type: data.message_type  // e.g., "assessment_question", "curriculum_proposed"
           }])
         }
 
@@ -148,10 +149,13 @@ export default function TeachingChat({
         setStatus('Failed to initialize. Please refresh.')
         
         // Fallback message
+        const focusQuestion = candidate.focus_question 
+          ? `\n\n${candidate.focus_question}` 
+          : ''
         setMessages([{
           id: 'fallback',
           role: 'assistant',
-          content: `Let's explore **${candidate.topic}** together.\n\n${candidate.focus_question}\n\nFeel free to ask questions or tell me what aspect interests you most.`
+          content: `Let's explore **${candidate.topic}** together.${focusQuestion}\n\nFeel free to ask questions or tell me what aspect interests you most.`
         }])
       } finally {
         setIsLoading(false)

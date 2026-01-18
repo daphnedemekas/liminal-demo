@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import ReactMarkdown from 'react-markdown'
 
 interface MessageBubbleProps {
@@ -7,6 +7,16 @@ interface MessageBubbleProps {
   audioUrl?: string
   isAudioMode?: boolean
   onAudioPlay?: () => void
+}
+
+// Strip leading/trailing quotes from AI messages (LLMs sometimes wrap responses in quotes)
+const stripQuotes = (text: string): string => {
+  const trimmed = text.trim()
+  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+      (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
+    return trimmed.slice(1, -1)
+  }
+  return text
 }
 
 export default function MessageBubble({
@@ -23,10 +33,18 @@ export default function MessageBubble({
     }
   }, [isAudioMode, audioUrl, role, onAudioPlay])
 
+  // Strip quotes from assistant messages
+  const displayContent = useMemo(() => {
+    if (role === 'assistant') {
+      return stripQuotes(content)
+    }
+    return content
+  }, [role, content])
+
   return (
     <div className={`message-bubble ${role}`}>
       <div className="message-content">
-        <ReactMarkdown>{content}</ReactMarkdown>
+        <ReactMarkdown>{displayContent}</ReactMarkdown>
       </div>
     </div>
   )

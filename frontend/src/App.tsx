@@ -3,13 +3,12 @@ import DiscoveryChat from './components/DiscoveryChat'
 import GoalChat from './components/GoalChat'
 import TeachingChat from './components/TeachingChat'
 import ModelSelector, { ModelConfig } from './components/ModelSelector'
-import OnboardingScreen from './components/OnboardingScreen'
 import LoginScreen from './components/LoginScreen'
 import TrajectoryPanel from './components/TrajectoryPanel'
 import Sidebar, { GoalSession, TeachingCandidate } from './components/Sidebar'
 import { api, GoalData } from './services/api'
 
-type Phase = 'login' | 'config' | 'onboarding' | 'discovery'
+type Phase = 'login' | 'config' | 'discovery'
 type MainView = 'trajectory' | 'exploration' | 'goal' | 'teaching'
 
 interface User {
@@ -54,7 +53,7 @@ function App() {
         createdAt: g.created_at ? new Date(g.created_at) : new Date(),
         isActive: g.status === 'active',
         // Convert single teaching_candidate to array format
-        teachingCandidates: g.teaching_candidate ? [g.teaching_candidate] : [],
+        teachingCandidates: Array.isArray(g.teaching_candidate) ? g.teaching_candidate : (g.teaching_candidate ? [g.teaching_candidate] : []),
       }))
       
       setGoalSessions(loadedGoals)
@@ -93,43 +92,10 @@ function App() {
 
   const handleModelSelect = (config: ModelConfig) => {
     setModelConfig(config)
-    setPhase('onboarding')
-  }
-
-  const handleOnboardingComplete = async (info: string, goal?: string) => {
-    setOnboardingInfo(info)
-
-    // Persist onboarding info
-    if (user) {
-      try {
-        await api.updateOnboarding(user.id, info)
-      } catch (err) {
-        console.error('[App] Failed to save onboarding:', err)
-      }
-    }
-
-    // If the user provided an explicit goal up-front, immediately create a goal panel
-    // and route them into the goal-specific chat. Exploration remains available in the sidebar.
-    if (goal && goal.trim() && user) {
-      try {
-        await handleGoalAccepted(goal.trim(), 'onboarding')
-        // Ensure we are viewing the new goal session (not exploration)
-        setActiveTeachingId(null)
-        setActiveMainView('goal')
-      } catch (err) {
-        console.error('[App] Failed to create initial goal panel from onboarding goal:', err)
-        // If this fails, fall back to exploration.
-        setActiveGoalSessionId(null)
-        setActiveTeachingId(null)
-        setActiveMainView('exploration')
-      }
-    } else {
-      // Default: start in exploration
-      setActiveGoalSessionId(null)
-      setActiveTeachingId(null)
-      setActiveMainView('exploration')
-    }
-
+    // Go directly to discovery - background info will be collected in the first chat message
+    setActiveGoalSessionId(null)
+    setActiveTeachingId(null)
+    setActiveMainView('exploration')
     setPhase('discovery')
   }
 
@@ -200,12 +166,12 @@ function App() {
   // Handle when teaching candidate is accepted - ADD to goal's teaching list (with deduplication)
   const handleTeachingCandidateAccepted = useCallback((candidate: TeachingCandidate, goalSessionId: string) => {
     console.log('[App] Teaching candidate accepted for goal:', goalSessionId, candidate)
-    
+
     // Add the teaching candidate to the goal session (only if not already present)
-    setGoalSessions(prev => prev.map(session => 
-      session.id === goalSessionId 
-        ? { 
-            ...session, 
+    setGoalSessions(prev => prev.map(session =>
+      session.id === goalSessionId
+        ? {
+            ...session,
             // Deduplicate by ID - don't add if candidate already exists
             teachingCandidates: session.teachingCandidates.some(tc => tc.id === candidate.id)
               ? session.teachingCandidates
@@ -213,10 +179,34 @@ function App() {
           }
         : session
     ))
-    
+
     // Automatically switch to the new teaching candidate view
     setActiveTeachingId(candidate.id)
   }, [])
+
+  // Handle when curriculum is accepted - ADD all tasks to goal's teaching list
+  const handleCurriculumAccepted = useCallback((tasks: TeachingCandidate[]) => {
+    if (!activeGoalSessionId) return
+
+    console.log('[App] Curriculum accepted with tasks:', tasks.length)
+
+    // Add all tasks to the active goal session
+    setGoalSessions(prev => prev.map(session =>
+      session.id === activeGoalSessionId
+        ? {
+            ...session,
+            teachingCandidates: tasks  // Replace with new curriculum
+          }
+        : session
+    ))
+
+    // Automatically select the first available task
+    const firstAvailable = tasks.find(t => t.status === 'available')
+    if (firstAvailable) {
+      setActiveTeachingId(firstAvailable.id)
+      setActiveMainView('teaching')
+    }
+  }, [activeGoalSessionId])
 
   // Handle logout
   const handleLogout = () => {
@@ -262,10 +252,6 @@ function App() {
             initialConfig={modelConfig}
           />
         </div>
-      )}
-
-      {phase === 'onboarding' && (
-        <OnboardingScreen onComplete={handleOnboardingComplete} />
       )}
 
       {showSidebar && (
@@ -317,6 +303,7 @@ function App() {
                   userId={user?.id}
                   onTopicFound={() => {}}  // No longer used
                   onGoalAccepted={handleGoalAccepted}
+                  onBackgroundCollected={(info) => setOnboardingInfo(info)}
                 />
               </div>
             )}
@@ -340,6 +327,7 @@ function App() {
                   onTeachingCandidateAccepted={(candidate) =>
                     handleTeachingCandidateAccepted(candidate, session.id)
                   }
+                  onCurriculumAccepted={handleCurriculumAccepted}
                 />
               </div>
             ))}

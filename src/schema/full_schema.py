@@ -202,10 +202,6 @@ class ConversationalTheme(BaseModel):
     last_mentioned_turn: int = 0
 
 
-# Legacy alias for backwards compatibility
-TopicCandidate = ConversationalTheme
-
-
 # ============================================================================
 # Teaching Candidate Tracking
 # ============================================================================
@@ -269,6 +265,9 @@ class TeachingCandidate(BaseModel):
     # Metadata
     turns_discussed: int = 0
     last_mentioned_turn: int = 0
+
+    # Status tracking (for sequential unlocking)
+    status: Literal["locked", "available", "in_progress", "completed"] = "locked"
 
 
 class GoalCandidate(BaseModel):
@@ -366,6 +365,7 @@ class PriorKnowledgeAssessment(BaseModel):
 
 class ProposedTask(BaseModel):
     """A proposed learning task in the curriculum."""
+    id: int = 0  # Task ID for ordering/references
     topic: str
     justification: str  # Why this task, tailored to user
     prerequisites: List[int] = Field(default_factory=list)  # IDs of prerequisite tasks
@@ -443,7 +443,6 @@ class InterviewState(BaseModel):
     
     # Teaching candidate tracking (Phase 2)
     teaching_candidate_identified: bool = False  # Has a teaching candidate been selected?
-    proposed_teaching_id: Optional[int] = None  # ID of teaching candidate proposed to user
     rejected_teaching_ids: List[int] = Field(default_factory=list)  # Teaching candidates user rejected
 
 

@@ -1,14 +1,16 @@
 SITUATION: The user's learning goal is already identified: {user_goal}
 Assessment is COMPLETE - we have good confidence in their prior knowledge level.
 
-YOUR TASK: Present a TASK CURRICULUM - a sequence of learning tasks with personalized justifications.
+YOUR TASK: Present a COMPREHENSIVE LEARNING PATH - a sequence of 8-12 learning tasks that charts the full journey from where they are now to achieving their goal.
 
 STRATEGIC FOCUS: {focus_instruction}
 INTENT: {question_intent}
 
-=== TASK CURRICULUM PROPOSAL ===
+=== LEARNING PATH PROPOSAL ===
 
-Based on assessment data, propose 3-5 learning tasks that form a coherent curriculum toward {user_goal}.
+Based on assessment data, propose 8-12 learning tasks that form a COMPLETE curriculum from their current level to mastery of {user_goal}.
+
+Think of this like designing a semester-long course: what are ALL the major topics they need to cover, in sequence?
 
 ASSESSMENT DATA:
 - Assessed Level: {assessed_level}
@@ -19,53 +21,64 @@ ASSESSMENT DATA:
 
 === CURRICULUM STRUCTURE ===
 
-Your proposal should:
+Your learning path should:
 1. Start where they are (build on what they know)
-2. Progress logically (each task enables the next)
-3. Have personalized justifications (why THIS task for THIS user)
-4. Include prerequisites (which tasks must come first)
+2. Cover EVERYTHING needed to achieve the goal (comprehensive)
+3. Progress logically - each task feeds into the next
+4. Have SIMILAR MAGNITUDE - each task is roughly equal in learning effort (think: 2-3 hours each)
+5. Be DISTINCT - each topic is different, no repetition
+6. Have personalized justifications (why THIS task for THIS user)
+7. Include prerequisites (which tasks must come first)
+
+TASK MAGNITUDE EXAMPLES:
+- TOO SMALL: "What is an embedding" (5 minutes)
+- RIGHT SIZE: "How embeddings capture semantic relationships and how to evaluate them" (2-3 hours)
+- TOO BIG: "All of machine learning" (months)
 
 THE PATTERN:
 
-"Based on [reference their background], here's what I'd suggest for {user_goal}:
+"Based on your background in [X] and your goal of {user_goal}, here's a complete learning path I've designed for you. Don't worry - we can adjust this as we go if needed:
 
-1. **[First Task]** (Foundation)
-   - Why for you: [Personalized reason based on assessment]
-   - Prerequisites: None
+1. **[First Task]** - [Short description]
+   Why for you: [Personalized reason referencing their assessment]
 
-2. **[Second Task]** (Building on #1)
-   - Why for you: [How this connects to what they already know/need]
-   - Prerequisites: Task 1
+2. **[Second Task]** - [Short description]
+   Why for you: [How this builds on #1 and connects to what they know]
 
-3. **[Third Task]** (Practical Application)
-   - Why for you: [How this addresses their specific gap or goal]
-   - Prerequisites: Task 1
+... (continue for 8-12 tasks) ...
 
-Does this progression make sense? I can adjust based on your preferences."
+12. **[Final Task]** - [Short description]
+   Why for you: [How this brings everything together toward the goal]
+
+This is my best guess at the full journey. We can absolutely adjust this as we learn more about what works for you - does this overall direction make sense?"
 
 === JUSTIFICATION REQUIREMENTS ===
 
 Each justification must reference:
 - Something from their assessment (what they know/don't know)
-- How this task connects to their goal
-- Why this is the right level/entry point
+- How this task connects to the goal
+- Why this comes at this point in the sequence
 
 GOOD justifications:
-- "You understand attention but haven't looked inside - this gives you the vocabulary"
-- "This fills the gap you mentioned about not understanding X"
-- "Since you've done Y before, this builds directly on that"
+- "Since you understand attention but haven't looked inside, this gives you the conceptual vocabulary"
+- "This fills the gap you mentioned about not understanding how X works"
+- "Building on the previous topic, this shows you how it applies in practice"
 
 BAD justifications:
 - "This is important to know" (generic)
 - "Everyone learns this first" (not personalized)
-- "This is foundational" (doesn't reference their level)
+- "This is foundational" (doesn't reference their specific level)
 
 === ENDING WITH CHOICE ===
 
-Always end with an option to modify:
-- "Does this progression make sense?"
-- "I can adjust based on your preferences"
-- "Ready to start, or would you like to modify?"
+Always include:
+1. Acknowledgment that this is a "best guess" / initial proposal
+2. Reassurance that it can be adjusted later
+3. Question about whether it makes sense
+
+Examples:
+- "This is my best guess at the full journey - we can refine it as we go. Does this direction make sense?"
+- "This isn't set in stone - we can adjust based on what works. Ready to start, or want to modify?"
 
 This triggers the Accept/Modify UI buttons.
 
@@ -73,16 +86,21 @@ This triggers the Accept/Modify UI buttons.
 
 When this message is detected, the frontend will show Accept/Modify buttons.
 The Accept/Modify detection looks for:
-- A numbered list of tasks with justifications
+- A numbered list of 8-12 tasks with justifications
 - A closing question about accepting or modifying
 
 CRITICAL RULES:
-- 3-5 tasks maximum (focused curriculum, not a course)
+- 8-12 tasks (comprehensive path, not just first steps)
+- Each task is SIMILAR MAGNITUDE (2-3 hours of learning each)
+- Each task is DISTINCT (different topic, no repetition)
+- SEQUENTIAL - each task feeds into the next
 - Every justification must be PERSONALIZED
 - First task should be "available", rest "locked"
 - Include clear prerequisites
+- Mention this is a starting point that can be adjusted
 - End with Accept/Modify prompt
 - Use **bold** for task names
-- Use PARAGRAPH BREAKS between tasks for readability
+- Use concise descriptions - don't over-explain each task
+
 
 

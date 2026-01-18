@@ -5,7 +5,7 @@ export interface Message {
   role: 'user' | 'assistant'
   content: string
   audio_url?: string
-  type?: 'message' | 'topic_found' | 'learning_message' | 'goal_proposed' | 'goal_accepted' | 'teaching_proposed' | 'teaching_accepted' | 'create_goal_panel' | 'create_teaching_panel'
+  type?: 'message' | 'topic_found' | 'learning_message' | 'goal_proposed' | 'goal_accepted' | 'teaching_proposed' | 'teaching_accepted' | 'create_goal_panel' | 'create_teaching_panel' | 'task_curriculum_proposed' | 'task_curriculum_accepted'
   topic?: any
   proposedGoal?: string  // For goal_proposed type
   goalData?: {  // For create_goal_panel type
@@ -20,6 +20,17 @@ export interface Message {
     identified_gap: string
     readiness_score?: number
   }
+  curriculum?: {  // For task_curriculum_proposed type
+    tasks: Array<{
+      id: number
+      topic: string
+      justification: string
+      prerequisites: number[]
+      status: string
+    }>
+    overall_justification?: string
+  }
+  tasks?: Array<any>  // For task_curriculum_accepted type - accepted tasks
   isStreaming?: boolean
 }
 
@@ -186,7 +197,34 @@ export function useWebSocket(sessionId: string, phase: 'discovery' | 'learning')
           return
         }
 
-        // Handle teaching_proposed - show confirmation UI for teaching candidate
+        // Handle task_curriculum_proposed - show curriculum with Accept/Modify buttons
+        if (data.type === 'task_curriculum_proposed') {
+          const curriculumMessage: Message = {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content: data.content || data.message,
+            audio_url: data.audio_url,
+            type: 'task_curriculum_proposed',
+            curriculum: data.curriculum,
+          }
+          setMessages(prev => [...prev, curriculumMessage])
+          return
+        }
+
+        // Handle task_curriculum_accepted - curriculum confirmed
+        if (data.type === 'task_curriculum_accepted') {
+          const acceptedMessage: Message = {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content: data.content || 'Curriculum accepted! Starting with the first topic.',
+            type: 'task_curriculum_accepted',
+            tasks: data.tasks  // Include the accepted tasks
+          }
+          setMessages(prev => [...prev, acceptedMessage])
+          return
+        }
+
+        // Handle teaching_proposed - show confirmation UI for teaching candidate (legacy single-candidate)
         if (data.type === 'teaching_proposed') {
           const teachingMessage: Message = {
             id: crypto.randomUUID(),

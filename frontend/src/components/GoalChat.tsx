@@ -26,15 +26,17 @@ interface GoalChatProps {
   modelConfig: ModelConfig
   onboardingInfo: string
   onTeachingCandidateAccepted: (candidate: TeachingCandidate) => void
+  onCurriculumAccepted?: (tasks: TeachingCandidate[]) => void  // When curriculum of multiple tasks is accepted
 }
 
-export default function GoalChat({ 
+export default function GoalChat({
   goalId,
-  goal, 
+  goal,
   userId,
-  modelConfig, 
+  modelConfig,
   onboardingInfo,
-  onTeachingCandidateAccepted 
+  onTeachingCandidateAccepted,
+  onCurriculumAccepted
 }: GoalChatProps) {
   const [inputText, setInputText] = useState('')
   const [actualSessionId, setActualSessionId] = useState<string | null>(null)
@@ -153,6 +155,27 @@ export default function GoalChat({
       })
     }
   }, [messages, onTeachingCandidateAccepted])
+
+  // Check for task_curriculum_accepted - notify parent to add all tasks
+  useEffect(() => {
+    const lastMessage = messages[messages.length - 1]
+    if (lastMessage?.type === 'task_curriculum_accepted' && lastMessage.tasks) {
+      console.log('[GoalChat] Curriculum accepted with tasks:', lastMessage.tasks)
+      const conversationHistory = messages
+        .filter(m => m.role === 'user' || m.role === 'assistant')
+        .map(m => ({ role: m.role, content: m.content }))
+
+      // Add goal conversation history to all tasks
+      const tasksWithHistory = lastMessage.tasks.map((task: any) => ({
+        ...task,
+        goalConversationHistory: conversationHistory
+      }))
+
+      if (onCurriculumAccepted) {
+        onCurriculumAccepted(tasksWithHistory)
+      }
+    }
+  }, [messages, onCurriculumAccepted])
 
   // Track if we've played audio for the current last message
   const [lastPlayedMessageId, setLastPlayedMessageId] = useState<string | null>(null)

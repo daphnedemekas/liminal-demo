@@ -30,9 +30,20 @@ export interface GoalData {
   teaching_candidate?: {
     id: number
     topic: string
-    focus_question: string
-    identified_gap: string
-  } | null
+    focus_question?: string
+    identified_gap?: string
+    justification?: string
+    prerequisites?: number[]
+    status?: string
+  } | Array<{
+    id: number
+    topic: string
+    focus_question?: string
+    identified_gap?: string
+    justification?: string
+    prerequisites?: number[]
+    status?: string
+  }> | null
 }
 
 export interface ExplorationSession {

@@ -210,26 +210,26 @@ class DiscoveryOrchestrator:
             # Return special marker that tells the caller to show goal confirmation UI
             return f"__GOAL_PROPOSED__:{self.schema.interview_state.proposed_goal}"
 
-        # Step 4b: Check if a teaching candidate has been proposed (needs user confirmation)
-        if self.schema.interview_state.proposed_teaching_id and not self.schema.interview_state.teaching_candidate_identified:
-            # Find the proposed candidate
-            proposed_candidate = next(
-                (c for c in self.schema.teaching_candidates 
-                 if c.id == self.schema.interview_state.proposed_teaching_id),
-                None
-            )
-            if proposed_candidate:
-                print(f"[Orchestrator] Teaching candidate proposed: '{proposed_candidate.topic}'")
-                # Return special marker with candidate info
-                candidate_info = {
-                    "id": proposed_candidate.id,
-                    "topic": proposed_candidate.topic,
-                    "focus_question": proposed_candidate.focus_question,
-                    "identified_gap": proposed_candidate.identified_gap,
-                    "readiness_score": proposed_candidate.readiness_score
-                }
-                import json
-                return f"__TEACHING_PROPOSED__:{json.dumps(candidate_info)}"
+        # Step 4b: Check if a task curriculum has been proposed (needs user confirmation)
+        if self.schema.task_curriculum.proposed and not self.schema.task_curriculum.accepted and len(self.schema.task_curriculum.tasks) > 0:
+            print(f"[Orchestrator] Task curriculum proposed: {len(self.schema.task_curriculum.tasks)} tasks")
+            
+            # Return special marker with curriculum info
+            import json
+            curriculum_info = {
+                "tasks": [
+                    {
+                        "id": task.id,
+                        "topic": task.topic,
+                        "justification": task.justification,
+                        "prerequisites": task.prerequisites,
+                        "status": task.status
+                    }
+                    for task in self.schema.task_curriculum.tasks
+                ],
+                "overall_justification": f"Based on your goal '{self.schema.interview_state.user_goal}' and what I've learned about your background, here's my best guess at a complete learning path. This is just a starting point - we can adjust as we go based on what works for you:"
+            }
+            return f"__TASK_CURRICULUM_PROPOSED__:{json.dumps(curriculum_info)}"
 
         # Step 4c: Check if ready for teaching
         if self.schema.teaching_recommendation.ready:
@@ -705,6 +705,65 @@ class DiscoveryOrchestrator:
         
         return next_question
 
+    def accept_proposed_curriculum(self) -> dict:
+        """
+        User accepted the proposed task curriculum. Return all tasks for frontend.
+        First task is available, rest are locked.
+
+        Returns:
+            Dictionary with tasks info for panel creation
+        """
+        if not self.schema.task_curriculum.proposed:
+            return {"success": False, "message": "No curriculum to accept."}
+
+        if len(self.schema.task_curriculum.tasks) == 0:
+            return {"success": False, "message": "No tasks in curriculum."}
+
+        # Mark curriculum as accepted
+        self.schema.task_curriculum.accepted = True
+
+        # Ensure first task is available, rest are locked
+        tasks = self.schema.task_curriculum.tasks
+        if tasks:
+            tasks[0].status = "available"
+            for task in tasks[1:]:
+                task.status = "locked"
+
+        print(f"\n[Orchestrator] ===== TASK CURRICULUM ACCEPTED =====")
+        print(f"[Orchestrator] {len(tasks)} tasks in curriculum")
+        for i, task in enumerate(tasks):
+            print(f"[Orchestrator]   {i+1}. {task.topic} ({task.status})")
+
+        # Add acceptance to conversation history
+        confirmation_message = f"Great! Your learning path has {len(tasks)} topics. Let's start with: **{tasks[0].topic}**"
+        self.conversation_history.append({
+            "role": "user",
+            "content": "[Accepted curriculum]"
+        })
+        self.conversation_history.append({
+            "role": "assistant",
+            "content": confirmation_message
+        })
+
+        # Save the updated state AND conversation history
+        self.db.save_session_state(self.session_id, self.schema.model_dump())
+        self.db.save_conversation_history(self.session_id, self.conversation_history)
+
+        return {
+            "success": True,
+            "message": confirmation_message,
+            "tasks": [
+                {
+                    "id": task.id,
+                    "topic": task.topic,
+                    "justification": task.justification,
+                    "prerequisites": task.prerequisites,
+                    "status": task.status
+                }
+                for task in tasks
+            ]
+        }
+
     def _create_transition_message(self) -> str:
         """
         Create handoff to teaching phase.
@@ -714,11 +773,9 @@ class DiscoveryOrchestrator:
         """
         rec = self.schema.teaching_recommendation
 
-        if rec.first_move:
-            return rec.first_move
-        else:
-            # Fallback transition
-            return f"Okay, so you want to understand {rec.target_topic}. Let's dive in."
+        if not rec.first_move:
+            raise ValueError(f"TeachingRecommendation.first_move is required but was empty for topic: {rec.target_topic}")
+        return rec.first_move
 
     def get_schema(self) -> dict:
         """
@@ -757,6 +814,51 @@ class DiscoveryOrchestrator:
                 self.scores = None  # No scores structure in current schema
 
         return FinalTopic(self.schema)
+
+    def _generate_curriculum_justification(self, candidates: list) -> str:
+        """
+        Generate justification for why these teaching candidates form a good curriculum path.
+
+        Args:
+            candidates: List of TeachingCandidate objects in proposed order
+
+        Returns:
+            Justification text explaining the curriculum path
+        """
+        # Build candidate summaries
+        candidates_text = "\n".join([
+            f"{i+1}. {c.topic}\n   Gap: {c.identified_gap}\n   Focus: {c.focus_question}"
+            for i, c in enumerate(candidates)
+        ])
+
+        prompt = f"""You're proposing a learning path for a user with this goal: "{self.schema.interview_state.proposed_goal or 'understanding key concepts'}"
+
+USER CONTEXT:
+- Background: {self.schema.user_profile.user_background[:200] if self.schema.user_profile.user_background else 'General learner'}
+- Learning style: {self.schema.user_profile.pacing_preference.description if self.schema.user_profile.pacing_preference else 'adaptive'}
+
+PROPOSED CURRICULUM PATH:
+{candidates_text}
+
+Generate a 2-3 sentence justification that:
+1. Explains why these topics form a coherent learning path
+2. Justifies why THIS ordering makes pedagogical sense (what builds on what)
+3. Connects to the user's specific goals/gaps
+
+Keep it conversational and personalized. Under 100 words.
+Return just the justification text."""
+
+        from src.config.model_config import get_model_name
+        model_name = self.model_config.get("interviewer") or get_model_name("interviewer")
+
+        response = self.llm.chat(
+            messages=[{"role": "user", "content": prompt}],
+            model=model_name,
+            temperature=0.7,
+            max_tokens=200
+        )
+
+        return response.strip()
 
     def end_session(self):
         """End the session and save final state."""

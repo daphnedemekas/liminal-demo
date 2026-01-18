@@ -1,0 +1,104 @@
+SITUATION: The user is in a learning goal conversation. We need to analyze their response and update our assessment of their prior knowledge.
+
+USER'S GOAL: {user_goal}
+ASSESSMENT TECHNIQUE USED: {technique_used}
+AI'S QUESTION: {ai_question}
+USER'S RESPONSE: {user_response}
+
+CURRENT ASSESSMENT STATE:
+- Assessed level: {current_level}
+- Concept knowledge: {concept_knowledge}
+- Techniques already used: {techniques_used}
+- Current confidence: {current_confidence}
+
+YOUR TASK: Analyze the user's response and extract GRANULAR concepts with PROFICIENCY LEVELS.
+
+=== PROFICIENCY LEVELS ===
+
+For each concept mentioned, assess their proficiency:
+
+1. "heard_of" - They've encountered the term but can't explain it
+   - Example: "I've heard of RAG" or "something about vectors?"
+   
+2. "understands_basics" - They can describe what it is at a high level
+   - Example: "RAG retrieves relevant documents and adds them to the prompt"
+   
+3. "can_explain" - They can explain HOW it works mechanistically
+   - Example: "The query gets embedded, then we do similarity search in the vector DB..."
+   
+4. "can_apply" - They've used it or can reason about tradeoffs
+   - Example: "In my project I found that chunk size really matters for retrieval quality"
+   
+5. "expert" - Deep knowledge, can discuss edge cases, alternatives, research
+   - Example: "Hybrid search with BM25 + dense retrieval often outperforms pure semantic..."
+
+=== GRANULARITY GUIDELINES ===
+
+DON'T collect vague concepts like:
+- "RAG" (too broad)
+- "machine learning" (too general)
+- "LLMs" (not specific enough)
+
+DO collect specific sub-concepts like:
+- "the purpose of RAG (retrieve docs to reduce hallucinations)"
+- "how embeddings capture semantic similarity"
+- "chunking strategies for document retrieval"
+- "the role of the context window in RAG"
+- "reranking retrieved results before passing to LLM"
+
+=== ANALYSIS FRAMEWORK ===
+
+For each response, evaluate:
+
+1. TERMINOLOGY: Do they use domain-specific terms correctly?
+   - Correct usage with explanation → can_explain or higher
+   - Correct usage without depth → understands_basics
+   - Mentions term vaguely → heard_of
+
+2. MECHANISTIC DEPTH: Do they explain HOW things work?
+   - Step-by-step explanation → can_explain
+   - "I've done this" with details → can_apply
+   - High-level only → understands_basics
+   - "I think it's something like..." → heard_of
+
+3. UNCERTAINTY MARKERS: How do they express what they don't know?
+   - "I know X but not Y" → X at understands_basics+, Y is a gap
+   - "I'm not sure about..." → heard_of at best
+   - Confident but wrong → misconception (mark as gap)
+
+=== OUTPUT FORMAT ===
+
+Return ONLY valid JSON with this exact structure:
+
+assessed_level: "beginner" or "intermediate" or "advanced" or null
+level_confidence: number between 0.0 and 1.0
+concept_updates: array of objects, each with:
+  - concept: string (SPECIFIC sub-concept, not broad area)
+  - proficiency: "heard_of" | "understands_basics" | "can_explain" | "can_apply" | "expert"
+  - evidence: string (quote from their response supporting this assessment)
+  - is_gap: boolean (true if this is something they DON'T know or are confused about)
+practical_experience: string or null
+learning_style_hints: array of strings
+evidence: object with technique, quote, revealed fields
+ready_for_task_proposal: boolean
+reasoning: string
+
+Example:
+assessed_level would be "intermediate"
+level_confidence would be 0.6
+concept_updates would be [
+  {{"concept": "the purpose of RAG (retrieve docs to ground LLM)", "proficiency": "understands_basics", "evidence": "I've read about RAG as one approach", "is_gap": false}},
+  {{"concept": "how to evaluate retrieval quality", "proficiency": "heard_of", "evidence": "I'm not sure what else is out there", "is_gap": true}},
+  {{"concept": "chunking strategies for documents", "proficiency": "heard_of", "evidence": null, "is_gap": true}}
+]
+
+CRITICAL RULES:
+1. Be conservative - don't jump to "can_apply" without evidence of actual use
+2. Track SPECIFIC sub-concepts, not general areas
+3. Each concept should be granular enough to teach in 5-10 minutes
+4. If they mention something vaguely, it's "heard_of" not "understands_basics"
+5. Quote ACTUAL words from their response as evidence
+6. Mark gaps (is_gap: true) for things they explicitly don't know or are confused about
+7. Return ONLY valid JSON - no text before or after
+
+

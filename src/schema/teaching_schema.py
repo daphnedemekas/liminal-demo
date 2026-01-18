@@ -23,6 +23,14 @@ class CurriculumStepStatus(str, Enum):
     SKIPPED = "skipped"
 
 
+class TeachingPhase(str, Enum):
+    """Phase of the teaching session."""
+    ASSESSMENT = "assessment"  # Probing user's prior knowledge for this topic
+    CURRICULUM_PROPOSAL = "curriculum_proposal"  # Proposing curriculum with justifications
+    NEGOTIATION = "negotiation"  # User modifying curriculum
+    TEACHING = "teaching"  # Active teaching
+
+
 class TeachingAction(str, Enum):
     """Possible teaching actions for the controller."""
     EXPLAIN = "explain"  # Provide explanation/information
@@ -36,6 +44,8 @@ class TeachingAction(str, Enum):
     PROVIDE_EXAMPLE = "provide_example"  # Give concrete example
     CHECK_PREREQUISITE = "check_prerequisite"  # Verify needed foundation
     SUMMARIZE_PROGRESS = "summarize_progress"  # Review what's been learned
+    ASSESS_KNOWLEDGE = "assess_knowledge"  # Probe user's knowledge (assessment phase)
+    PROPOSE_CURRICULUM = "propose_curriculum"  # Propose the learning path
 
 
 # ============================================================================
@@ -177,6 +187,7 @@ class CurriculumStep(BaseModel):
     objective: str  # What this step teaches
     explanation_approach: str  # How to explain it (analogy, example, mechanism, etc.)
     quick_check: str  # Question to verify understanding
+    why_for_you: str = ""  # Personalized justification for this learner
     marker_targets: List[str] = Field(default_factory=list)  # Which markers this step targets
     prerequisites: List[int] = Field(default_factory=list)  # IDs of prerequisite steps
     status: CurriculumStepStatus = CurriculumStepStatus.NOT_STARTED
@@ -233,6 +244,8 @@ class TeachingCandidateInfo(BaseModel):
     stakes_summary: Optional[str] = None
     pedagogical_scope: str = "10min"  # "5min", "10min", "15min"
     angle: str = "mechanism"  # mechanism, meaning, application, historical, geometric, intuitive
+    source_material: Optional[str] = None  # Curated excerpts from reference documents for teaching
+    source_citations: Optional[List[str]] = None  # e.g., ["Wikipedia: Attention Mechanism", "Anthropic Blog"]
 
 
 # ============================================================================
@@ -245,6 +258,15 @@ class TeachingSchema(BaseModel):
     user_id: str
     goal_id: int
     teaching_candidate_id: int
+    
+    # Phase tracking
+    teaching_phase: TeachingPhase = TeachingPhase.ASSESSMENT
+    curriculum_accepted: bool = False  # User accepted the proposed curriculum
+    
+    # Assessment tracking (for task-specific prior knowledge)
+    assessment_concepts_known: List[str] = Field(default_factory=list)
+    assessment_concepts_unclear: List[str] = Field(default_factory=list) 
+    assessment_confidence: float = 0.0  # 0-1, how confident we are about user's level
     
     # Core teaching content
     teaching_candidate: TeachingCandidateInfo

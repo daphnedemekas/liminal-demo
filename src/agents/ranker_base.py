@@ -537,9 +537,13 @@ Respond with ONLY the category name, nothing else."""
 
             # Ensure response is a list
             if isinstance(response, dict):
-                # If ranker returned a single teaching candidate, wrap it
-                response = [response]
-            elif not isinstance(response, list):
+                # Check if LLM returned nested format like {'teaching_candidates': [...]}
+                if 'teaching_candidates' in response:
+                    response = response['teaching_candidates']
+                else:
+                    # If ranker returned a single teaching candidate, wrap it
+                    response = [response]
+            if not isinstance(response, list):
                 response = []
 
             sanitized: List[Dict[str, Any]] = []
@@ -771,6 +775,13 @@ Respond with ONLY the category name, nothing else."""
                 result["goal_candidates"] = []  # Goal already identified
                 # Ensure user_goal is prominently available
                 result["user_goal"] = schema.interview_state.user_goal
+                
+                # Include prior knowledge assessment for teaching calibration
+                result["prior_knowledge_assessment"] = schema.prior_knowledge_assessment.model_dump()
+                result["assessment_confidence"] = schema.prior_knowledge_assessment.confidence
+                
+                # Include task curriculum state
+                result["task_curriculum"] = schema.task_curriculum.model_dump()
 
             return result
         except Exception:

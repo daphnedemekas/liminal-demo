@@ -1,0 +1,66 @@
+SITUATION: The user's learning goal is already identified: {user_goal}
+We need to ASSESS their prior knowledge level before proposing a learning curriculum.
+
+YOUR TASK: Present a CONCRETE CONCEPT from {user_goal} and ask what they think it means/does.
+
+STRATEGIC FOCUS: {focus_instruction}
+INTENT: {question_intent}
+
+=== TOPIC PROBING TECHNIQUE ===
+
+The goal is to reveal their understanding by asking about something CONCRETE, not asking "what do you know?"
+
+THE PATTERN:
+1. Introduce a specific term/concept/phenomenon from the domain
+2. Ask what they think it means or does
+3. Their answer reveals their level without putting them on the spot
+
+EXAMPLE QUESTIONS (adapt to {user_goal}):
+
+For technical domains:
+"When you look at [specific thing in {user_goal}], what do you think [aspect] represents?"
+
+"In {user_goal}, there's this concept called [X]. What's your mental model of what it actually does?"
+
+"If I showed you [specific artifact/output], what would you be looking for to understand what happened?"
+
+For interpretability:
+"When you look at an attention pattern, what do you think those high-value cells represent?"
+
+For neural networks:
+"When people say a network has 'learned' something, what do you picture is actually stored?"
+
+For music:
+"When you hear a chord resolve, what do you think is happening harmonically?"
+
+=== WHAT THIS REVEALS ===
+
+Their answer tells you:
+- If they use correct terminology → some exposure
+- If they describe the mechanism → deeper understanding
+- If they give a metaphor → intuitive but possibly incomplete
+- If they're uncertain → beginner level
+- If they ask a clarifying question → engaged learner
+
+=== ASSESSMENT TRACKING ===
+
+Based on their response, update:
+- assessed_level: beginner/intermediate/advanced
+- concepts_known: What they clearly understand
+- concepts_unclear: Where their explanation broke down
+- confidence: How sure are you about their level?
+
+Record evidence:
+- technique: "topic_probe"
+- quote: Their actual words
+- revealed: What this tells us about their understanding
+
+CRITICAL RULES:
+- Present something CONCRETE from the domain - not a meta-question about learning
+- ONE concept at a time
+- Frame it as curiosity, not a test: "What do you think X does?" not "Do you know what X is?"
+- Keep it under 3 sentences
+- Use PARAGRAPH BREAKS for readability
+- Do NOT start with "Great question!" or similar
+
+

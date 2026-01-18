@@ -69,10 +69,15 @@ export default function FeedPanel({
     fetchFeed()
   }
 
-  // Auto-load feed on mount (only once)
+  // Auto-load feed on mount (only once) - delay to let opening question generate first
   useEffect(() => {
     if (!hasEverLoaded && !loading) {
-      fetchFeed()
+      // Delay feed loading so the chat opening question can generate first
+      // The user will be reading the question while feed loads in background
+      const timer = setTimeout(() => {
+        fetchFeed()
+      }, 5000)  // 5 second delay
+      return () => clearTimeout(timer)
     }
   }, [hasEverLoaded, loading, fetchFeed])
 
@@ -134,18 +139,15 @@ export default function FeedPanel({
     )
   }
 
-  // Initial state - not yet loaded
-  if (!hasEverLoaded) {
+  // Initial state - not yet loaded (will auto-load after delay)
+  if (!hasEverLoaded && !loading) {
     return (
       <div className="feed-panel">
         <div className="feed-header">
           <h3>{getContextLabel()}</h3>
         </div>
         <div className="feed-empty">
-          <p>Get personalized content based on your conversation.</p>
-          <button onClick={handleGenerate} className="feed-generate-btn">
-            ✨ Generate Feed
-          </button>
+          <p>Content will load shortly...</p>
         </div>
       </div>
     )

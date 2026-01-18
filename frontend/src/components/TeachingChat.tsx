@@ -30,6 +30,7 @@ interface Message {
   id: string
   role: 'user' | 'assistant'
   content: string
+  type?: string  // For special message types like 'curriculum_proposed'
 }
 
 interface CurriculumProgress {
@@ -192,20 +193,65 @@ export default function TeachingChat({
       setIsConnected(false)
     }
 
-    ws.onmessage = (event) => {
+      ws.onmessage = (event) => {
       const data = JSON.parse(event.data)
-      console.log('[TeachingChat] Received:', data.type)
+      console.log('[TeachingChat] Received:', data.type, 'phase:', data.phase)
 
       switch (data.type) {
         case 'status':
           setStatus(data.status)
           break
 
+        case 'assessment_question':
+          // Assessment phase - just a question, no curriculum yet
+          setMessages(prev => [...prev, {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content: data.content,
+            type: 'assessment_question'
+          }])
+          setIsLoading(false)
+          setStatus(null)
+          break
+
+        case 'curriculum_proposed':
+          // Curriculum proposed - show Accept/Modify buttons
+          setMessages(prev => [...prev, {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content: data.content,
+            type: 'curriculum_proposed'  // This triggers Accept/Modify buttons
+          }])
+          setIsLoading(false)
+          setStatus(null)
+          // Store curriculum info if provided
+          if (data.curriculum_plan) {
+            setCurriculumProgress({
+              current_step: 0,
+              total_steps: data.curriculum_plan.steps?.length || 0,
+              completed_steps: 0
+            })
+          }
+          break
+
+        case 'curriculum_accepted':
+          // Curriculum accepted - teaching begins
+          setMessages(prev => [...prev, {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content: data.content,
+            type: 'curriculum_accepted'
+          }])
+          setIsLoading(false)
+          setStatus(null)
+          break
+
         case 'teaching_message':
           setMessages(prev => [...prev, {
             id: crypto.randomUUID(),
             role: 'assistant',
-            content: data.content
+            content: data.content,
+            type: 'teaching_message'
           }])
           setIsLoading(false)
           setStatus(null)
@@ -223,7 +269,8 @@ export default function TeachingChat({
           setMessages(prev => [...prev, {
             id: crypto.randomUUID(),
             role: 'assistant',
-            content: data.content
+            content: data.content,
+            type: 'teaching_complete'
           }])
           setIsLoading(false)
           setStatus('Teaching complete!')
@@ -383,6 +430,27 @@ export default function TeachingChat({
     }
   }
 
+  // Check for curriculum proposed (for negotiation phase)
+  const lastCurriculumProposedIndex = messages.findLastIndex(m => m.type === 'curriculum_proposed')
+  const lastCurriculumAcceptedIndex = messages.findLastIndex(m => m.type === 'curriculum_accepted')
+  const hasPendingCurriculum = lastCurriculumProposedIndex > lastCurriculumAcceptedIndex && lastCurriculumProposedIndex >= 0
+
+  // Handle curriculum accept/modify
+  const handleAcceptCurriculum = () => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ command: '__ACCEPT_CURRICULUM__' }))
+    }
+  }
+
+  const handleModifyCurriculum = () => {
+    // Focus the input field for user to type modification
+    const input = document.querySelector('.goal-chat-input input') as HTMLInputElement
+    if (input) {
+      input.focus()
+      input.placeholder = 'What would you like to change?'
+    }
+  }
+
   return (
     <div className="discovery-with-feed">
       {/* Feed Panel - Left side */}
@@ -460,12 +528,37 @@ export default function TeachingChat({
 
           {/* Messages */}
           <div className="goal-chat-messages" style={{ position: 'relative' }}>
-            {messages.map((msg) => (
-              <MessageBubble
-                key={msg.id}
-                role={msg.role}
-                content={msg.content}
-              />
+            {messages.map((msg, index) => (
+              <div key={msg.id}>
+                <MessageBubble
+                  role={msg.role}
+                  content={msg.content}
+                />
+                
+                {/* Show curriculum Accept/Modify buttons when curriculum is proposed */}
+                {msg.type === 'curriculum_proposed' && 
+                 index === lastCurriculumProposedIndex && 
+                 hasPendingCurriculum && (
+                  <div className="curriculum-confirmation">
+                    <div className="curriculum-confirmation-buttons">
+                      <button 
+                        className="curriculum-accept-btn"
+                        onClick={handleAcceptCurriculum}
+                        disabled={isLoading || !isConnected}
+                      >
+                        Accept — Let's learn
+                      </button>
+                      <button 
+                        className="curriculum-modify-btn"
+                        onClick={handleModifyCurriculum}
+                        disabled={isLoading || !isConnected}
+                      >
+                        Modify
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             ))}
             {(isLoading || status) && (
               <div className="status-indicator">

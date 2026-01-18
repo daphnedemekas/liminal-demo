@@ -288,22 +288,21 @@ async def generate_profile_summary(request: ProfileSummaryRequest):
         
         # Generate summary with LLM
         llm = LLMClient()
-        prompt = f"""Based on this learner profile data, write a concise 1-2 sentence factual summary of what we've identified about this learner's preferences and interests.
-
-DO NOT:
-- Use sycophantic language (no "passionate", "unique", "impressive", "driven", "thrives")
-- Praise the learner or their qualities
-- Use flowery or enthusiastic language
-
-DO:
-- State factual observations about their learning style and interests
-- Use neutral, informative language
-- Focus on what we've learned from the conversation
+        prompt = f"""Write a VERY SHORT summary (2-3 sentences max, under 80 words total) of this learner's style.
 
 Profile data:
 {chr(10).join(f"- {p}" for p in context_parts)}
 
-Write only the factual summary. Example good output: "Prefers problem-solving approaches and has shown interest in distributed systems, particularly consensus algorithms. Learning style appears exploratory with moderate tolerance for uncertainty." """
+RULES:
+- Maximum 80 words
+- Plain text only, no markdown or formatting
+- Be direct and factual
+- Focus on 1-2 key traits, not all of them
+- No praise or flowery language
+
+Example good output: "You show interest-driven curiosity, meaning you learn for the pleasure of understanding rather than to fill knowledge gaps. Combined with your high tolerance for uncertainty, you're well-suited for open-ended exploration of complex topics."
+
+Write the summary now:"""
 
         summary = llm.chat(
             messages=[{"role": "user", "content": prompt}],
@@ -314,6 +313,29 @@ Write only the factual summary. Example good output: "Prefers problem-solving ap
     except Exception as e:
         print(f"[Profile Summary] Error: {e}")
         return {"summary": "Profile analysis in progress..."}
+
+
+@app.get("/api/trajectory/{user_id}")
+async def get_trajectory(user_id: str):
+    """Get (or initialize) the user's cross-phase learner trajectory dashboard JSON."""
+    try:
+        traj = db.get_or_create_learner_trajectory(user_id)
+        return traj.get("dashboard_state") or {}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/trajectory/{user_id}/refresh")
+async def refresh_trajectory(user_id: str):
+    """Incrementally refresh the user's trajectory dashboard from new checkpoints."""
+    try:
+        from src.agents.trajectory_updater import TrajectoryUpdater
+
+        updater = TrajectoryUpdater(db=db)
+        dashboard = updater.refresh(user_id=user_id)
+        return dashboard
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============================================
@@ -598,20 +620,20 @@ async def start_teaching(request: TeachingStartRequest):
             request.teaching_candidate_id
         )
         
-        # Generate opening (includes curriculum plan generation)
-        opening_message = orchestrator.start()
+        # Generate opening (starts in assessment phase)
+        start_result = orchestrator.start()
         
         # Store in memory
         teaching_sessions[session_id] = orchestrator
         
-        print(f"[Teaching] Created new session: {session_id[:8]}... for topic: {request.topic}")
+        print(f"[Teaching] Created new session: {session_id[:8]}... for topic: {request.topic} (phase: {start_result.get('phase', 'unknown')})")
         
         return TeachingStartResponse(
             session_id=session_id,
-            opening_message=opening_message,
+            opening_message=start_result.get("message", ""),
             conversation_history=orchestrator.conversation_history,
             is_resumed=False,
-            curriculum_plan=orchestrator.schema.curriculum_plan.model_dump() if orchestrator.schema.curriculum_plan else None
+            curriculum_plan=orchestrator.schema.curriculum_plan.model_dump() if orchestrator.schema.curriculum_plan.steps else None
         )
         
     except Exception as e:
@@ -651,6 +673,7 @@ async def teaching_websocket(websocket: WebSocket, session_id: str):
     
     # Get orchestrator
     orchestrator = teaching_sessions.get(session_id)
+    session_info = None
     
     if not orchestrator:
         # Try to restore from database
@@ -672,25 +695,57 @@ async def teaching_websocket(websocket: WebSocket, session_id: str):
             return
     
     try:
+        # Cache session info for checkpoint attribution
+        try:
+            session_info = db.get_session_by_id(session_id) or {}
+        except Exception:
+            session_info = {}
+
+        def _maybe_checkpoint(teaching_schema: dict):
+            """Persist a sparse trajectory checkpoint for this user (best-effort)."""
+            try:
+                user_id = (teaching_schema or {}).get("user_id") or getattr(orchestrator, "user_id", None)
+                if not user_id:
+                    return
+                db.maybe_write_trajectory_checkpoint(
+                    user_id=user_id,
+                    session_id=session_id,
+                    session_type=session_info.get("session_type") or "teaching",
+                    goal_id=session_info.get("goal_id"),
+                    teaching_candidate_id=session_info.get("teaching_candidate_id"),
+                    schema_state=teaching_schema,
+                    conversation_history=getattr(orchestrator, "conversation_history", None),
+                    turn_index=(teaching_schema or {}).get("turns_elapsed"),
+                )
+            except Exception as e:
+                print(f"[Trajectory] Teaching checkpoint failed: {e}")
+
         while True:
             # Receive message from frontend
             data = await websocket.receive_json()
             user_message = data.get("content", "")
-            
+
+            # Check for special commands (curriculum accept/modify) first
+            command = data.get("command")
+            if command:
+                user_message = command  # Pass command to orchestrator
+
+            # Skip if no message or command
             if not user_message:
                 continue
-            
+
             # Send status
             await websocket.send_json({
                 "type": "status",
                 "status": "Processing..."
             })
-            
+
             try:
+                
                 # Process message through teaching orchestrator
                 import asyncio
                 loop = asyncio.get_event_loop()
-                response = await loop.run_in_executor(
+                result = await loop.run_in_executor(
                     None,
                     orchestrator.process_user_message,
                     user_message
@@ -699,26 +754,41 @@ async def teaching_websocket(websocket: WebSocket, session_id: str):
                 # Get current state for markers/progress
                 schema = orchestrator.get_schema()
                 
+                # result is now a dict with message, phase, type, etc.
+                message_type = result.get("type", "teaching_message")
+                message_content = result.get("message", "")
+                phase = result.get("phase", "teaching")
+                
                 # Check if teaching phase is complete
                 if orchestrator.is_complete():
                     await websocket.send_json({
                         "type": "teaching_complete",
-                        "content": response,
+                        "content": message_content,
                         "message": "You've demonstrated strong understanding of this topic!",
                         "final_markers": schema.get("understanding_markers", [])
                     })
+                    _maybe_checkpoint(schema)
                 else:
-                    # Send regular teaching message with state updates
-                    await websocket.send_json({
-                        "type": "teaching_message",
-                        "content": response,
-                        "curriculum_progress": {
+                    # Send message with appropriate type for UI to handle
+                    response_data = {
+                        "type": message_type,  # e.g., "curriculum_proposed", "assessment_question", "teaching_message"
+                        "content": message_content,
+                        "phase": phase,
+                        "curriculum_progress": result.get("curriculum_progress", {
                             "current_step": schema.get("current_step_index", 0),
                             "total_steps": len(schema.get("curriculum_plan", {}).get("steps", [])),
                             "completed_steps": len(schema.get("curriculum_plan", {}).get("completed_step_ids", []))
-                        },
+                        }),
                         "narrative_summary": schema.get("narrative_summary", ""),
-                        "understanding_markers": [
+                    }
+                    
+                    # Include curriculum plan if being proposed
+                    if message_type == "curriculum_proposed":
+                        response_data["curriculum_plan"] = result.get("curriculum_plan")
+                    
+                    # Include understanding markers if in teaching phase
+                    if phase == "teaching":
+                        response_data["understanding_markers"] = [
                             {
                                 "id": m.get("id"),
                                 "name": m.get("name"),
@@ -726,9 +796,11 @@ async def teaching_websocket(websocket: WebSocket, session_id: str):
                                 "evidence": m.get("evidence", [])[-1] if m.get("evidence") else None
                             }
                             for m in schema.get("understanding_markers", [])
-                            if m.get("level") != "not_yet"  # Only send markers with evidence
+                            if m.get("level") != "not_yet"
                         ]
-                    })
+                    
+                    await websocket.send_json(response_data)
+                    _maybe_checkpoint(schema)
                     
             except Exception as e:
                 print(f"[Teaching WS] Error processing message: {e}")
@@ -866,7 +938,7 @@ async def start_discovery(request: SessionCreateRequest = SessionCreateRequest()
                     audio_url = f"/audio/{audio_path.name}"
             except Exception as e:
                 print(f"[Audio] TTS generation failed for opening message: {e}")
-                audio_url = None
+        audio_url = None
 
         return SessionCreateResponse(
             session_id=session_id,
@@ -895,10 +967,49 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
         await websocket.close()
         return
 
+    # Cache DB session info for checkpoint attribution (best-effort)
+    try:
+        session_info = db.get_session_by_id(session_id) or {}
+    except Exception:
+        session_info = {}
+
+    def _maybe_checkpoint():
+        """Persist a sparse trajectory checkpoint for this user (best-effort)."""
+        print(f"[Trajectory] _maybe_checkpoint called for session {session_id[:8]}...")
+        try:
+            discovery = session_data.discovery_session
+            if not discovery:
+                print(f"[Trajectory] No discovery session found, skipping checkpoint")
+                return
+            schema_snapshot = discovery.get_schema()
+            turns = (schema_snapshot.get("interview_state", {}) or {}).get("turns_elapsed")
+            user_id_val = getattr(discovery, "user_id", None) or session_info.get("user_id")
+            print(f"[Trajectory] Calling checkpoint writer for user {user_id_val[:8] if user_id_val else 'None'}... at turn {turns}")
+            checkpoint_id = db.maybe_write_trajectory_checkpoint(
+                user_id=user_id_val,
+                session_id=session_id,
+                session_type=session_info.get("session_type") or "exploration",
+                goal_id=session_info.get("goal_id"),
+                teaching_candidate_id=session_info.get("teaching_candidate_id"),
+                schema_state=schema_snapshot,
+                conversation_history=getattr(discovery, "conversation_history", None),
+                turn_index=turns,
+            )
+            if checkpoint_id:
+                print(f"[Trajectory] ✅ Checkpoint {checkpoint_id} written at turn {turns}")
+            else:
+                print(f"[Trajectory] No checkpoint needed (turn {turns}, cadence or event condition not met)")
+        except Exception as e:
+            print(f"[Trajectory] Discovery checkpoint failed: {e}")
+            import traceback
+            traceback.print_exc()
+
     try:
         while True:
             # Receive message from frontend
+            print(f"[WebSocket] Waiting for message on session {session_id[:8]}...")
             data = await websocket.receive_json()
+            print(f"[WebSocket] Received data: {data}")
             user_message = data.get("content", "")
 
             if not user_message:
@@ -971,6 +1082,7 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
                         "goal_id": result.get("goal_id", 0),
                         "message": result.get("message", "Goal accepted")
                     })
+                    _maybe_checkpoint()
                     continue
 
                 if user_message == "__REJECT_GOAL__":
@@ -985,6 +1097,7 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
                         "content": response,
                         "audio_url": None
                     })
+                    _maybe_checkpoint()
                     continue
 
                 # Check for teaching candidate accept/reject commands
@@ -1017,6 +1130,7 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
                         "candidate": result.get("candidate", {}),
                         "message": result.get("message", "Teaching candidate accepted")
                     })
+                    _maybe_checkpoint()
                     continue
 
                 if user_message == "__REJECT_TEACHING__":
@@ -1031,6 +1145,7 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
                         "content": response,
                         "audio_url": None
                     })
+                    _maybe_checkpoint()
                     continue
 
                 # Process message in thread pool to avoid blocking the event loop
@@ -1063,6 +1178,7 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
                         "audio_url": goal_audio_url,
                         "message": f"**Goal identified:** {proposed_goal}"
                     })
+                    _maybe_checkpoint()
                     continue
 
                 # Check if a teaching candidate was proposed (needs user confirmation)
@@ -1087,6 +1203,7 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
                         "audio_url": teaching_audio_url,
                         "message": f"I think I found a great starting point: **{candidate['topic']}**"
                     })
+                    _maybe_checkpoint()
                     continue
 
                 # Generate audio with ElevenLabs TTS
@@ -1129,6 +1246,7 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
                             "scores": final_topic.scores.to_dict() if final_topic.scores else {}
                         }
                     })
+                    _maybe_checkpoint()
                 else:
                     # Send regular message
                     await websocket.send_json({
@@ -1136,6 +1254,7 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
                         "content": response,
                         "audio_url": audio_url
                     })
+                    _maybe_checkpoint()
 
             except Exception as e:
                 # Command processing failed - send error but don't disconnect

@@ -9,7 +9,9 @@ from src.schema.full_schema import (
     ConversationalTheme,
     TeachingCandidate,
     Controller,
-    TeachingRecommendation
+    TeachingRecommendation,
+    PriorKnowledgeAssessment,
+    AssessmentEvidence
 )
 
 
@@ -212,6 +214,98 @@ class TeachingCandidateRanker(RankerAgentBase):
             traceback.print_exc()
             return self._not_ready_recommendation()
 
+    def _update_prior_knowledge_assessment(
+        self,
+        schema: DiscoverySchema,
+        conversation_history: List[Dict[str, str]],
+        user_message: str
+    ) -> Dict[str, Any]:
+        """
+        Analyze user's response to update prior knowledge assessment.
+        
+        This helps calibrate teaching to the user's actual level.
+        
+        Returns:
+            Updated assessment dictionary
+        """
+        try:
+            # Get the last AI message (the question we asked)
+            ai_question = ""
+            for msg in reversed(conversation_history[:-1]):  # Exclude the current user message
+                if msg.get("role") == "assistant":
+                    ai_question = msg.get("content", "")
+                    break
+            
+            # Get current assessment state
+            current_assessment = schema.prior_knowledge_assessment
+            
+            # Determine which technique was likely used based on controller
+            technique_used = "topic_probe"  # Default
+            if schema.controller:
+                mode = schema.controller.conversation_mode
+                if mode == "explain_back":
+                    technique_used = "explain_back"
+                elif mode == "scenario_probe":
+                    technique_used = "scenario_probe"
+                elif mode == "calibration":
+                    technique_used = "calibration"
+                elif mode == "topic_probe":
+                    technique_used = "topic_probe"
+            
+            # Load the analysis prompt
+            prompt_template = self.prompt_loader.load_ranker_prompt(
+                "analyze_assessment", 
+                variant=self.get_prompt_variant()
+            )
+            
+            user_goal = schema.interview_state.user_goal or "Not yet identified"
+            
+            # Format concept knowledge with proficiency levels
+            concept_knowledge_str = "none yet"
+            if current_assessment.concept_knowledge:
+                concept_knowledge_str = "\n".join([
+                    f"  - {ck.concept} [{ck.proficiency}]" + (f" (evidence: {ck.evidence[:100]}...)" if ck.evidence and len(ck.evidence) > 100 else f" (evidence: {ck.evidence})" if ck.evidence else "")
+                    for ck in current_assessment.concept_knowledge
+                ])
+            
+            formatted_prompt = prompt_template.format(
+                user_goal=user_goal,
+                technique_used=technique_used,
+                ai_question=ai_question[:500],  # Truncate for context
+                user_response=user_message[:1000],  # Truncate
+                current_level=current_assessment.assessed_level or "unknown",
+                concept_knowledge=concept_knowledge_str,
+                techniques_used=", ".join(current_assessment.techniques_used) or "none yet",
+                current_confidence=current_assessment.confidence
+            )
+            
+            messages = [{"role": "user", "content": formatted_prompt}]
+            
+            # Use ranker model
+            from src.config import get_model_name
+            model = self.model_override if self.model_override else get_model_name(
+                "ranker", "assessment", default="gpt-4o"
+            )
+            
+            response = self.llm.chat_with_json(
+                messages=messages,
+                model=model,
+                temperature=0.3,
+                max_tokens=800,
+                json_top_level="object"
+            )
+            
+            print(f"[ASSESSMENT] Level: {response.get('assessed_level')}, Confidence: {response.get('level_confidence', 0):.2f}")
+            print(f"[ASSESSMENT] Ready for task proposal: {response.get('ready_for_task_proposal', False)}")
+            
+            return response
+            
+        except Exception as e:
+            print(f"[ERROR] Error updating prior knowledge assessment: {e}")
+            import traceback
+            traceback.print_exc()
+            return {}
+
     def update_schema(
         self,
         current_schema: DiscoverySchema,
@@ -223,10 +317,12 @@ class TeachingCandidateRanker(RankerAgentBase):
 
         Execution order (phased for correct dependencies):
         - PHASE 1: branch_condition, user_profile, conversational_themes (parallel)
-        - PHASE 2: teaching_candidates (sequential - needs fresh themes)
+        - PHASE 1.5: prior knowledge assessment (uses user's response)
+        - PHASE 2: teaching_candidates (sequential - needs fresh themes + assessment)
         - PHASE 3: controller + readiness (parallel)
 
         Updates:
+        - prior_knowledge_assessment (NEW!)
         - teaching_candidates (primary focus)
         - user_profile
         - conversational_themes
@@ -301,24 +397,132 @@ class TeachingCandidateRanker(RankerAgentBase):
         if theme_updates:
             temp_schema.conversational_themes = [ConversationalTheme(**t) for t in theme_updates]
 
-        # ===== PHASE 2: Teaching candidates (sequential - uses fresh themes) =====
-        print("[TIMING] Phase 2: teaching candidates (uses fresh themes)...")
-        phase2_start = time.time()
-
-        teaching_updates = self._update_teaching_candidates(
-            temp_schema,  # Now has fresh themes!
+        # ===== PHASE 1.5: Prior Knowledge Assessment =====
+        print("[TIMING] Phase 1.5: prior knowledge assessment...")
+        phase1_5_start = time.time()
+        
+        assessment_updates = self._update_prior_knowledge_assessment(
+            temp_schema,
             conversation_history,
-            current_schema.interview_state.turns_elapsed + 1
+            user_message
         )
+        
+        if assessment_updates:
+            # Update the assessment in schema
+            current_assessment = temp_schema.prior_knowledge_assessment
+            
+            # Update level if provided and confidence is higher
+            if assessment_updates.get("assessed_level"):
+                new_confidence = assessment_updates.get("level_confidence", 0)
+                if new_confidence > current_assessment.confidence:
+                    current_assessment.assessed_level = assessment_updates["assessed_level"]
+                    current_assessment.confidence = new_confidence
+            
+            # NEW: Handle granular concept_updates with proficiency levels
+            from src.schema.full_schema import ConceptKnowledge
+            for concept_update in assessment_updates.get("concept_updates", []):
+                concept_name = concept_update.get("concept", "")
+                proficiency = concept_update.get("proficiency", "heard_of")
+                evidence = concept_update.get("evidence")
+                is_gap = concept_update.get("is_gap", False)
+                
+                if concept_name:
+                    # Check if concept already exists
+                    existing = next((c for c in current_assessment.concept_knowledge if c.concept == concept_name), None)
+                    
+                    if existing:
+                        # Update proficiency if new assessment is more confident
+                        proficiency_order = ["heard_of", "understands_basics", "can_explain", "can_apply", "expert"]
+                        if proficiency_order.index(proficiency) > proficiency_order.index(existing.proficiency):
+                            existing.proficiency = proficiency
+                            existing.evidence = evidence
+                    else:
+                        # Add new concept
+                        current_assessment.concept_knowledge.append(
+                            ConceptKnowledge(concept=concept_name, proficiency=proficiency, evidence=evidence)
+                        )
+                    
+                    # Also update legacy lists for backwards compatibility
+                    if is_gap:
+                        if concept_name not in current_assessment.concepts_unclear:
+                            current_assessment.concepts_unclear.append(concept_name)
+                    else:
+                        if concept_name not in current_assessment.concepts_known:
+                            current_assessment.concepts_known.append(concept_name)
+            
+            # LEGACY: Also handle old format for backwards compatibility
+            for concept in assessment_updates.get("new_concepts_known", []):
+                if concept and concept not in current_assessment.concepts_known:
+                    current_assessment.concepts_known.append(concept)
+            
+            for concept in assessment_updates.get("new_concepts_unclear", []):
+                if concept and concept not in current_assessment.concepts_unclear:
+                    current_assessment.concepts_unclear.append(concept)
+            
+            # Update practical experience if provided
+            if assessment_updates.get("practical_experience"):
+                current_assessment.practical_experience = assessment_updates["practical_experience"]
+            
+            # Accumulate learning style hints
+            for hint in assessment_updates.get("learning_style_hints", []):
+                if hint and hint not in current_assessment.learning_style_hints:
+                    current_assessment.learning_style_hints.append(hint)
+            
+            # Add evidence
+            if assessment_updates.get("evidence"):
+                ev = assessment_updates["evidence"]
+                # Handle case where LLM returns revealed as a list instead of string
+                revealed = ev.get("revealed", "")
+                if isinstance(revealed, list):
+                    revealed = "; ".join(str(r) for r in revealed)
+                quote = ev.get("quote", "")
+                if isinstance(quote, list):
+                    quote = "; ".join(str(q) for q in quote)
+                    
+                current_assessment.evidence.append(
+                    AssessmentEvidence(
+                        technique=str(ev.get("technique", "unknown")),
+                        quote=str(quote),
+                        revealed=str(revealed)
+                    )
+                )
+                # Track technique used
+                technique = str(ev.get("technique", "unknown"))
+                if technique not in current_assessment.techniques_used:
+                    current_assessment.techniques_used.append(technique)
+            
+            temp_schema.prior_knowledge_assessment = current_assessment
+        
+        print(f"[TIMING] Phase 1.5 completed: {time.time() - phase1_5_start:.2f}s")
 
-        # Apply teaching candidate updates
-        if teaching_updates:
-            temp_schema.teaching_candidates = [TeachingCandidate(**t) for t in teaching_updates]
+        # ===== PHASE 2: Teaching candidates (GATED on assessment confidence) =====
+        # Only discover teaching candidates when we've assessed the user's level
+        assessment_confidence = temp_schema.prior_knowledge_assessment.confidence
+        ASSESSMENT_THRESHOLD = 0.6  # Need at least 60% confidence before proposing tasks
+        
+        if assessment_confidence >= ASSESSMENT_THRESHOLD:
+            print(f"[TIMING] Phase 2: teaching candidates (assessment confidence {assessment_confidence:.2f} >= {ASSESSMENT_THRESHOLD})")
+            phase2_start = time.time()
+
+            teaching_updates = self._update_teaching_candidates(
+                temp_schema,  # Now has fresh themes!
+                conversation_history,
+                current_schema.interview_state.turns_elapsed + 1
+            )
+
+            # Apply teaching candidate updates
+            if teaching_updates:
+                temp_schema.teaching_candidates = [TeachingCandidate(**t) for t in teaching_updates]
+            
+            print(f"[TIMING] Phase 2 completed: {time.time() - phase2_start:.2f}s")
+        else:
+            print(f"[ASSESSMENT] Skipping Phase 2 - assessment confidence {assessment_confidence:.2f} < {ASSESSMENT_THRESHOLD}")
+            print(f"[ASSESSMENT] Still gathering prior knowledge. Techniques used: {temp_schema.prior_knowledge_assessment.techniques_used}")
+            # Keep existing teaching candidates (don't wipe them)
+            temp_schema.teaching_candidates = current_schema.teaching_candidates
 
         # Preserve goal_candidates (not updated in Phase 2)
         temp_schema.goal_candidates = current_schema.goal_candidates
-
-        print(f"[TIMING] Phase 2 completed: {time.time() - phase2_start:.2f}s")
 
         # ===== PHASE 3: Controller + readiness (parallel) =====
         print("[TIMING] Phase 3: controller + readiness (parallel)...")

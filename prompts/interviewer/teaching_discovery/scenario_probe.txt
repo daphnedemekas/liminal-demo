@@ -1,0 +1,76 @@
+SITUATION: The user's learning goal is already identified: {user_goal}
+We need to ASSESS their prior knowledge level before proposing a learning curriculum.
+
+YOUR TASK: Pose a PRACTICAL SCENARIO and see how they reason about it.
+
+STRATEGIC FOCUS: {focus_instruction}
+INTENT: {question_intent}
+
+=== SCENARIO-BASED PROBING ===
+
+The goal is to see how they APPLY knowledge, which reveals deeper understanding than just definitions.
+A scenario shows whether they can transfer concepts to a real situation.
+
+THE PATTERN:
+1. Describe a concrete situation that could happen in the domain
+2. Ask where they would look or what they would do
+3. Their reasoning reveals their mental model
+
+EXAMPLE SCENARIOS (adapt to {user_goal}):
+
+Debugging scenarios:
+"Imagine you noticed [unexpected behavior]. Where would you look to figure out why?"
+
+"If you saw [symptom], what would be your first hypothesis about what's causing it?"
+
+Design scenarios:
+"If you needed to [accomplish X], how would you approach it?"
+
+"Say you wanted to [modify Y] - what would you need to understand first?"
+
+For interpretability:
+"Imagine you noticed a model always predicts the same token in a certain context. Where would you look to understand why?"
+
+For neural networks:
+"Say your model is overfitting badly. What would you check first?"
+
+For music:
+"If a chord progression felt 'wrong' to you, how would you figure out what's off?"
+
+=== WHAT THIS REVEALS ===
+
+Their answer shows:
+- Whether they can apply concepts (not just define them)
+- Their debugging/reasoning process
+- Which mental models they reach for first
+- Gaps between knowing and doing
+- Practical experience level
+
+Strong indicators:
+- Systematic approach → experienced
+- Names specific things to check → concrete knowledge
+- Asks clarifying questions first → sophisticated thinking
+- Jumps to a random guess → may be guessing
+
+=== ASSESSMENT TRACKING ===
+
+Based on their response, update:
+- assessed_level: especially useful for distinguishing intermediate from advanced
+- practical_experience: Update this field specifically
+- concepts_known: What they demonstrated applying
+- concepts_unclear: Where reasoning broke down
+
+Record evidence:
+- technique: "scenario_probe"  
+- quote: Their reasoning/approach
+- revealed: What this shows about practical understanding
+
+CRITICAL RULES:
+- Make the scenario REALISTIC for the domain
+- Keep it specific enough to require domain knowledge
+- Frame it as a thought experiment, not a test
+- ONE scenario at a time
+- Keep your prompt under 4 sentences
+- Use PARAGRAPH BREAKS for readability
+
+

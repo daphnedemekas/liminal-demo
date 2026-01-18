@@ -5,10 +5,12 @@ import TeachingChat from './components/TeachingChat'
 import ModelSelector, { ModelConfig } from './components/ModelSelector'
 import OnboardingScreen from './components/OnboardingScreen'
 import LoginScreen from './components/LoginScreen'
+import TrajectoryPanel from './components/TrajectoryPanel'
 import Sidebar, { GoalSession, TeachingCandidate } from './components/Sidebar'
 import { api, GoalData } from './services/api'
 
 type Phase = 'login' | 'config' | 'onboarding' | 'discovery'
+type MainView = 'trajectory' | 'exploration' | 'goal' | 'teaching'
 
 interface User {
   id: string
@@ -31,10 +33,12 @@ function App() {
   const [goalSessions, setGoalSessions] = useState<GoalSession[]>([])
   const [activeGoalSessionId, setActiveGoalSessionId] = useState<string | null>(null)
   const [activeTeachingId, setActiveTeachingId] = useState<number | null>(null)
+  const [activeMainView, setActiveMainView] = useState<MainView>('exploration')
 
   // Derived: what are we viewing?
-  const isViewingExploration = activeGoalSessionId === null
-  const isViewingTeaching = activeTeachingId !== null
+  const isViewingTrajectory = activeMainView === 'trajectory'
+  const isViewingExploration = activeMainView === 'exploration'
+  const isViewingTeaching = activeMainView === 'teaching'
 
   // Load user data when logged in
   const loadUserData = useCallback(async (userId: string) => {
@@ -111,16 +115,19 @@ function App() {
         await handleGoalAccepted(goal.trim(), 'onboarding')
         // Ensure we are viewing the new goal session (not exploration)
         setActiveTeachingId(null)
+        setActiveMainView('goal')
       } catch (err) {
         console.error('[App] Failed to create initial goal panel from onboarding goal:', err)
         // If this fails, fall back to exploration.
         setActiveGoalSessionId(null)
         setActiveTeachingId(null)
+        setActiveMainView('exploration')
       }
     } else {
       // Default: start in exploration
       setActiveGoalSessionId(null)
       setActiveTeachingId(null)
+      setActiveMainView('exploration')
     }
 
     setPhase('discovery')
@@ -155,6 +162,7 @@ function App() {
     setGoalSessions(prev => [...prev, newSession])
     setActiveGoalSessionId(newSession.id)
     setActiveTeachingId(null)  // Clear any teaching selection
+    setActiveMainView('goal')
   }, [user])
 
   // Handle sidebar navigation - select a goal
@@ -163,10 +171,12 @@ function App() {
       // Go to exploration
       setActiveGoalSessionId(null)
       setActiveTeachingId(null)
+      setActiveMainView('exploration')
     } else {
       // Select goal (not a specific teaching candidate)
       setActiveGoalSessionId(sessionId)
       setActiveTeachingId(null)
+      setActiveMainView('goal')
     }
   }
 
@@ -174,23 +184,32 @@ function App() {
   const handleSelectTeaching = (goalSessionId: string, teachingId: number) => {
     setActiveGoalSessionId(goalSessionId)
     setActiveTeachingId(teachingId)
+    setActiveMainView('teaching')
   }
 
   const handleNewExploration = () => {
     setActiveGoalSessionId(null)
     setActiveTeachingId(null)
+    setActiveMainView('exploration')
   }
 
-  // Handle when teaching candidate is accepted - ADD to goal's teaching list
+  const handleSelectTrajectory = () => {
+    setActiveMainView('trajectory')
+  }
+
+  // Handle when teaching candidate is accepted - ADD to goal's teaching list (with deduplication)
   const handleTeachingCandidateAccepted = useCallback((candidate: TeachingCandidate, goalSessionId: string) => {
     console.log('[App] Teaching candidate accepted for goal:', goalSessionId, candidate)
     
-    // Add the teaching candidate to the goal session
+    // Add the teaching candidate to the goal session (only if not already present)
     setGoalSessions(prev => prev.map(session => 
       session.id === goalSessionId 
         ? { 
             ...session, 
-            teachingCandidates: [...session.teachingCandidates, candidate]
+            // Deduplicate by ID - don't add if candidate already exists
+            teachingCandidates: session.teachingCandidates.some(tc => tc.id === candidate.id)
+              ? session.teachingCandidates
+              : [...session.teachingCandidates, candidate]
           }
         : session
     ))
@@ -207,6 +226,7 @@ function App() {
     setPhase('login')
     setActiveGoalSessionId(null)
     setActiveTeachingId(null)
+    setActiveMainView('exploration')
   }
 
   // Get the active goal session data
@@ -254,6 +274,8 @@ function App() {
             goalSessions={goalSessions}
             activeSessionId={activeGoalSessionId}
             activeTeachingId={activeTeachingId}
+            isTrajectoryActive={isViewingTrajectory}
+            onSelectTrajectory={user ? handleSelectTrajectory : undefined}
             onSelectSession={handleSelectSession}
             onSelectTeaching={handleSelectTeaching}
             onNewExploration={handleNewExploration}
@@ -270,9 +292,24 @@ function App() {
               </div>
             )}
 
-            {/* Exploration Panel */}
-            {!isLoadingUserData && isViewingExploration && (
-              <div style={{ width: '100%', height: '100%' }}>
+            {/* Trajectory Panel - kept mounted, hidden when not active */}
+            {!isLoadingUserData && user && (
+              <div style={{ 
+                display: isViewingTrajectory ? 'flex' : 'none',
+                width: '100%', 
+                height: '100%' 
+              }}>
+                <TrajectoryPanel userId={user.id} />
+              </div>
+            )}
+
+            {/* Exploration Panel - kept mounted, hidden when not active */}
+            {!isLoadingUserData && (
+              <div style={{ 
+                display: isViewingExploration ? 'flex' : 'none',
+                width: '100%', 
+                height: '100%' 
+              }}>
                 <DiscoveryChat
                   key={user?.id || 'anonymous-exploration'}
                   modelConfig={modelConfig}
@@ -284,44 +321,50 @@ function App() {
               </div>
             )}
 
-            {/* Goal Panel (when viewing a goal, not a teaching candidate) */}
-            {activeGoalSession && user && !isLoadingUserData && !isViewingTeaching && (
-              <div style={{
-                display: !isViewingExploration ? 'flex' : 'none',
-                width: '100%',
-                height: '100%'
-              }}>
+            {/* Goal Panels - render ALL goals, show/hide based on selection */}
+            {!isLoadingUserData && user && goalSessions.map(session => (
+              <div 
+                key={`goal-${session.id}`}
+                style={{
+                  display: (activeMainView === 'goal' && activeGoalSessionId === session.id) ? 'flex' : 'none',
+                  width: '100%',
+                  height: '100%'
+                }}
+              >
                 <GoalChat
-                  key={activeGoalSession.id}
-                  goalId={activeGoalSession.goalId}
-                  goal={activeGoalSession.goal}
+                  goalId={session.goalId}
+                  goal={session.goal}
                   userId={user.id}
                   modelConfig={modelConfig}
                   onboardingInfo={onboardingInfo}
                   onTeachingCandidateAccepted={(candidate) =>
-                    handleTeachingCandidateAccepted(candidate, activeGoalSession.id)
+                    handleTeachingCandidateAccepted(candidate, session.id)
                   }
                 />
               </div>
-            )}
+            ))}
 
-            {/* Teaching Panel (when viewing a specific teaching candidate) */}
-            {activeGoalSession && activeTeachingCandidate && user && !isLoadingUserData && (
-              <div style={{
-                display: isViewingTeaching ? 'flex' : 'none',
-                width: '100%',
-                height: '100%'
-              }}>
-                <TeachingChat
-                  key={activeTeachingCandidate.id}
-                  candidate={activeTeachingCandidate}
-                  goalId={activeGoalSession.goalId}
-                  goalText={activeGoalSession.goal}
-                  userId={user.id}
-                  onboardingInfo={onboardingInfo}
-                  modelConfig={modelConfig}
-                />
-              </div>
+            {/* Teaching Panels - render ALL teaching candidates, show/hide based on selection */}
+            {!isLoadingUserData && user && goalSessions.flatMap(session => 
+              session.teachingCandidates.map(candidate => (
+                <div 
+                  key={`teaching-${candidate.id}`}
+                  style={{
+                    display: (isViewingTeaching && activeTeachingId === candidate.id) ? 'flex' : 'none',
+                    width: '100%',
+                    height: '100%'
+                  }}
+                >
+                  <TeachingChat
+                    candidate={candidate}
+                    goalId={session.goalId}
+                    goalText={session.goal}
+                    userId={user.id}
+                    onboardingInfo={onboardingInfo}
+                    modelConfig={modelConfig}
+                  />
+                </div>
+              ))
             )}
           </div>
         </div>

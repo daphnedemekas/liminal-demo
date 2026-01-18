@@ -1,11 +1,14 @@
 import { useState } from 'react'
 
+export type TaskStatus = 'locked' | 'available' | 'in_progress' | 'completed'
+
 export interface TeachingCandidate {
   id: number
   topic: string
   focus_question: string
   identified_gap: string
   readiness_score: number
+  status: TaskStatus  // locked, available, in_progress, completed
   goalConversationHistory?: Array<{ role: string; content: string }>  // Context from goal chat
 }
 
@@ -22,6 +25,8 @@ interface SidebarProps {
   goalSessions: GoalSession[]
   activeSessionId: string | null
   activeTeachingId: number | null  // Currently selected teaching candidate
+  isTrajectoryActive?: boolean
+  onSelectTrajectory?: () => void
   onSelectSession: (sessionId: string | null) => void
   onSelectTeaching: (goalSessionId: string, teachingId: number) => void  // Select a teaching candidate
   onNewExploration: () => void
@@ -34,6 +39,8 @@ export default function Sidebar({
   goalSessions, 
   activeSessionId, 
   activeTeachingId,
+  isTrajectoryActive = false,
+  onSelectTrajectory,
   onSelectSession, 
   onSelectTeaching,
   onNewExploration,
@@ -73,6 +80,20 @@ export default function Sidebar({
 
       {!isCollapsed && (
         <>
+          {/* Trajectory Section */}
+          <div className="sidebar-section">
+            <div className="sidebar-section-label">Trajectory</div>
+            <button
+              className={`sidebar-exploration-btn ${isTrajectoryActive ? 'active' : ''}`}
+              onClick={onSelectTrajectory}
+              disabled={!onSelectTrajectory}
+              title={!onSelectTrajectory ? 'Trajectory unavailable' : 'View longitudinal learner trajectory'}
+            >
+              <span className="sidebar-exploration-icon"></span>
+              <span>Learner Trajectory</span>
+            </button>
+          </div>
+
           {/* Exploration Section */}
           <div className="sidebar-section">
             <div className="sidebar-section-label">Exploration</div>
@@ -125,19 +146,32 @@ export default function Sidebar({
                       )}
                     </div>
 
-                    {/* Teaching Candidates (sub-items) */}
+                    {/* Teaching Candidates (sub-items) - Learning Tasks */}
                     {expandedGoals.has(session.id) && session.teachingCandidates.length > 0 && (
                       <div className="sidebar-teaching-list">
-                        {session.teachingCandidates.map((tc) => (
-                          <button
-                            key={tc.id}
-                            className={`sidebar-teaching-item ${activeTeachingId === tc.id ? 'active' : ''}`}
-                            onClick={() => onSelectTeaching(session.id, tc.id)}
-                          >
-                            <span className="sidebar-teaching-icon"></span>
-                            <span className="sidebar-teaching-topic">{tc.topic}</span>
-                          </button>
-                        ))}
+                        {session.teachingCandidates.map((tc, idx) => {
+                          const isLocked = tc.status === 'locked'
+                          const isCompleted = tc.status === 'completed'
+                          const isInProgress = tc.status === 'in_progress'
+                          
+                          return (
+                            <button
+                              key={tc.id}
+                              className={`sidebar-teaching-item ${activeTeachingId === tc.id ? 'active' : ''} ${isLocked ? 'locked' : ''} ${isCompleted ? 'completed' : ''} ${isInProgress ? 'in-progress' : ''}`}
+                              onClick={() => !isLocked && onSelectTeaching(session.id, tc.id)}
+                              disabled={isLocked}
+                              title={isLocked ? 'Complete previous tasks to unlock' : tc.topic}
+                            >
+                              <span className="sidebar-teaching-status">
+                                {isLocked && '🔒'}
+                                {isCompleted && '✓'}
+                                {isInProgress && '▶'}
+                                {tc.status === 'available' && `${idx + 1}`}
+                              </span>
+                              <span className="sidebar-teaching-topic">{tc.topic}</span>
+                            </button>
+                          )
+                        })}
                       </div>
                     )}
                   </div>

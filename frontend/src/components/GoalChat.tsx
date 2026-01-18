@@ -262,13 +262,19 @@ export default function GoalChat({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isListening, isAudioMode, stopListening, transcript, handleSend, resetTranscript])
 
-  // Check for teaching candidate proposed
+  // Check for teaching candidate proposed (legacy single-candidate flow)
   const lastTeachingProposedIndex = messages.findLastIndex(m => m.type === 'teaching_proposed')
   const lastTeachingPanelIndex = messages.findLastIndex(m => m.type === 'create_teaching_panel' || m.type === 'teaching_accepted')
   const hasPendingTeaching = lastTeachingProposedIndex > lastTeachingPanelIndex && lastTeachingProposedIndex >= 0
   const pendingTeachingProposal = hasPendingTeaching ? messages[lastTeachingProposedIndex] : null
 
-  // Handle teaching candidate accept/reject
+  // Check for task curriculum proposed (new batch proposal flow)
+  const lastCurriculumProposedIndex = messages.findLastIndex(m => m.type === 'task_curriculum_proposed')
+  const lastCurriculumAcceptedIndex = messages.findLastIndex(m => m.type === 'task_curriculum_accepted')
+  const hasPendingCurriculum = lastCurriculumProposedIndex > lastCurriculumAcceptedIndex && lastCurriculumProposedIndex >= 0
+  const pendingCurriculumProposal = hasPendingCurriculum ? messages[lastCurriculumProposedIndex] : null
+
+  // Handle teaching candidate accept/reject (legacy)
   const handleAcceptTeaching = () => {
     if (isConnected) {
       sendCommand('__ACCEPT_TEACHING__')
@@ -278,6 +284,22 @@ export default function GoalChat({
   const handleRejectTeaching = () => {
     if (isConnected) {
       sendCommand('__REJECT_TEACHING__')
+    }
+  }
+
+  // Handle task curriculum accept/modify (new)
+  const handleAcceptCurriculum = () => {
+    if (isConnected) {
+      sendCommand('__ACCEPT_CURRICULUM__')
+    }
+  }
+
+  const handleModifyCurriculum = () => {
+    // Focus the input field for user to type modification
+    const input = document.querySelector('.goal-chat-input input') as HTMLInputElement
+    if (input) {
+      input.focus()
+      input.placeholder = 'What would you like to change about this curriculum?'
     }
   }
 
@@ -365,7 +387,7 @@ export default function GoalChat({
                 isAudioMode={isAudioMode}
                 onAudioPlay={() => msg.audio_url && playAudio(msg.audio_url)}
               />
-              {/* Show teaching candidate confirmation buttons */}
+              {/* Show teaching candidate confirmation buttons (legacy single-candidate) */}
               {msg.type === 'teaching_proposed' && 
                msg.teachingCandidate && 
                index === lastTeachingProposedIndex && 
@@ -392,6 +414,30 @@ export default function GoalChat({
                       disabled={!isConnected}
                     >
                       Not quite — explore more
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Show task curriculum Accept/Modify buttons (new batch proposal) */}
+              {msg.type === 'task_curriculum_proposed' && 
+               index === lastCurriculumProposedIndex && 
+               hasPendingCurriculum && (
+                <div className="curriculum-confirmation">
+                  <div className="curriculum-confirmation-buttons">
+                    <button 
+                      className="curriculum-accept-btn"
+                      onClick={handleAcceptCurriculum}
+                      disabled={!isConnected}
+                    >
+                      Accept — Let's start
+                    </button>
+                    <button 
+                      className="curriculum-modify-btn"
+                      onClick={handleModifyCurriculum}
+                      disabled={!isConnected}
+                    >
+                      Modify
                     </button>
                   </div>
                 </div>

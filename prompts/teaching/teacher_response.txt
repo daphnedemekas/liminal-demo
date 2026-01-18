@@ -16,6 +16,11 @@ CONTROLLER INSTRUCTION:
 USER BACKGROUND:
 {user_background}
 
+REFERENCE MATERIAL:
+{source_material}
+
+(Use this authoritative content as the basis for your explanations. Quote or paraphrase from it when teaching. Do not invent facts not supported by this material. If the reference material is empty, use your general knowledge but be more cautious about specific claims.)
+
 CONVERSATION HISTORY (recent):
 {conversation}
 

@@ -201,32 +201,79 @@ CRITICAL RULES FOR STAKES:
 
 === OUTPUT FORMAT ===
 
-Return a JSON array of teaching candidates:
+Return a JSON object with teaching candidates AND task curriculum proposal:
 
-[
-  {{
-    "id": 1,
-    "topic": "how backpropagation calculates gradients",
-    "source_theme_id": 3,
-    "focus_question": "How does backpropagation calculate gradients for each weight?",
-    "identified_gap": "Understands forward pass but confused about how errors propagate backward through layers",
-    "current_model_summary": "Knows that weights are adjusted based on error, but doesn't understand the chain rule mechanism",
-    "is_concrete": true,
-    "book_chapter_test": "Yes - Chapter 6 'Backpropagation' in most deep learning textbooks",
-    "pedagogical_scope": "15min",  // Valid: "5min", "10min", "15min", "too_broad"
-    "disambiguated_hook": "mechanism",  // Valid: "mechanism", "meaning", "usefulness", "beauty", "weirdness"
-    "angle": "geometric",  // Valid: "mechanism", "meaning", "application", "historical", "geometric", "intuitive"
-    "estimated_RPL_fit": "proximal",  // Valid: "too_easy", "proximal", "too_hard", "unknown"
-    "specificity": "specific",  // Valid: "broad", "medium", "specific"
-    "goal_relevance": "high",  // NEW FIELD: "high", "medium", "low"
-    "stakes_clarified": true,  // Has user explained WHY they want to know this?
-    "stakes_summary": "Building an ML system and need to debug training issues",  // Their actual words
-    "stakes_type": "utility",  // Valid: "intrinsic", "utility", "identity", "urgency"
-    "readiness_score": 0.8,  // Convenience metric for ranking
-    "turns_discussed": 2,
-    "last_mentioned_turn": 3
+{{
+  "teaching_candidates": [
+    {{
+      "id": 1,
+      "topic": "how backpropagation calculates gradients",
+      "source_theme_id": 3,
+      "focus_question": "How does backpropagation calculate gradients for each weight?",
+      "identified_gap": "Understands forward pass but confused about how errors propagate backward through layers",
+      "current_model_summary": "Knows that weights are adjusted based on error, but doesn't understand the chain rule mechanism",
+      "is_concrete": true,
+      "book_chapter_test": "Yes - Chapter 6 'Backpropagation' in most deep learning textbooks",
+      "pedagogical_scope": "15min",
+      "disambiguated_hook": "mechanism",
+      "angle": "geometric",
+      "estimated_RPL_fit": "proximal",
+      "specificity": "specific",
+      "goal_relevance": "high",
+      "stakes_clarified": true,
+      "stakes_summary": "Building an ML system and need to debug training issues",
+      "stakes_type": "utility",
+      "readiness_score": 0.8,
+      "turns_discussed": 2,
+      "last_mentioned_turn": 3,
+      "status": "available"
+    }}
+  ],
+  "task_curriculum": {{
+    "proposed": true,
+    "accepted": false,
+    "tasks": [
+      {{
+        "id": 1,
+        "topic": "Transformer Circuits Framework",
+        "justification": "You understand attention but haven't looked inside - this gives you the conceptual vocabulary",
+        "prerequisites": [],
+        "status": "available"
+      }},
+      {{
+        "id": 2,
+        "topic": "Induction Heads",
+        "justification": "A concrete example of finding and understanding a circuit, building on the framework",
+        "prerequisites": [1],
+        "status": "locked"
+      }},
+      {{
+        "id": 3,
+        "topic": "Activation Patching",
+        "justification": "The hands-on technique you'll use to actually do interpretability",
+        "prerequisites": [1],
+        "status": "locked"
+      }}
+    ],
+    "modification_history": []
+  }},
+  "prior_knowledge_assessment": {{
+    "assessed_level": "intermediate",
+    "concepts_known": ["attention mechanism", "gradient descent"],
+    "concepts_unclear": ["how attention heads compose"],
+    "practical_experience": "Has trained transformers but never looked inside",
+    "learning_style_hints": ["prefers mechanistic explanations"],
+    "confidence": 0.8,
+    "evidence": [
+      {{
+        "technique": "explain_back",
+        "quote": "User explained attention as weights that sum to 1",
+        "revealed": "shallow understanding of attention"
+      }}
+    ],
+    "techniques_used": ["explain_back", "scenario_probe"]
   }}
-]
+}}
 
 PRESERVATION REQUIREMENT:
 - You MUST include ALL teaching candidates from "CURRENT TEACHING CANDIDATES" in your response

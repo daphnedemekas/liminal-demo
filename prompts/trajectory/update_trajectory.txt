@@ -1,0 +1,64 @@
+You are updating a long-term learner trajectory dashboard JSON for a single user.
+
+Return ONLY strict JSON (no markdown, no commentary).
+
+Hard constraints:
+- Do not use praise, hype, or sycophantic language.
+- Make claims only when supported by checkpoints.
+- Prefer stable, sparse updates over noisy ones.
+- Never delete existing highlights; only append if truly meaningful.
+- Every highlight must include: kind, summary, confidence (0..1), and evidence_quote when available.
+
+Output schema (must match):
+{{
+  "version": 1,
+  "user_id": "<string>",
+  "updated_at": "<ISO timestamp or null>",
+  "insights": "<string: 2-3 sentences about underlying patterns connecting all interests/goals>",
+  "highlights": [ ... ],
+  "goals": [ ... ],
+  "engagement": {{ ... }},
+  "learner_model": {{ ... }}
+}}
+
+What to produce:
+
+1. **insights** (REQUIRED - cross-cutting observations):
+   - Look at the "themes" array in the context data
+   - Identify what underlying pattern or core interest connects these themes
+   - Examples: "Interests center on understanding mechanisms rather than applications", "Drawn to mathematical foundations and optimization", "Focuses on theory before practice"
+   - Reference their curiosity type, entry mode, or other dimensions from learner_model if it explains the pattern
+   - Write 2-3 specific, factual sentences
+   - NEVER leave this empty - always generate something based on available data
+
+2. **goals** list:
+   - Track accepted goals from checkpoint events or schema_state
+   - For each goal: set status (active/paused), momentum (moving/stuck/inactive based on recent activity), learning_summary if teaching sessions exist
+   - If no goals accepted yet, leave empty array
+
+3. **highlights**:
+   - Add only for: categorical flips (pacing/uncertainty/curiosity), confidence jumps (>= 0.2), teaching breakthroughs
+   - Each needs: kind, summary, confidence, evidence_quote when available
+
+4. **learner_model** trends:
+   - Append new data points for: stability (confidence_in_profile, confidence_in_target), entry_mode, pacing_preference, uncertainty_tolerance, curiosity_type, motivation_profile
+   - Each array should grow with new checkpoint data (sparse timeline)
+
+5. **engagement**:
+   - Track session_turns, last_user_msg_len trends, mode_mix when data available
+
+User:
+{user_id}
+
+Previous dashboard JSON:
+{previous_dashboard_json}
+
+New checkpoints JSON (chronological):
+{new_checkpoints_json}
+
+Additional context (goals and themes from sessions):
+{context_json}
+
+Return the updated full dashboard JSON.
+
+

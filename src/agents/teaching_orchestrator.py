@@ -14,6 +14,7 @@ from src.schema.teaching_schema import (
     UnderstandingMarker,
     UnderstandingLevel,
     TeachingAction,
+    TeachingPhase,
     CurriculumStepStatus,
     get_default_markers
 )
@@ -103,7 +104,9 @@ class TeachingOrchestrator:
             current_model_summary=teaching_candidate.get("current_model_summary"),
             stakes_summary=teaching_candidate.get("stakes_summary"),
             pedagogical_scope=teaching_candidate.get("pedagogical_scope", "10min"),
-            angle=teaching_candidate.get("angle", "mechanism")
+            angle=teaching_candidate.get("angle", "mechanism"),
+            source_material=teaching_candidate.get("source_material"),
+            source_citations=teaching_candidate.get("source_citations")
         )
         
         return TeachingSchema(
@@ -119,19 +122,19 @@ class TeachingOrchestrator:
             understanding_markers=get_default_markers()
         )
 
-    def start(self) -> str:
+    def start(self) -> dict:
         """
-        Start the teaching session by generating a curriculum plan and opening message.
+        Start the teaching session with assessment phase.
         
         Returns:
-            Opening message with curriculum overview
+            Dict with opening message and metadata
         """
-        # Generate curriculum plan
-        print("[TeachingOrchestrator] Generating curriculum plan...")
-        self._generate_curriculum_plan()
+        # Start in ASSESSMENT phase - don't generate curriculum yet
+        self.schema.teaching_phase = TeachingPhase.ASSESSMENT
+        print(f"[TeachingOrchestrator] Starting in ASSESSMENT phase for topic: {self.schema.teaching_candidate.topic}")
         
-        # Generate structured opening
-        opening = self._generate_opening_message()
+        # Generate assessment opening question
+        opening = self._generate_assessment_opening()
         
         # Add to history
         self.conversation_history.append({
@@ -142,16 +145,58 @@ class TeachingOrchestrator:
         # Save state
         self._save_state()
         
-        return opening
+        return {
+            "message": opening,
+            "phase": self.schema.teaching_phase.value,
+            "type": "assessment_question"
+        }
+    
+    def _generate_assessment_opening(self) -> str:
+        """Generate opening question to assess user's prior knowledge for this specific topic."""
+        candidate = self.schema.teaching_candidate
+        
+        prompt = f"""You are starting a teaching session on "{candidate.topic}".
+
+CONTEXT:
+- Overall Goal: {self.goal_text}
+- This Topic: {candidate.topic}
+- Identified Gap: {candidate.identified_gap}
+- Focus Question: {candidate.focus_question}
+- User Background: {self.user_background}
+
+TASK: Generate an opening message that:
+1. Acknowledges what we're about to learn together
+2. Asks a probing question to understand what they ALREADY know about this specific topic
+3. The question should reveal their mental model, not just yes/no understanding
+4. Keep it warm and conversational
+
+IMPORTANT: Don't ask "what do you know about X?" directly. Instead:
+- Ask them to explain a related concept
+- Present a scenario and ask how they'd think about it
+- Ask about their intuition or mental model
+- Reference something from the goal conversation to build on
+
+Keep your response under 100 words. Be direct and engaging.
+
+Return just the message text, no JSON."""
+
+        model_name = self.model_config.get("interviewer") or get_model_name("interviewer")
+        
+        response = self.llm.chat(
+            messages=[{"role": "user", "content": prompt}],
+            model=model_name,
+            temperature=0.8,
+            max_tokens=300
+        )
+        
+        return response.strip()
 
     def _generate_curriculum_plan(self):
-        """Generate the initial curriculum plan using LLM."""
+        """Generate the initial curriculum plan using LLM. Raises errors on failure."""
         prompt_path = Path(__file__).parent.parent.parent / "prompts" / "teaching" / "plan_curriculum.txt"
         
         if not prompt_path.exists():
-            print(f"[Warning] Curriculum prompt not found, using fallback")
-            self._create_fallback_curriculum()
-            return
+            raise FileNotFoundError(f"Curriculum prompt not found at: {prompt_path}")
         
         prompt_template = prompt_path.read_text()
         
@@ -175,65 +220,35 @@ class TeachingOrchestrator:
             current_model_summary=self.schema.teaching_candidate.current_model_summary or "Unknown",
             stakes_summary=self.schema.teaching_candidate.stakes_summary or "Not specified",
             user_background=self.user_background,
+            assessment_concepts_known=", ".join(self.schema.assessment_concepts_known) if self.schema.assessment_concepts_known else "Still assessing",
+            assessment_concepts_unclear=", ".join(self.schema.assessment_concepts_unclear) if self.schema.assessment_concepts_unclear else "Still assessing",
+            assessment_confidence=f"{self.schema.assessment_confidence:.2f}",
+            source_material=self.schema.teaching_candidate.source_material or "(No reference material provided)",
             goal_conversation_summary=goal_conv_summary,
             turns_elapsed=0
         )
         
-        model_name = get_model_name(self.model_config.get("ranker"), "ranker")
+        # Use model override if provided, otherwise fall back to config
+        model_name = self.model_config.get("ranker") or get_model_name("ranker")
         
-        try:
-            result = self.llm.chat_with_json(
-                messages=[{"role": "user", "content": prompt}],
-                model=model_name,
-                temperature=0.7,
-                max_tokens=2000
-            )
-            
-            if result:
-                # Parse and validate curriculum
-                self.schema.curriculum_plan = CurriculumPlan(**result)
-                print(f"[TeachingOrchestrator] Created curriculum with {len(self.schema.curriculum_plan.steps)} steps")
-            else:
-                self._create_fallback_curriculum()
-                
-        except Exception as e:
-            print(f"[TeachingOrchestrator] Error generating curriculum: {e}")
-            self._create_fallback_curriculum()
-
-    def _create_fallback_curriculum(self):
-        """Create a simple fallback curriculum if LLM fails."""
-        self.schema.curriculum_plan = CurriculumPlan(
-            topic=self.schema.teaching_candidate.topic,
-            goal_text=self.goal_text,
-            total_steps=3,
-            steps=[
-                CurriculumStep(
-                    id=1,
-                    objective=f"Understand the basics of {self.schema.teaching_candidate.topic}",
-                    explanation_approach="Start with concrete example",
-                    quick_check="Can you explain the core concept in your own words?",
-                    marker_targets=["explanation", "recall"],
-                    prerequisites=[]
-                ),
-                CurriculumStep(
-                    id=2,
-                    objective="Explore how it works in practice",
-                    explanation_approach="Walk through a real example step by step",
-                    quick_check="What would happen if we changed this part?",
-                    marker_targets=["application", "prediction"],
-                    prerequisites=[1]
-                ),
-                CurriculumStep(
-                    id=3,
-                    objective="Connect to broader context and applications",
-                    explanation_approach="Show connections to related concepts",
-                    quick_check="Where else might you see this pattern?",
-                    marker_targets=["transfer", "connection_making"],
-                    prerequisites=[2]
-                )
-            ],
-            current_step_id=1
+        print(f"[TeachingOrchestrator] Generating curriculum for topic: {self.schema.teaching_candidate.topic}")
+        print(f"[TeachingOrchestrator] Using model: {model_name}")
+        
+        result = self.llm.chat_with_json(
+            messages=[{"role": "user", "content": prompt}],
+            model=model_name,
+            temperature=0.7,
+            max_tokens=2000
         )
+        
+        if not result:
+            raise ValueError(f"LLM returned empty result for curriculum generation. Model: {model_name}")
+        
+        # Parse and validate curriculum
+        self.schema.curriculum_plan = CurriculumPlan(**result)
+        print(f"[TeachingOrchestrator] Created curriculum with {len(self.schema.curriculum_plan.steps)} steps:")
+        for i, step in enumerate(self.schema.curriculum_plan.steps):
+            print(f"  Step {i+1}: {step.objective}")
 
     def _generate_opening_message(self) -> str:
         """Generate the opening message with curriculum overview."""
@@ -260,7 +275,7 @@ What's your current sense of this? Even a rough mental model or analogy helps me
 
         return opening
 
-    def process_user_message(self, user_message: str) -> str:
+    def process_user_message(self, user_message: str) -> dict:
         """
         Process user message through the teaching pipeline.
         
@@ -268,8 +283,12 @@ What's your current sense of this? Even a rough mental model or analogy helps me
             user_message: User's message
             
         Returns:
-            Teacher's response
+            Dict with response and metadata (phase, type, etc.)
         """
+        # Check for special commands
+        if user_message == "__ACCEPT_CURRICULUM__":
+            return self._handle_accept_curriculum()
+        
         # Add user message to history
         self.conversation_history.append({
             "role": "user",
@@ -277,21 +296,301 @@ What's your current sense of this? Even a rough mental model or analogy helps me
         })
         
         self.schema.turns_elapsed += 1
+        current_phase = self.schema.teaching_phase
+        print(f"[TeachingOrchestrator] Processing message in phase: {current_phase}")
+        
+        # Handle based on current phase
+        if current_phase == TeachingPhase.ASSESSMENT:
+            return self._process_assessment_phase(user_message)
+        elif current_phase == TeachingPhase.CURRICULUM_PROPOSAL:
+            return self._process_proposal_phase(user_message)
+        elif current_phase == TeachingPhase.NEGOTIATION:
+            return self._process_negotiation_phase(user_message)
+        else:  # TEACHING phase
+            return self._process_teaching_phase(user_message)
+    
+    def _process_assessment_phase(self, user_message: str) -> dict:
+        """Process message during assessment phase."""
+        print("[TeachingOrchestrator] Assessment phase - analyzing user's knowledge...")
+        
+        # Analyze user's response to update assessment
+        self._analyze_assessment_response(user_message)
+        
+        # Check if we have enough confidence to propose curriculum
+        # Usually after 2-3 turns of assessment
+        if self.schema.assessment_confidence >= 0.6 or self.schema.turns_elapsed >= 3:
+            print(f"[TeachingOrchestrator] Assessment complete (confidence: {self.schema.assessment_confidence:.2f})")
+            return self._transition_to_curriculum_proposal()
+        else:
+            # Generate follow-up assessment question
+            response = self._generate_assessment_followup(user_message)
+            self.conversation_history.append({"role": "assistant", "content": response})
+            self._save_state()
+            return {
+                "message": response,
+                "phase": "assessment",
+                "type": "assessment_question"
+            }
+    
+    def _analyze_assessment_response(self, user_message: str):
+        """Analyze user's response to extract knowledge level."""
+        prompt = f"""Analyze this user response to understand their prior knowledge about "{self.schema.teaching_candidate.topic}".
+
+USER'S RESPONSE:
+{user_message}
+
+CONTEXT:
+- Topic: {self.schema.teaching_candidate.topic}
+- Identified Gap: {self.schema.teaching_candidate.identified_gap}
+
+Return JSON:
+{{
+  "concepts_demonstrated": ["concept1", "concept2"],  // Concepts they clearly understand
+  "concepts_unclear": ["concept3"],  // Concepts they're confused about or missing
+  "assessment_confidence": 0.7,  // 0-1, how confident are we about their level?
+  "overall_level": "beginner|intermediate|advanced",
+  "learning_style_hints": ["prefers analogies", "wants math details"]
+}}
+
+Return ONLY valid JSON."""
+
+        model_name = self.model_config.get("ranker") or get_model_name("ranker")
+        result = self.llm.chat_with_json(
+            messages=[{"role": "user", "content": prompt}],
+            model=model_name,
+            temperature=0.3,
+            max_tokens=500
+        )
+        
+        if result:
+            # Update schema with assessment results
+            for concept in result.get("concepts_demonstrated", []):
+                if concept and concept not in self.schema.assessment_concepts_known:
+                    self.schema.assessment_concepts_known.append(concept)
+            for concept in result.get("concepts_unclear", []):
+                if concept and concept not in self.schema.assessment_concepts_unclear:
+                    self.schema.assessment_concepts_unclear.append(concept)
+            
+            # Update confidence (average with existing)
+            new_confidence = result.get("assessment_confidence", 0.5)
+            self.schema.assessment_confidence = max(self.schema.assessment_confidence, new_confidence)
+            print(f"[Assessment] Updated confidence: {self.schema.assessment_confidence:.2f}")
+    
+    def _generate_assessment_followup(self, user_message: str) -> str:
+        """Generate follow-up question to continue assessment."""
+        prompt = f"""You are assessing a learner's knowledge about "{self.schema.teaching_candidate.topic}".
+
+CONVERSATION SO FAR:
+{self._format_recent_conversation()}
+
+WHAT WE'VE LEARNED ABOUT THEM:
+- Concepts they know: {', '.join(self.schema.assessment_concepts_known) or 'Still assessing'}
+- Concepts unclear: {', '.join(self.schema.assessment_concepts_unclear) or 'Still assessing'}
+- Assessment confidence: {self.schema.assessment_confidence:.2f}
+
+TASK: Generate a follow-up question that:
+1. Probes deeper into their understanding
+2. Explores a different angle than previous questions
+3. Helps us understand their mental model better
+4. Is conversational, not quiz-like
+
+Keep it under 80 words. Be warm and curious.
+Return just the message text."""
+
+        model_name = self.model_config.get("interviewer") or get_model_name("interviewer")
+        response = self.llm.chat(
+            messages=[{"role": "user", "content": prompt}],
+            model=model_name,
+            temperature=0.8,
+            max_tokens=200
+        )
+        return response.strip()
+    
+    def _transition_to_curriculum_proposal(self) -> dict:
+        """Generate curriculum and propose it to user."""
+        print("[TeachingOrchestrator] Transitioning to CURRICULUM_PROPOSAL phase...")
+        self.schema.teaching_phase = TeachingPhase.CURRICULUM_PROPOSAL
+        
+        # Generate curriculum using assessment data
+        self._generate_curriculum_plan()
+        
+        # Generate proposal message with justifications
+        response = self._generate_curriculum_proposal_message()
+        
+        self.conversation_history.append({"role": "assistant", "content": response})
+        self._save_state()
+        
+        return {
+            "message": response,
+            "phase": "curriculum_proposal",
+            "type": "curriculum_proposed",  # This triggers Accept/Modify buttons in UI
+            "curriculum_plan": {
+                "steps": [{"objective": s.objective, "why_for_you": s.why_for_you} for s in self.schema.curriculum_plan.steps]
+            }
+        }
+    
+    def _generate_curriculum_proposal_message(self) -> str:
+        """Generate message proposing the curriculum with justifications."""
+        plan = self.schema.curriculum_plan
+        candidate = self.schema.teaching_candidate
+        
+        # Build steps with justifications
+        steps_text = ""
+        for i, step in enumerate(plan.steps[:5]):  # Show up to 5 steps
+            why = step.why_for_you or "This builds on what you already know."
+            steps_text += f"\n{i+1}. **{step.objective}**\n   *Why this for you:* {why}\n"
+        
+        assessment_summary = ""
+        if self.schema.assessment_concepts_known:
+            assessment_summary = f"\n\nFrom our conversation, I can see you already understand: {', '.join(self.schema.assessment_concepts_known[:3])}."
+        if self.schema.assessment_concepts_unclear:
+            assessment_summary += f" We'll focus on clarifying: {', '.join(self.schema.assessment_concepts_unclear[:3])}."
+        
+        message = f"""Based on what you've shared, I've designed a learning path for **{candidate.topic}**:{assessment_summary}
+
+**Proposed Curriculum:**
+{steps_text}
+
+Does this learning path work for you? We can adjust the focus, add steps, or skip things you already know."""
+        
+        return message
+    
+    def _handle_accept_curriculum(self) -> dict:
+        """Handle user accepting the proposed curriculum."""
+        print("[TeachingOrchestrator] User accepted curriculum - transitioning to TEACHING phase")
+        self.schema.curriculum_accepted = True
+        self.schema.teaching_phase = TeachingPhase.TEACHING
+
+        # Mark first step as in progress
+        if len(self.schema.curriculum_plan.steps) > 0:
+            self.schema.curriculum_plan.steps[0].status = CurriculumStepStatus.IN_PROGRESS
+            self.schema.curriculum_plan.current_step_id = self.schema.curriculum_plan.steps[0].id
+
+        # Generate first teaching message
+        response = self._generate_first_teaching_message()
+
+        self.conversation_history.append({"role": "assistant", "content": response})
+        self._save_state()
+
+        return {
+            "message": response,
+            "phase": "teaching",
+            "type": "curriculum_accepted",
+            "curriculum_progress": {
+                "current_step": self.schema.current_step_index,
+                "total_steps": len(self.schema.curriculum_plan.steps),
+                "completed_steps": len(self.schema.curriculum_plan.completed_step_ids)
+            }
+        }
+    
+    def _generate_first_teaching_message(self) -> str:
+        """Generate the first actual teaching message after curriculum acceptance."""
+        current_step = self._get_current_step()
+        if not current_step:
+            return "Let's begin! What would you like to start with?"
+        
+        prompt = f"""You're starting to teach "{self.schema.teaching_candidate.topic}".
+
+FIRST CURRICULUM STEP:
+- Objective: {current_step.objective}
+- Approach: {current_step.explanation_approach}
+
+USER'S BACKGROUND:
+- They know: {', '.join(self.schema.assessment_concepts_known) or 'basics'}
+- They need clarity on: {', '.join(self.schema.assessment_concepts_unclear) or 'core concepts'}
+
+Generate a teaching message that:
+1. Acknowledges they're ready to begin
+2. Introduces the first concept clearly
+3. Uses an analogy or concrete example
+4. Ends with an engagement hook (question or thought prompt)
+
+Keep it focused and under 150 words. No fluff.
+Return just the teaching message."""
+
+        model_name = self.model_config.get("interviewer") or get_model_name("interviewer")
+        response = self.llm.chat(
+            messages=[{"role": "user", "content": prompt}],
+            model=model_name,
+            temperature=0.7,
+            max_tokens=400
+        )
+        return response.strip()
+    
+    def _process_proposal_phase(self, user_message: str) -> dict:
+        """Process message during curriculum proposal (user giving feedback)."""
+        # User is providing feedback on curriculum - transition to negotiation
+        self.schema.teaching_phase = TeachingPhase.NEGOTIATION
+        return self._process_negotiation_phase(user_message)
+    
+    def _process_negotiation_phase(self, user_message: str) -> dict:
+        """Process user's curriculum modification request."""
+        print("[TeachingOrchestrator] Negotiation phase - adjusting curriculum...")
+        
+        # Analyze modification request and adjust curriculum
+        self._adjust_curriculum_based_on_feedback(user_message)
+        
+        # Re-propose
+        response = self._generate_curriculum_proposal_message()
+        
+        self.conversation_history.append({"role": "assistant", "content": response})
+        self._save_state()
+        
+        return {
+            "message": response,
+            "phase": "negotiation",
+            "type": "curriculum_proposed"
+        }
+    
+    def _adjust_curriculum_based_on_feedback(self, user_message: str):
+        """Adjust curriculum based on user's modification request."""
+        prompt = f"""User wants to modify this curriculum for "{self.schema.teaching_candidate.topic}":
+
+CURRENT CURRICULUM:
+{[{"id": s.id, "objective": s.objective} for s in self.schema.curriculum_plan.steps]}
+
+USER'S FEEDBACK:
+{user_message}
+
+Suggest modifications. Return JSON:
+{{
+  "action": "add|remove|modify|reorder",
+  "step_ids_affected": [1, 2],
+  "new_objectives": ["New objective 1"],  // Only if adding/modifying
+  "reasoning": "Brief explanation"
+}}
+
+Return ONLY valid JSON."""
+
+        model_name = self.model_config.get("ranker") or get_model_name("ranker")
+        result = self.llm.chat_with_json(
+            messages=[{"role": "user", "content": prompt}],
+            model=model_name,
+            temperature=0.5,
+            max_tokens=500
+        )
+        
+        if result:
+            # Apply modifications (simplified - just record the feedback for now)
+            self.schema.curriculum_plan.adaptation_history.append(
+                f"User requested: {user_message[:100]}. Action: {result.get('action', 'unknown')}"
+            )
+    
+    def _process_teaching_phase(self, user_message: str) -> dict:
+        """Process message during active teaching phase."""
+        # Original teaching logic
+        print("[TeachingOrchestrator] Teaching phase - processing...")
         
         # Step 1: Determine next teaching action
-        print("[TeachingOrchestrator] Determining next action...")
         self._update_controller(user_message)
         
         # Step 2: Assess understanding markers
-        print("[TeachingOrchestrator] Assessing understanding...")
         self._assess_understanding(user_message)
         
         # Step 3: Check if curriculum needs adjustment
-        print("[TeachingOrchestrator] Checking curriculum...")
         self._check_curriculum_adaptation()
         
         # Step 4: Generate teacher response
-        print("[TeachingOrchestrator] Generating response...")
         response = self._generate_teacher_response(user_message)
         
         # Step 5: Update curriculum progress if appropriate
@@ -306,16 +605,28 @@ What's your current sense of this? Even a rough mental model or analogy helps me
         # Save state
         self._save_state()
         
-        return response
+        return {
+            "message": response,
+            "phase": "teaching",
+            "type": "teaching_message",
+            "curriculum_progress": {
+                "current_step": self.schema.current_step_index,
+                "total_steps": len(self.schema.curriculum_plan.steps),
+                "completed_steps": len(self.schema.curriculum_plan.completed_step_ids)
+            }
+        }
+    
+    def _format_recent_conversation(self) -> str:
+        """Format recent conversation for prompts."""
+        recent = self.conversation_history[-6:] if len(self.conversation_history) > 6 else self.conversation_history
+        return "\n".join([f"{m['role'].upper()}: {m['content'][:200]}..." if len(m['content']) > 200 else f"{m['role'].upper()}: {m['content']}" for m in recent])
 
     def _update_controller(self, user_message: str):
-        """Update controller state based on conversation."""
+        """Update controller state based on conversation. Raises errors on failure."""
         prompt_path = Path(__file__).parent.parent.parent / "prompts" / "teaching" / "generate_teaching_controller.txt"
         
         if not prompt_path.exists():
-            # Fallback controller logic
-            self._fallback_controller_update(user_message)
-            return
+            raise FileNotFoundError(f"Teaching controller prompt not found at: {prompt_path}")
         
         prompt_template = prompt_path.read_text()
         
@@ -339,62 +650,31 @@ What's your current sense of this? Even a rough mental model or analogy helps me
             user_message=user_message
         )
         
-        model_name = get_model_name(self.model_config.get("ranker"), "ranker")
+        # Use model override if provided, otherwise fall back to config
+        model_name = self.model_config.get("ranker") or get_model_name("ranker")
         
-        try:
-            result = self.llm.chat_with_json(
-                messages=[{"role": "user", "content": prompt}],
-                model=model_name,
-                temperature=0.5,
-                max_tokens=800
-            )
-            
-            if result:
-                self.schema.controller = TeachingController(
-                    next_action=TeachingAction(result.get("next_action", "explain")),
-                    action_rationale=result.get("action_rationale", ""),
-                    focus_content=result.get("focus_content", ""),
-                    target_markers=result.get("target_markers", []),
-                    user_question_pending=result.get("user_question_pending", False),
-                    user_question=result.get("user_question"),
-                    confusion_detected=result.get("confusion_detected", False),
-                    prerequisite_gap_detected=result.get("prerequisite_gap_detected", False),
-                    pacing_adjustment=result.get("pacing_adjustment")
-                )
-                print(f"[TeachingOrchestrator] Controller: {self.schema.controller.next_action}")
-            else:
-                self._fallback_controller_update(user_message)
-                
-        except Exception as e:
-            print(f"[TeachingOrchestrator] Controller error: {e}")
-            self._fallback_controller_update(user_message)
-
-    def _fallback_controller_update(self, user_message: str):
-        """Simple fallback controller logic."""
-        # Check for question
-        if "?" in user_message:
-            self.schema.controller = TeachingController(
-                next_action=TeachingAction.ANSWER_QUESTION,
-                action_rationale="User asked a question",
-                focus_content=user_message,
-                user_question_pending=True,
-                user_question=user_message
-            )
-        # Check for confusion signals
-        elif any(phrase in user_message.lower() for phrase in ["don't understand", "confused", "what?", "huh"]):
-            self.schema.controller = TeachingController(
-                next_action=TeachingAction.PROVIDE_EXAMPLE,
-                action_rationale="User seems confused",
-                focus_content="Clarify with concrete example",
-                confusion_detected=True
-            )
-        else:
-            # Default: continue explaining
-            self.schema.controller = TeachingController(
-                next_action=TeachingAction.EXPLAIN,
-                action_rationale="Continue teaching",
-                focus_content=self._get_current_step().objective if self._get_current_step() else "Continue"
-            )
+        result = self.llm.chat_with_json(
+            messages=[{"role": "user", "content": prompt}],
+            model=model_name,
+            temperature=0.5,
+            max_tokens=800
+        )
+        
+        if not result:
+            raise ValueError(f"LLM returned empty result for controller update. Model: {model_name}")
+        
+        self.schema.controller = TeachingController(
+            next_action=TeachingAction(result.get("next_action", "explain")),
+            action_rationale=result.get("action_rationale", ""),
+            focus_content=result.get("focus_content", ""),
+            target_markers=result.get("target_markers", []),
+            user_question_pending=result.get("user_question_pending", False),
+            user_question=result.get("user_question"),
+            confusion_detected=result.get("confusion_detected", False),
+            prerequisite_gap_detected=result.get("prerequisite_gap_detected", False),
+            pacing_adjustment=result.get("pacing_adjustment")
+        )
+        print(f"[TeachingOrchestrator] Controller: {self.schema.controller.next_action}")
 
     def _assess_understanding(self, user_message: str):
         """Assess understanding markers based on conversation."""
@@ -423,7 +703,8 @@ What's your current sense of this? Even a rough mental model or analogy helps me
             user_message=user_message
         )
         
-        model_name = get_model_name(self.model_config.get("ranker"), "ranker")
+        # Use model override if provided, otherwise fall back to config
+        model_name = self.model_config.get("ranker") or get_model_name("ranker")
         
         try:
             result = self.llm.chat_with_json(
@@ -487,7 +768,8 @@ What's your current sense of this? Even a rough mental model or analogy helps me
             controller_state=self.schema.controller.model_dump_json(indent=2)
         )
         
-        model_name = get_model_name(self.model_config.get("ranker"), "ranker")
+        # Use model override if provided, otherwise fall back to config
+        model_name = self.model_config.get("ranker") or get_model_name("ranker")
         
         try:
             result = self.llm.chat_with_json(
@@ -542,11 +824,11 @@ What's your current sense of this? Even a rough mental model or analogy helps me
         print(f"[TeachingOrchestrator] Applied {adaptation_type} adaptation")
 
     def _generate_teacher_response(self, user_message: str) -> str:
-        """Generate the teacher's response."""
+        """Generate the teacher's response. Raises errors on failure."""
         prompt_path = Path(__file__).parent.parent.parent / "prompts" / "teaching" / "teacher_response.txt"
         
         if not prompt_path.exists():
-            return self._fallback_response(user_message)
+            raise FileNotFoundError(f"Teacher response prompt not found at: {prompt_path}")
         
         prompt_template = prompt_path.read_text()
         
@@ -567,33 +849,25 @@ What's your current sense of this? Even a rough mental model or analogy helps me
             target_markers=", ".join(ctrl.target_markers) if ctrl.target_markers else "general understanding",
             action_rationale=ctrl.action_rationale,
             user_background=self.user_background,
+            source_material=self.schema.teaching_candidate.source_material or "(No reference material provided)",
             conversation=conv_text,
             user_message=user_message
         )
         
-        model_name = get_model_name(self.model_config.get("interviewer"), "interviewer")
+        # Use model override if provided, otherwise fall back to config
+        model_name = self.model_config.get("interviewer") or get_model_name("interviewer")
         
-        try:
-            response = self.llm.chat(
-                messages=[{"role": "user", "content": prompt}],
-                model=model_name,
-                temperature=0.7,
-                max_tokens=1000
-            )
-            return response
-            
-        except Exception as e:
-            print(f"[TeachingOrchestrator] Response generation error: {e}")
-            return self._fallback_response(user_message)
-
-    def _fallback_response(self, user_message: str) -> str:
-        """Generate fallback response if LLM fails."""
-        candidate = self.schema.teaching_candidate
+        response = self.llm.chat(
+            messages=[{"role": "user", "content": prompt}],
+            model=model_name,
+            temperature=0.7,
+            max_tokens=1000
+        )
         
-        if "?" in user_message:
-            return f"Good question! Let me think about that in the context of {candidate.topic}. Can you tell me more about what specifically is unclear?"
-        else:
-            return f"That's helpful context. Let me continue explaining {candidate.topic}. What aspect would you like me to focus on next?"
+        if not response:
+            raise ValueError(f"LLM returned empty response for teacher. Model: {model_name}")
+        
+        return response
 
     def _update_progress(self):
         """Update curriculum progress based on understanding markers."""

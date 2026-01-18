@@ -237,6 +237,33 @@ export const api = {
 
     return response.json()
   },
+
+  // Learner trajectory dashboard
+  async getTrajectory(userId: string): Promise<LearnerTrajectoryDashboard> {
+    const response = await fetch(`${API_BASE_URL}/api/trajectory/${userId}`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to get trajectory')
+    }
+
+    return response.json()
+  },
+
+  async refreshTrajectory(userId: string): Promise<LearnerTrajectoryDashboard> {
+    const response = await fetch(`${API_BASE_URL}/api/trajectory/${userId}/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to refresh trajectory')
+    }
+
+    return response.json()
+  },
 }
 
 export interface FeedItem {
@@ -307,4 +334,36 @@ export interface TeachingSchema {
   open_questions: string[]
   prerequisite_gaps: string[]
   phase_complete: boolean
+}
+
+export interface TrajectoryHighlight {
+  id?: string
+  timestamp?: string
+  kind: string
+  summary: string
+  confidence: number
+  evidence_quote?: string | null
+  source_session_id?: string | null
+  goal_id?: number | null
+}
+
+export interface TrajectoryGoal {
+  goal_id: number
+  goal_text: string
+  status: string
+  momentum: string
+  last_activity_at?: string | null
+  learning_summary?: string
+  next_suggested_move?: string
+}
+
+export interface LearnerTrajectoryDashboard {
+  version: number
+  user_id: string
+  updated_at?: string | null
+  insights?: string  // Cross-cutting observations about patterns connecting interests
+  highlights: TrajectoryHighlight[]
+  goals: TrajectoryGoal[]
+  engagement: any
+  learner_model: any
 }

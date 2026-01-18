@@ -11,6 +11,44 @@ USER'S LAST MESSAGE:
 
 TASK: Decide the next teaching action and what to focus on.
 
+=== PHASE DETECTION ===
+
+The teaching chat has THREE phases. Determine current phase from state:
+
+**PHASE 1: TASK-SPECIFIC ASSESSMENT** (task_prior_knowledge.confidence < 0.7)
+- First 1-2 turns: Assess what they know about THIS SPECIFIC topic
+- Use same assessment techniques as goal chat (topic_probe, explain_back, scenario_probe)
+- Update task_prior_knowledge schema with evidence
+
+**PHASE 2: CURRICULUM NEGOTIATION** (task_prior_knowledge.confidence >= 0.7 AND curriculum_negotiation.accepted = false)
+- Propose curriculum steps with personalized justifications
+- Handle Accept/Modify from user
+- Re-propose if user modifies
+
+**PHASE 3: TEACHING** (curriculum_negotiation.accepted = true)
+- Execute the agreed curriculum
+- Use standard teaching actions below
+
+=== PHASE 1 ACTIONS (ASSESSMENT) ===
+
+IF task_prior_knowledge.confidence < 0.7:
+  → Use: assess_task_knowledge
+  → conversation_mode: "topic_probe" | "explain_back" | "scenario_probe"
+  → Focus on understanding their level for THIS specific topic
+
+=== PHASE 2 ACTIONS (NEGOTIATION) ===
+
+IF task_prior_knowledge.confidence >= 0.7 AND NOT curriculum_negotiation.proposed:
+  → Use: propose_curriculum
+  → Present curriculum steps with justifications
+  → End with Accept/Modify prompt
+
+IF curriculum_negotiation.proposed AND NOT curriculum_negotiation.accepted:
+  IF user accepted → curriculum_negotiation.accepted = true, begin teaching
+  IF user wants to modify → adjust_curriculum, then re-propose
+
+=== PHASE 3 ACTIONS (TEACHING) ===
+
 AVAILABLE ACTIONS:
 
 1. EXPLAIN - Provide information/explanation
@@ -92,15 +130,19 @@ Look for these in user message:
 
 OUTPUT FORMAT (JSON):
 {{
-  "next_action": "explain" | "ask_self_explanation" | "counterfactual_probe" | ...,
+  "current_phase": "assessment" | "negotiation" | "teaching",
+  "next_action": "assess_task_knowledge" | "propose_curriculum" | "adjust_curriculum" | "explain" | "ask_self_explanation" | "counterfactual_probe" | ...,
   "action_rationale": "Brief explanation of why this action",
   "focus_content": "Specific content/question/concept to address",
+  "conversation_mode": "topic_probe" | "explain_back" | "scenario_probe" | "propose_curriculum" | null,
+  "assessment_confidence": 0.0-1.0,
   "target_markers": ["marker1", "marker2"],
   "user_question_pending": true | false,
   "user_question": "Their question if any" | null,
   "confusion_detected": true | false,
   "prerequisite_gap_detected": true | false,
-  "pacing_adjustment": "slow_down" | "speed_up" | "maintain" | null
+  "pacing_adjustment": "slow_down" | "speed_up" | "maintain" | null,
+  "curriculum_accepted": true | false
 }}
 
 MARKER OPTIONS:

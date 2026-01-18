@@ -104,12 +104,26 @@ class LLMClient:
                 # OpenAI-compatible providers (OpenAI + Cerebras)
                 client = self.cerebras_client if provider == "cerebras" else self.openai_client
 
-                resp = client.chat.completions.create(
-                    model=model_name,
-                    messages=messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                )
+                # GPT-5 and o-series models have special requirements:
+                # - use max_completion_tokens instead of max_tokens
+                # - only support temperature=1 (don't pass custom temperature)
+                is_restricted_model = model_name.startswith("gpt-5") or model_name.startswith("o1") or model_name.startswith("o3")
+                
+                kwargs = {
+                    "model": model_name,
+                    "messages": messages,
+                }
+                
+                # Only pass temperature for models that support it
+                if not is_restricted_model:
+                    kwargs["temperature"] = temperature
+                
+                if is_restricted_model:
+                    kwargs["max_completion_tokens"] = max_tokens
+                else:
+                    kwargs["max_tokens"] = max_tokens
+
+                resp = client.chat.completions.create(**kwargs)
 
                 usage = getattr(resp, "usage", None)
                 if usage is not None:
@@ -178,12 +192,24 @@ class LLMClient:
                         # NOTE: response_format currently only supports forcing a JSON *object*.
                         # Many of our ranker tasks return a top-level JSON array. For those, do not
                         # force response_format; rely on prompt-only parsing.
+                        
+                        # GPT-5 and o-series models have special requirements
+                        is_restricted_model = model_name.startswith("gpt-5") or model_name.startswith("o1") or model_name.startswith("o3")
+                        
                         kwargs = dict(
                             model=model_name,
                             messages=messages,
-                            temperature=temperature,
-                            max_tokens=max_tokens,
                         )
+                        
+                        # Only pass temperature for models that support it
+                        if not is_restricted_model:
+                            kwargs["temperature"] = temperature
+                        
+                        if is_restricted_model:
+                            kwargs["max_completion_tokens"] = max_tokens
+                        else:
+                            kwargs["max_tokens"] = max_tokens
+                            
                         if json_top_level == "object":
                             kwargs["response_format"] = {"type": "json_object"}
 
@@ -327,13 +353,25 @@ class LLMClient:
             # OpenAI-compatible providers (OpenAI + Cerebras)
             client = self.cerebras_client if provider == "cerebras" else self.openai_client
 
-            stream = client.chat.completions.create(
-                model=model_name,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                stream=True,
-            )
+            # GPT-5 and o-series models have special requirements
+            is_restricted_model = model_name.startswith("gpt-5") or model_name.startswith("o1") or model_name.startswith("o3")
+            
+            kwargs = {
+                "model": model_name,
+                "messages": messages,
+                "stream": True,
+            }
+            
+            # Only pass temperature for models that support it
+            if not is_restricted_model:
+                kwargs["temperature"] = temperature
+            
+            if is_restricted_model:
+                kwargs["max_completion_tokens"] = max_tokens
+            else:
+                kwargs["max_tokens"] = max_tokens
+
+            stream = client.chat.completions.create(**kwargs)
 
             for chunk in stream:
                 if chunk.choices and chunk.choices[0].delta.content:

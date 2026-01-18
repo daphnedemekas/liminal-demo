@@ -9,6 +9,16 @@ CONTEXT:
 - Why This Matters to Them: {stakes_summary}
 - User Background: {user_background}
 
+FRESH ASSESSMENT (from recent conversation):
+- Concepts they clearly know: {assessment_concepts_known}
+- Concepts they're unclear about: {assessment_concepts_unclear}
+- Assessment confidence: {assessment_confidence}
+
+REFERENCE MATERIAL AVAILABLE:
+{source_material}
+
+(Design curriculum steps that can be taught using this source material. If reference material is provided, structure your explanations and examples around the content within it. If empty, use your general knowledge.)
+
 PRIOR CONVERSATION CONTEXT (from goal discovery):
 {goal_conversation_summary}
 
@@ -46,9 +56,28 @@ STEP STRUCTURE:
 Each curriculum step should have:
 - objective: What the user will understand after this step (1 sentence)
 - explanation_approach: How to teach it (analogy, example, mechanism, visual, etc.)
+- why_for_you: PERSONALIZED justification - why this step for THIS user (required!)
+- how_well_verify: Concrete way to check understanding
 - quick_check: A question to verify understanding (recognition, not recall)
 - marker_targets: Which understanding markers this step aims to develop
 - prerequisites: IDs of steps that must come first (empty for first step)
+
+PERSONALIZATION REQUIREMENTS:
+
+The why_for_you field MUST reference:
+- Something from the user's background or assessment
+- How this step connects to what they already know
+- Why this is the right level/angle for them specifically
+
+GOOD why_for_you examples:
+- "You already know the architecture - this reframes it for interpretability"
+- "This fills the gap you mentioned about not understanding heads"
+- "Since you've done visualization before, this connects that to mechanism"
+
+BAD why_for_you (generic - NOT allowed):
+- "This is foundational"
+- "Everyone needs to know this"
+- "This is important"
 
 MARKER OPTIONS (choose 1-3 per step):
 - recall, explanation, application, analysis
@@ -94,6 +123,8 @@ Return ONLY valid JSON with this structure:
       "id": 1,
       "objective": "...",
       "explanation_approach": "...",
+      "why_for_you": "You understand X but haven't seen Y - this bridges that gap",
+      "how_well_verify": "You explain what info flows where",
       "quick_check": "...",
       "marker_targets": ["recall", "connection_making"],
       "prerequisites": [],
@@ -108,7 +139,12 @@ Return ONLY valid JSON with this structure:
   "created_at_turn": {turns_elapsed},
   "last_modified_turn": {turns_elapsed},
   "adaptations_made": 0,
-  "adaptation_history": []
+  "adaptation_history": [],
+  "curriculum_negotiation": {{
+    "proposed": false,
+    "accepted": false,
+    "user_modifications": []
+  }}
 }}
 
 CRITICAL RULES:

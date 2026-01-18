@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useSpeechRecognition } from '../hooks/useSpeechRecognition'
 
 interface OnboardingScreenProps {
   onComplete: (info: string, goal?: string) => void
@@ -10,6 +11,31 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
   const [step, setStep] = useState<OnboardingStep>('goal-choice')
   const [backgroundInfo, setBackgroundInfo] = useState('')
   const [goal, setGoal] = useState('')
+  
+  const {
+    isListening,
+    transcript,
+    startListening,
+    stopListening,
+    isSupported: isSpeechSupported,
+    resetTranscript,
+  } = useSpeechRecognition()
+
+  // Append transcript to backgroundInfo as user speaks
+  useEffect(() => {
+    if (transcript && isListening) {
+      setBackgroundInfo(transcript)
+    }
+  }, [transcript, isListening])
+
+  const handleToggleRecording = () => {
+    if (isListening) {
+      stopListening()
+    } else {
+      resetTranscript()
+      startListening()
+    }
+  }
 
   const handleGoalChoice = (hasGoal: boolean) => {
     if (hasGoal) {
@@ -135,6 +161,26 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
               autoFocus
             />
 
+            {isSpeechSupported && (
+              <button
+                className={`onboarding-speak-button ${isListening ? 'recording' : ''}`}
+                onClick={handleToggleRecording}
+                type="button"
+              >
+                {isListening ? (
+                  <>
+                    <span className="recording-indicator"></span>
+                    Stop Recording
+                  </>
+                ) : (
+                  <>
+                    <span className="mic-icon">🎤</span>
+                    Speak
+                  </>
+                )}
+              </button>
+            )}
+
             <div className="onboarding-button-row">
               <button
                 className="onboarding-back-button"
@@ -181,6 +227,26 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
               rows={6}
               autoFocus
             />
+
+            {isSpeechSupported && (
+              <button
+                className={`onboarding-speak-button ${isListening ? 'recording' : ''}`}
+                onClick={handleToggleRecording}
+                type="button"
+              >
+                {isListening ? (
+                  <>
+                    <span className="recording-indicator"></span>
+                    Stop Recording
+                  </>
+                ) : (
+                  <>
+                    <span className="mic-icon">🎤</span>
+                    Speak
+                  </>
+                )}
+              </button>
+            )}
 
             <div className="onboarding-button-row">
               <button

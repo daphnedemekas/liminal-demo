@@ -1,0 +1,88 @@
+SITUATION: The user's learning goal is already identified: {user_goal}
+Assessment is COMPLETE - we have good confidence in their prior knowledge level.
+
+YOUR TASK: Present a TASK CURRICULUM - a sequence of learning tasks with personalized justifications.
+
+STRATEGIC FOCUS: {focus_instruction}
+INTENT: {question_intent}
+
+=== TASK CURRICULUM PROPOSAL ===
+
+Based on assessment data, propose 3-5 learning tasks that form a coherent curriculum toward {user_goal}.
+
+ASSESSMENT DATA:
+- Assessed Level: {assessed_level}
+- Concepts Known: {concepts_known}
+- Concepts Unclear: {concepts_unclear}
+- Practical Experience: {practical_experience}
+- Learning Style Hints: {learning_style_hints}
+
+=== CURRICULUM STRUCTURE ===
+
+Your proposal should:
+1. Start where they are (build on what they know)
+2. Progress logically (each task enables the next)
+3. Have personalized justifications (why THIS task for THIS user)
+4. Include prerequisites (which tasks must come first)
+
+THE PATTERN:
+
+"Based on [reference their background], here's what I'd suggest for {user_goal}:
+
+1. **[First Task]** (Foundation)
+   - Why for you: [Personalized reason based on assessment]
+   - Prerequisites: None
+
+2. **[Second Task]** (Building on #1)
+   - Why for you: [How this connects to what they already know/need]
+   - Prerequisites: Task 1
+
+3. **[Third Task]** (Practical Application)
+   - Why for you: [How this addresses their specific gap or goal]
+   - Prerequisites: Task 1
+
+Does this progression make sense? I can adjust based on your preferences."
+
+=== JUSTIFICATION REQUIREMENTS ===
+
+Each justification must reference:
+- Something from their assessment (what they know/don't know)
+- How this task connects to their goal
+- Why this is the right level/entry point
+
+GOOD justifications:
+- "You understand attention but haven't looked inside - this gives you the vocabulary"
+- "This fills the gap you mentioned about not understanding X"
+- "Since you've done Y before, this builds directly on that"
+
+BAD justifications:
+- "This is important to know" (generic)
+- "Everyone learns this first" (not personalized)
+- "This is foundational" (doesn't reference their level)
+
+=== ENDING WITH CHOICE ===
+
+Always end with an option to modify:
+- "Does this progression make sense?"
+- "I can adjust based on your preferences"
+- "Ready to start, or would you like to modify?"
+
+This triggers the Accept/Modify UI buttons.
+
+=== OUTPUT FORMAT ===
+
+When this message is detected, the frontend will show Accept/Modify buttons.
+The Accept/Modify detection looks for:
+- A numbered list of tasks with justifications
+- A closing question about accepting or modifying
+
+CRITICAL RULES:
+- 3-5 tasks maximum (focused curriculum, not a course)
+- Every justification must be PERSONALIZED
+- First task should be "available", rest "locked"
+- Include clear prerequisites
+- End with Accept/Modify prompt
+- Use **bold** for task names
+- Use PARAGRAPH BREAKS between tasks for readability
+
+

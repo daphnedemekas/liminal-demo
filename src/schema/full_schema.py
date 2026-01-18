@@ -172,7 +172,7 @@ class ConversationalTheme(BaseModel):
     """
     id: int
     theme_seed: str  # Initial mention
-    theme_type: Literal["abstract_goal", "preference", "concrete_topic", "metacognitive_pattern"] = "concrete_topic"
+    theme_type: Literal["abstract_goal", "preference", "concrete_topic", "metacognitive_pattern", "current_knowledge_level", "self_assessment"] = "concrete_topic"
     disambiguated_hook: Optional[str] = None  # mechanism, meaning, usefulness, beauty, weirdness
     user_phase: Optional[InterestPhase] = None
     current_model_summary: Optional[str] = None  # User's existing understanding
@@ -320,6 +320,90 @@ class GoalCandidate(BaseModel):
 
 
 # ============================================================================
+# Prior Knowledge Assessment (for Goal Chat and Teaching Chat)
+# ============================================================================
+
+class AssessmentEvidence(BaseModel):
+    """Evidence collected during assessment."""
+    technique: str  # topic_probe, explain_back, scenario, recognition, connection, calibration
+    quote: str  # What the user said
+    revealed: str  # What this revealed about their understanding
+
+
+class ConceptKnowledge(BaseModel):
+    """A specific concept with proficiency level and evidence."""
+    concept: str  # Fine-grained concept, e.g. "how vector databases store embeddings in RAG"
+    proficiency: Literal["heard_of", "understands_basics", "can_explain", "can_apply", "expert"] = "heard_of"
+    evidence: Optional[str] = None  # Quote or reasoning that supports this assessment
+    
+    def __hash__(self):
+        return hash(self.concept)
+    
+    def __eq__(self, other):
+        if isinstance(other, ConceptKnowledge):
+            return self.concept == other.concept
+        return False
+
+
+class PriorKnowledgeAssessment(BaseModel):
+    """Tracks assessment of user's prior knowledge for a goal or task."""
+    assessed_level: Optional[Literal["beginner", "intermediate", "advanced"]] = None
+    # New: granular concepts with proficiency levels
+    concept_knowledge: List[ConceptKnowledge] = Field(default_factory=list)
+    # Legacy: simple string lists (kept for backwards compatibility during transition)
+    concepts_known: List[str] = Field(default_factory=list)
+    concepts_unclear: List[str] = Field(default_factory=list)
+    practical_experience: Optional[str] = None
+    learning_style_hints: List[str] = Field(default_factory=list)
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    evidence: List[AssessmentEvidence] = Field(default_factory=list)
+    techniques_used: List[str] = Field(default_factory=list)
+
+
+# ============================================================================
+# Task Curriculum (for Goal Chat - batch proposal of learning tasks)
+# ============================================================================
+
+class ProposedTask(BaseModel):
+    """A proposed learning task in the curriculum."""
+    topic: str
+    justification: str  # Why this task, tailored to user
+    prerequisites: List[int] = Field(default_factory=list)  # IDs of prerequisite tasks
+    status: Literal["locked", "available", "in_progress", "completed"] = "locked"
+
+
+class TaskCurriculum(BaseModel):
+    """Tracks the task curriculum proposal and negotiation state."""
+    proposed: bool = False
+    accepted: bool = False
+    tasks: List[ProposedTask] = Field(default_factory=list)
+    modification_history: List[str] = Field(default_factory=list)  # Track user modifications
+
+
+# ============================================================================
+# Curriculum Negotiation (for Teaching Chat - step-by-step curriculum)
+# ============================================================================
+
+class CurriculumStep(BaseModel):
+    """A step in the negotiated curriculum."""
+    id: int
+    objective: str
+    explanation_approach: str
+    why_for_you: str  # Personalized justification
+    how_well_verify: str  # How we'll check understanding
+    marker_targets: List[str] = Field(default_factory=list)
+    prerequisites: List[int] = Field(default_factory=list)
+
+
+class CurriculumNegotiation(BaseModel):
+    """Tracks curriculum negotiation state in teaching chat."""
+    proposed: bool = False
+    accepted: bool = False
+    steps: List[CurriculumStep] = Field(default_factory=list)
+    user_modifications: List[str] = Field(default_factory=list)
+
+
+# ============================================================================
 # Interview State
 # ============================================================================
 
@@ -377,10 +461,17 @@ class Controller(BaseModel):
     
     # Conversation mode selection for recognition-based patterns
     conversation_mode: Optional[Literal[
-        "calibration",       # Early turns, forced-choice A/B questions
-        "grounded_offer",    # Mid-game, offer content + reaction question
+        "calibration",        # Early turns, forced-choice A/B questions
+        "grounded_offer",     # Mid-game, offer content + reaction question
         "hypothesis_correct", # Stuck on fuzzy topic, guess + ask what's wrong
-        "direct_probe"       # Standard question without grounding
+        "direct_probe",       # Standard question without grounding
+        # NEW: Assessment techniques for prior knowledge probing
+        "topic_probe",        # Present a concept, ask what they think it means
+        "explain_back",       # Ask user to walk through something
+        "scenario_probe",     # Pose a practical situation, see how they reason
+        # NEW: Curriculum proposal modes
+        "propose_tasks",      # Present batch of learning tasks with justifications
+        "propose_curriculum"  # Present step-by-step curriculum for a task
     ]] = None
     
     # Ambiguity targeting for intentional progress
@@ -459,6 +550,11 @@ class DiscoverySchema(BaseModel):
     interview_state: InterviewState = Field(default_factory=InterviewState)
     controller: Controller
     teaching_recommendation: TeachingRecommendation = Field(default_factory=TeachingRecommendation)
+    
+    # NEW: Assessment and curriculum negotiation fields
+    prior_knowledge_assessment: PriorKnowledgeAssessment = Field(default_factory=PriorKnowledgeAssessment)
+    task_curriculum: TaskCurriculum = Field(default_factory=TaskCurriculum)
+    curriculum_negotiation: CurriculumNegotiation = Field(default_factory=CurriculumNegotiation)
 
     class Config:
         """Pydantic config."""

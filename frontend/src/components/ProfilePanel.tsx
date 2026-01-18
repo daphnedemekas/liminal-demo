@@ -333,6 +333,8 @@ export default function ProfilePanel({ sessionId, isConnected, initialSummary, i
   const themes = schema.conversational_themes || []
   const interviewState = schema.interview_state || {}
   const controller = schema.controller || {}
+  const priorKnowledgeAssessment = schema.prior_knowledge_assessment || {}
+  const taskCurriculum = schema.task_curriculum || {}
 
   const entryMode = getDominantEntryMode(profile.entry_mode)
   const curiosity = formatTraitValue(profile.curiosity_type)
@@ -367,6 +369,77 @@ export default function ProfilePanel({ sessionId, isConnected, initialSummary, i
               : summary || 'Continue the conversation to build your learner profile.'}
           </p>
         </div>
+
+        {/* Prior Knowledge Assessment (when available) */}
+        {priorKnowledgeAssessment.assessed_level && (
+          <div className="profile-card assessment-card">
+            <div className="card-header">
+              <span className="card-title">Prior Knowledge</span>
+              <span className={`level-badge ${priorKnowledgeAssessment.assessed_level}`}>
+                {priorKnowledgeAssessment.assessed_level}
+              </span>
+            </div>
+            <div className="assessment-details">
+              {/* NEW: Granular concepts with proficiency levels */}
+              {priorKnowledgeAssessment.concept_knowledge?.length > 0 && (
+                <div className="assessment-section">
+                  <span className="assessment-label">Concept Knowledge</span>
+                  <div className="concept-knowledge-list">
+                    {priorKnowledgeAssessment.concept_knowledge.map((ck: { concept: string; proficiency: string; evidence?: string }, idx: number) => (
+                      <div key={idx} className={`concept-knowledge-item proficiency-${ck.proficiency}`} title={ck.evidence || ''}>
+                        <span className="concept-name">{ck.concept}</span>
+                        <span className={`proficiency-badge ${ck.proficiency}`}>
+                          {ck.proficiency === 'heard_of' && '👂 Heard of'}
+                          {ck.proficiency === 'understands_basics' && '📖 Basics'}
+                          {ck.proficiency === 'can_explain' && '💬 Can explain'}
+                          {ck.proficiency === 'can_apply' && '🛠️ Can apply'}
+                          {ck.proficiency === 'expert' && '⭐ Expert'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {/* LEGACY: Simple concept lists (fallback if no granular data) */}
+              {(!priorKnowledgeAssessment.concept_knowledge || priorKnowledgeAssessment.concept_knowledge.length === 0) && priorKnowledgeAssessment.concepts_known?.length > 0 && (
+                <div className="assessment-section">
+                  <span className="assessment-label">Concepts Known</span>
+                  <div className="concept-tags">
+                    {priorKnowledgeAssessment.concepts_known.map((concept: string, idx: number) => (
+                      <span key={idx} className="concept-tag known">{concept}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {priorKnowledgeAssessment.concepts_unclear?.length > 0 && (
+                <div className="assessment-section">
+                  <span className="assessment-label">Needs Clarification</span>
+                  <div className="concept-tags">
+                    {priorKnowledgeAssessment.concepts_unclear.map((concept: string, idx: number) => (
+                      <span key={idx} className="concept-tag unclear">{concept}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {priorKnowledgeAssessment.practical_experience && (
+                <div className="assessment-section">
+                  <span className="assessment-label">Experience</span>
+                  <p className="assessment-text">{priorKnowledgeAssessment.practical_experience}</p>
+                </div>
+              )}
+              {priorKnowledgeAssessment.learning_style_hints?.length > 0 && (
+                <div className="assessment-section">
+                  <span className="assessment-label">Learning Style</span>
+                  <div className="style-tags">
+                    {priorKnowledgeAssessment.learning_style_hints.map((hint: string, idx: number) => (
+                      <span key={idx} className="style-tag">{hint}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Learning Style Traits */}
         <div className="profile-card">

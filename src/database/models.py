@@ -160,3 +160,46 @@ class FeedItem(Base):
 
     def __repr__(self):
         return f"<FeedItem(id={self.id}, type='{self.context_type}', title='{self.title[:30]}...')>"
+
+
+class LearnerTrajectory(Base):
+    """Canonical longitudinal learner dashboard state (one row per user)."""
+
+    __tablename__ = "learner_trajectories"
+
+    user_id = Column(String, ForeignKey("user_profiles.user_id"), primary_key=True)
+    dashboard_state = Column(JSON, nullable=False, default=dict)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    last_checkpoint_id = Column(Integer, nullable=True)
+
+    user = relationship("UserProfile")
+
+    def __repr__(self):
+        return f"<LearnerTrajectory(user_id='{self.user_id}', last_checkpoint_id={self.last_checkpoint_id})>"
+
+
+class TrajectoryCheckpoint(Base):
+    """Sparse, append-only checkpoints for trajectory computation/plotting."""
+
+    __tablename__ = "trajectory_checkpoints"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String, ForeignKey("user_profiles.user_id"), index=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    session_id = Column(String, ForeignKey("conversation_sessions.session_id"), nullable=True, index=True)
+    session_type = Column(String, nullable=True)  # exploration | goal | teaching
+    goal_id = Column(Integer, ForeignKey("user_goals.id"), nullable=True, index=True)
+    teaching_candidate_id = Column(Integer, nullable=True, index=True)
+    turn_index = Column(Integer, nullable=True)
+
+    metrics = Column(JSON, nullable=False, default=dict)
+    events = Column(JSON, nullable=False, default=list)
+    source_summary = Column(Text, nullable=True)
+
+    user = relationship("UserProfile")
+    session = relationship("ConversationSession")
+    goal = relationship("UserGoal")
+
+    def __repr__(self):
+        return f"<TrajectoryCheckpoint(id={self.id}, user_id='{self.user_id}', session_type='{self.session_type}')>"

@@ -21,7 +21,8 @@ const INTERVIEWER_MODELS: ModelOption[] = [
   { value: 'cerebras:llama3.1-8b', label: 'Cerebras Llama 3.1 8B', description: 'Very fast, lower cost' },
   { value: 'anthropic:claude-sonnet-4-20250514', label: 'Claude Sonnet 4', description: 'High quality, slower' },
   { value: 'anthropic:claude-3-5-haiku-20241022', label: 'Claude Haiku 3.5', description: 'Good balance' },
-  { value: 'openai:gpt-4o', label: 'GPT-4o', description: 'OpenAI latest' },
+  { value: 'openai:gpt-5', label: 'GPT-5', description: 'OpenAI most capable' },
+  { value: 'openai:gpt-4o', label: 'GPT-4o', description: 'OpenAI balanced' },
   { value: 'openai:gpt-4o-mini', label: 'GPT-4o Mini', description: 'OpenAI fast' },
 ]
 
@@ -29,7 +30,8 @@ const RANKER_MODELS: ModelOption[] = [
   { value: 'cerebras:llama-3.3-70b', label: 'Cerebras Llama 3.3 70B', description: 'Fast analysis' },
   { value: 'anthropic:claude-sonnet-4-20250514', label: 'Claude Sonnet 4', description: 'Best quality' },
   { value: 'anthropic:claude-3-5-haiku-20241022', label: 'Claude Haiku 3.5', description: 'Good balance' },
-  { value: 'openai:gpt-4o', label: 'GPT-4o', description: 'OpenAI latest' },
+  { value: 'openai:gpt-5', label: 'GPT-5', description: 'OpenAI most capable' },
+  { value: 'openai:gpt-4o', label: 'GPT-4o', description: 'OpenAI balanced' },
   { value: 'openai:gpt-4o-mini', label: 'GPT-4o Mini', description: 'OpenAI fast' },
   { value: 'cerebras:llama3.1-8b', label: 'Cerebras Llama 3.1 8B', description: 'Very fast' },
 ]
@@ -37,10 +39,10 @@ const RANKER_MODELS: ModelOption[] = [
 export default function ModelSelector({ onModelSelect, initialConfig }: ModelSelectorProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [interviewerModel, setInterviewerModel] = useState(
-    initialConfig?.interviewer || 'cerebras:llama-3.3-70b'
+    initialConfig?.interviewer || 'openai:gpt-4o'
   )
   const [rankerModel, setRankerModel] = useState(
-    initialConfig?.ranker || 'cerebras:llama-3.3-70b'
+    initialConfig?.ranker || 'openai:gpt-4o'
   )
 
   const handleApply = () => {

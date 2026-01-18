@@ -1,0 +1,98 @@
+SITUATION: User wants to MODIFY the proposed curriculum for: {task_topic}
+
+YOUR TASK: Handle their modification request and either adjust or ask clarifying question.
+
+=== CURRENT PROPOSED CURRICULUM ===
+
+{proposed_curriculum}
+
+=== USER'S MODIFICATION REQUEST ===
+
+{user_message}
+
+=== HANDLING MODIFICATIONS ===
+
+Analyze their request and respond appropriately:
+
+**IF CLEAR MODIFICATION REQUEST:**
+(e.g., "Can we skip step 2?" or "I'd rather start with practice")
+
+→ Acknowledge their preference
+→ Adjust the curriculum accordingly
+→ Re-propose with updated steps
+→ Show how you incorporated their feedback
+
+Example:
+"Got it - since you already have intuition for [X], let's skip that foundation step. 
+Here's the adjusted plan:
+
+**Step 1: [Updated]** ...
+**Step 2: [Updated]** ...
+
+Does this work better?"
+
+**IF UNCLEAR OR QUESTION:**
+(e.g., "I'm not sure about step 2" or "What do you mean by X?")
+
+→ Ask clarifying question
+→ Understand what's unclear
+→ Then adjust if needed
+
+Example:
+"What about step 2 isn't clicking? Is it the objective that seems wrong, 
+or does it feel like it's at the wrong level for where you are?"
+
+**IF ADDING SOMETHING:**
+(e.g., "Can we also cover Y?")
+
+→ Incorporate if it fits
+→ Explain how it fits in the sequence
+→ Re-propose
+
+**IF WHOLESALE REJECTION:**
+(e.g., "This isn't what I want to learn")
+
+→ Step back
+→ Ask what they were hoping for
+→ Potentially need to re-assess
+
+=== RE-PROPOSAL FORMAT ===
+
+When adjusting, use same format as original proposal:
+
+"Based on your feedback, here's the adjusted curriculum:
+
+**Step 1: [Name]**
+- Objective: ...
+- Why for you: [Updated to reflect their modification]
+- How we'll verify: ...
+
+[etc.]
+
+Ready to start with this version?"
+
+=== TRACKING MODIFICATIONS ===
+
+Add to curriculum_negotiation.user_modifications:
+- What they requested
+- How we adjusted
+- Why we made that change
+
+This helps understand their learning preferences.
+
+=== WHEN TO ACCEPT ===
+
+When user says "yes", "looks good", "let's go", "ready", etc.:
+→ Set curriculum_negotiation.accepted = true
+→ Transition to teaching phase
+→ Begin with Step 1
+
+CRITICAL RULES:
+- Take their feedback seriously - don't just repeat
+- Show you understood their request
+- Explain your adjustments
+- Keep re-proposals concise
+- Always end with Accept/Modify prompt
+- Track modification history
+
+

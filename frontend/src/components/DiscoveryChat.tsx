@@ -49,6 +49,14 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
     setInputText('')
   }, [inputText, isConnected, sendMessage])
 
+  // Reset initRef when component unmounts to allow re-initialization on remount
+  useEffect(() => {
+    return () => {
+      console.log('[DiscoveryChat] Component unmounting, resetting init flag')
+      initRef.current = false
+    }
+  }, [])
+
   // Initialize session and get opening message
   useEffect(() => {
     console.log('[DiscoveryChat] Component mounted, initializing session...')

@@ -39,226 +39,267 @@ export function useWebSocket(sessionId: string, phase: 'discovery' | 'learning')
   const [status, setStatus] = useState<string | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const streamingMessageIdRef = useRef<string | null>(null)
+  const retryCountRef = useRef(0)
+  const maxRetries = 3
+  const connectionTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Connect to WebSocket
+  // Connect to WebSocket with timeout and retry
   useEffect(() => {
     // Don't connect if sessionId is empty
     if (!sessionId) {
       return
     }
 
-    const wsBase = import.meta.env.VITE_WS_URL || 'ws://localhost:8000'
-    const wsUrl = `${wsBase}/ws/${phase}/${sessionId}`
-    const ws = new WebSocket(wsUrl)
+    let retryTimeout: NodeJS.Timeout | null = null
+    let isMounted = true
 
-    ws.onopen = () => {
-      console.log(`WebSocket connected: ${phase}`)
-      setIsConnected(true)
-    }
+    const connect = () => {
+      if (!isMounted) return
+      
+      const wsBase = import.meta.env.VITE_WS_URL || 'ws://localhost:8000'
+      const wsUrl = `${wsBase}/ws/${phase}/${sessionId}`
+      
+      console.log(`[WebSocket] Connecting to ${phase}... (attempt ${retryCountRef.current + 1})`)
+      setStatus('Connecting...')
+      
+      const ws = new WebSocket(wsUrl)
+      wsRef.current = ws
 
-    ws.onmessage = (event) => {
-      console.log('[useWebSocket] Received message:', event.data.substring(0, 100) + '...')
-      const data = JSON.parse(event.data)
-      console.log('[useWebSocket] Parsed data type:', data.type)
-
-      // Handle error messages
-      if (data.type === 'error') {
-        console.error('[WebSocket] Error from server:', data.message)
-        // Show error as a system message
-        const errorMessage: Message = {
-          id: crypto.randomUUID(),
-          role: 'assistant',
-          content: `⚠️ ${data.message}`,
+      // Connection timeout - 5 seconds
+      connectionTimeoutRef.current = setTimeout(() => {
+        if (ws.readyState !== WebSocket.OPEN && isMounted) {
+          console.log('[WebSocket] Connection timeout, closing...')
+          ws.close()
+          
+          // Retry if under max retries
+          if (retryCountRef.current < maxRetries) {
+            retryCountRef.current++
+            setStatus(`Retrying... (${retryCountRef.current}/${maxRetries})`)
+            retryTimeout = setTimeout(connect, 1000)
+          } else {
+            setStatus('Connection failed. Please refresh.')
+          }
         }
-        setMessages(prev => [...prev, errorMessage])
+      }, 5000)
+
+      ws.onopen = () => {
+        console.log(`[WebSocket] Connected: ${phase}`)
+        if (connectionTimeoutRef.current) clearTimeout(connectionTimeoutRef.current)
+        retryCountRef.current = 0
+        setIsConnected(true)
         setStatus(null)
-        return
       }
 
-      // Handle status messages
-      if (data.type === 'status') {
-        setStatus(data.status)
-        return
-      }
+      ws.onmessage = (event) => {
+        console.log('[useWebSocket] Received message:', event.data.substring(0, 100) + '...')
+        const data = JSON.parse(event.data)
+        console.log('[useWebSocket] Parsed data type:', data.type)
 
-      // Handle streaming messages
-      if (data.type === 'stream_start') {
-        // Create a new streaming message placeholder
-        const messageId = crypto.randomUUID()
-        streamingMessageIdRef.current = messageId
+        // Handle error messages
+        if (data.type === 'error') {
+          console.error('[WebSocket] Error from server:', data.message)
+          // Show error as a system message
+          const errorMessage: Message = {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content: `⚠️ ${data.message}`,
+          }
+          setMessages(prev => [...prev, errorMessage])
+          setStatus(null)
+          return
+        }
+
+        // Handle status messages
+        if (data.type === 'status') {
+          setStatus(data.status)
+          return
+        }
+
+        // Handle streaming messages
+        if (data.type === 'stream_start') {
+          // Create a new streaming message placeholder
+          const messageId = crypto.randomUUID()
+          streamingMessageIdRef.current = messageId
+          setStatus(null)
+          
+          const streamingMessage: Message = {
+            id: messageId,
+            role: 'assistant',
+            content: '',
+            isStreaming: true,
+          }
+          setMessages(prev => [...prev, streamingMessage])
+          return
+        }
+
+        if (data.type === 'stream_chunk') {
+          // Append chunk to the current streaming message
+          if (streamingMessageIdRef.current) {
+            setMessages(prev => prev.map(msg => 
+              msg.id === streamingMessageIdRef.current
+                ? { ...msg, content: msg.content + data.content }
+                : msg
+            ))
+          }
+          return
+        }
+
+        if (data.type === 'stream_end') {
+          // Finalize the streaming message with audio
+          if (streamingMessageIdRef.current) {
+            setMessages(prev => prev.map(msg => 
+              msg.id === streamingMessageIdRef.current
+                ? { ...msg, content: data.content, audio_url: data.audio_url, isStreaming: false }
+                : msg
+            ))
+            streamingMessageIdRef.current = null
+          }
+          return
+        }
+
+        // Clear status when we get a real message
         setStatus(null)
-        
-        const streamingMessage: Message = {
-          id: messageId,
-          role: 'assistant',
-          content: '',
-          isStreaming: true,
+
+        // Handle goal_proposed - show confirmation UI
+        if (data.type === 'goal_proposed') {
+          const goalMessage: Message = {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content: data.content || data.message,
+            audio_url: data.audio_url,
+            type: 'goal_proposed',
+            proposedGoal: data.goal,
+          }
+          setMessages(prev => [...prev, goalMessage])
+          return
         }
-        setMessages(prev => [...prev, streamingMessage])
-        return
-      }
 
-      if (data.type === 'stream_chunk') {
-        // Append chunk to the current streaming message
-        if (streamingMessageIdRef.current) {
-          setMessages(prev => prev.map(msg => 
-            msg.id === streamingMessageIdRef.current
-              ? { ...msg, content: msg.content + data.content }
-              : msg
-          ))
-        }
-        return
-      }
-
-      if (data.type === 'stream_end') {
-        // Finalize the streaming message with audio
-        if (streamingMessageIdRef.current) {
-          setMessages(prev => prev.map(msg => 
-            msg.id === streamingMessageIdRef.current
-              ? { ...msg, content: data.content, audio_url: data.audio_url, isStreaming: false }
-              : msg
-          ))
-          streamingMessageIdRef.current = null
-        }
-        return
-      }
-
-      // Clear status when we get a real message
-      setStatus(null)
-
-      // Handle goal_proposed - show confirmation UI
-      if (data.type === 'goal_proposed') {
-        const goalMessage: Message = {
-          id: crypto.randomUUID(),
-          role: 'assistant',
-          content: data.content || data.message,
-          audio_url: data.audio_url,
-          type: 'goal_proposed',
-          proposedGoal: data.goal,
-        }
-        setMessages(prev => [...prev, goalMessage])
-        return
-      }
-
-      // Handle goal_accepted - transition to phase 2
-      if (data.type === 'goal_accepted') {
-        const acceptedMessage: Message = {
-          id: crypto.randomUUID(),
-          role: 'assistant',
-          content: data.content,
-          type: 'goal_accepted',
-        }
-        setMessages(prev => [...prev, acceptedMessage])
-        return
-      }
-
-      // Handle teaching_proposed - show confirmation UI for teaching candidate
-      if (data.type === 'teaching_proposed') {
-        const teachingMessage: Message = {
-          id: crypto.randomUUID(),
-          role: 'assistant',
-          content: data.content || data.message,
-          audio_url: data.audio_url,
-          type: 'teaching_proposed',
-          teachingCandidate: data.candidate,
-        }
-        setMessages(prev => [...prev, teachingMessage])
-        return
-      }
-
-      // Handle teaching_accepted - ready to start learning
-      if (data.type === 'teaching_accepted') {
-        const acceptedMessage: Message = {
-          id: crypto.randomUUID(),
-          role: 'assistant',
-          content: data.content,
-          type: 'teaching_accepted',
-        }
-        setMessages(prev => [...prev, acceptedMessage])
-        return
-      }
-
-      // Handle create_goal_panel - new message type for multi-panel architecture
-      if (data.type === 'create_goal_panel') {
-        const panelMessage: Message = {
-          id: crypto.randomUUID(),
-          role: 'assistant',
-          content: data.message,
-          type: 'create_goal_panel',
-          goalData: {
-            goal: data.goal,
-            goal_id: data.goal_id,
-            message: data.message,
-          },
-        }
-        setMessages(prev => [...prev, panelMessage])
-        return
-      }
-
-      // Handle create_teaching_panel - new message type for multi-panel architecture
-      if (data.type === 'create_teaching_panel') {
-        const panelMessage: Message = {
-          id: crypto.randomUUID(),
-          role: 'assistant',
-          content: data.message,
-          type: 'create_teaching_panel',
-          teachingCandidate: data.candidate,
-        }
-        setMessages(prev => [...prev, panelMessage])
-        return
-      }
-
-      // Handle topic_found (may come after streaming)
-      if (data.type === 'topic_found') {
-        // If we were streaming, update that message
-        if (streamingMessageIdRef.current) {
-          setMessages(prev => prev.map(msg => 
-            msg.id === streamingMessageIdRef.current
-              ? { ...msg, content: data.content, audio_url: data.audio_url, type: 'topic_found', topic: data.topic, isStreaming: false }
-              : msg
-          ))
-          streamingMessageIdRef.current = null
-        } else {
-          // Otherwise add as new message
-          const newMessage: Message = {
+        // Handle goal_accepted - transition to phase 2
+        if (data.type === 'goal_accepted') {
+          const acceptedMessage: Message = {
             id: crypto.randomUUID(),
             role: 'assistant',
             content: data.content,
-            audio_url: data.audio_url,
-            type: data.type,
-            topic: data.topic,
+            type: 'goal_accepted',
           }
-          setMessages(prev => [...prev, newMessage])
+          setMessages(prev => [...prev, acceptedMessage])
+          return
         }
-        return
+
+        // Handle teaching_proposed - show confirmation UI for teaching candidate
+        if (data.type === 'teaching_proposed') {
+          const teachingMessage: Message = {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content: data.content || data.message,
+            audio_url: data.audio_url,
+            type: 'teaching_proposed',
+            teachingCandidate: data.candidate,
+          }
+          setMessages(prev => [...prev, teachingMessage])
+          return
+        }
+
+        // Handle teaching_accepted - ready to start learning
+        if (data.type === 'teaching_accepted') {
+          const acceptedMessage: Message = {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content: data.content,
+            type: 'teaching_accepted',
+          }
+          setMessages(prev => [...prev, acceptedMessage])
+          return
+        }
+
+        // Handle create_goal_panel - new message type for multi-panel architecture
+        if (data.type === 'create_goal_panel') {
+          const panelMessage: Message = {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content: data.message,
+            type: 'create_goal_panel',
+            goalData: {
+              goal: data.goal,
+              goal_id: data.goal_id,
+              message: data.message,
+            },
+          }
+          setMessages(prev => [...prev, panelMessage])
+          return
+        }
+
+        // Handle create_teaching_panel - new message type for multi-panel architecture
+        if (data.type === 'create_teaching_panel') {
+          const panelMessage: Message = {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content: data.message,
+            type: 'create_teaching_panel',
+            teachingCandidate: data.candidate,
+          }
+          setMessages(prev => [...prev, panelMessage])
+          return
+        }
+
+        // Handle topic_found (may come after streaming)
+        if (data.type === 'topic_found') {
+          // If we were streaming, update that message
+          if (streamingMessageIdRef.current) {
+            setMessages(prev => prev.map(msg => 
+              msg.id === streamingMessageIdRef.current
+                ? { ...msg, content: data.content, audio_url: data.audio_url, type: 'topic_found', topic: data.topic, isStreaming: false }
+                : msg
+            ))
+            streamingMessageIdRef.current = null
+          } else {
+            // Otherwise add as new message
+            const newMessage: Message = {
+              id: crypto.randomUUID(),
+              role: 'assistant',
+              content: data.content,
+              audio_url: data.audio_url,
+              type: data.type,
+              topic: data.topic,
+            }
+            setMessages(prev => [...prev, newMessage])
+          }
+          return
+        }
+
+        // Handle regular messages (non-streaming fallback)
+        const newMessage: Message = {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: data.content,
+          audio_url: data.audio_url,
+          type: data.type,
+          topic: data.topic,
+        }
+
+        setMessages(prev => [...prev, newMessage])
       }
 
-      // Handle regular messages (non-streaming fallback)
-      const newMessage: Message = {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        content: data.content,
-        audio_url: data.audio_url,
-        type: data.type,
-        topic: data.topic,
+      ws.onerror = (error) => {
+        console.error('[WebSocket] Error:', error)
       }
 
-      setMessages(prev => [...prev, newMessage])
+      ws.onclose = () => {
+        console.log('[WebSocket] Disconnected')
+        setIsConnected(false)
+      }
     }
 
-    ws.onerror = (error) => {
-      console.error('WebSocket error:', error)
-    }
-
-    ws.onclose = () => {
-      console.log('WebSocket disconnected')
-      setIsConnected(false)
-    }
-
-    wsRef.current = ws
+    connect()
 
     return () => {
-      ws.close()
+      isMounted = false
+      if (connectionTimeoutRef.current) clearTimeout(connectionTimeoutRef.current)
+      if (retryTimeout) clearTimeout(retryTimeout)
+      retryCountRef.current = 0
+      if (wsRef.current) {
+        wsRef.current.close()
+      }
     }
   }, [sessionId, phase])
 

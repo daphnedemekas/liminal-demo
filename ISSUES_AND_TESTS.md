@@ -155,15 +155,16 @@ test('TeachingChat sends model_config in API request', async () => {
 })
 ```
 
-### Issue 6: WebSocket Reconnection Timing (Observed - Not Fixed)
+### Issue 6: WebSocket Reconnection Timing (FIXED)
 **File:** `frontend/src/hooks/useWebSocket.ts`
 **Severity:** Medium
 **Description:** When navigating between Discovery and Goal panels, WebSocket disconnect/reconnect can be slow. The "Connecting..." state persists for several seconds.
 
-**Potential Improvements:**
-- Add connection timeout with auto-retry
-- Show more informative connection state (e.g., "Retrying...")
-- Consider connection pooling or keep-alive
+**Fix Applied:**
+- Added 5-second connection timeout
+- Added auto-retry mechanism (up to 3 retries)
+- Shows informative status: "Connecting...", "Retrying... (1/3)", "Connection failed. Please refresh."
+- Proper cleanup of timeouts on unmount
 
 **Suggested Unit Tests:**
 ```typescript
@@ -189,29 +190,39 @@ describe('useWebSocket', () => {
     // Assert isConnected remains false
     // Assert no crash
   });
+
+  it('should retry connection up to 3 times on timeout', () => {
+    // Mock WebSocket to hang
+    // Wait for timeout + retries
+    // Assert status shows retry attempts
+    // Assert max 3 retries
+  });
 });
 ```
 
-### Issue 7: Exploration Chat Missing Recent Messages After Panel Switch (OBSERVED)
-**File:** `frontend/src/components/DiscoveryChat.tsx` or `backend/main.py`
+### Issue 7: Exploration Chat Missing Recent Messages After Panel Switch (FIXED)
+**File:** `frontend/src/components/DiscoveryChat.tsx`
 **Severity:** Medium
-**Description:** When switching from exploration → goal → teaching → exploration, the most recent messages in exploration chat are missing. The Turn counter shows Turn 2, but only 3 messages are displayed instead of 5.
+**Description:** When switching from exploration → goal → teaching → exploration, the most recent messages in exploration chat are missing.
 
-**Symptoms:**
-- Chat shows older messages correctly
-- Most recent user message and AI response (goal proposal) are missing
-- Profile data shows correct Turn count
-- Discovery State shows the proposed goal, but proposal UI is not visible
+**Root Cause:**
+- The `initRef.current` flag was never reset when component unmounted
+- When remounting, the component would skip re-initialization because `initRef.current` was still true
+- This meant conversation history was not re-fetched from backend
 
-**Possible Causes:**
-- Backend session may not be returning full conversation history
-- Frontend may be loading stale cached data
-- WebSocket reconnection might fetch truncated history
+**Fix Applied:**
+- Added cleanup effect to reset `initRef.current = false` when component unmounts
+- This ensures re-initialization occurs on remount, fetching fresh conversation history
 
-**Suggested Fix:**
-- Verify backend `/api/discovery/start` returns complete `conversation_history`
-- Check if frontend caches messages and doesn't update properly on reconnect
-- Add debug logging to track message count before/after panel switch
+```typescript
+// Reset initRef when component unmounts to allow re-initialization on remount
+useEffect(() => {
+  return () => {
+    console.log('[DiscoveryChat] Component unmounting, resetting init flag')
+    initRef.current = false
+  }
+}, [])
+```
 
 **Suggested Unit Tests:**
 ```typescript
@@ -220,6 +231,13 @@ test('Exploration chat preserves all messages after panel switch', async () => {
   // Switch to goal panel
   // Switch back to exploration
   // Verify all 3 messages + AI responses are visible
+})
+
+test('DiscoveryChat reinitializes on remount', async () => {
+  // Mount component
+  // Unmount component
+  // Remount component
+  // Assert api.startDiscoverySession is called again
 })
 ```
 

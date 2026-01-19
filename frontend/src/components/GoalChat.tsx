@@ -9,6 +9,7 @@ import FeedPanel from './FeedPanel'
 import AudioToggle from './AudioToggle'
 import BreathingCircle from './BreathingCircle'
 import { ModelConfig } from './ModelSelector'
+import { stripMarkdown } from '../utils/textUtils'
 
 interface TeachingCandidate {
   id: number
@@ -47,6 +48,10 @@ export default function GoalChat({
   const initRef = useRef(false)
 
   const { messages, sendMessage, sendCommand, isConnected, status, addMessage, setMessages } = useWebSocket(actualSessionId || '', 'discovery')
+  
+  // These must be after useWebSocket since they depend on messages
+  const hasFirstAssistantMessage = messages.some((msg) => msg.role === 'assistant')
+  const shouldShowSidePanels = isResumed || hasFirstAssistantMessage
   const { isAudioMode, isPlaying, toggleAudioMode, playAudio } = useAudio()
   const {
     isListening,
@@ -341,13 +346,15 @@ export default function GoalChat({
   return (
     <div className="discovery-with-feed">
       {/* Feed Panel */}
-      <FeedPanel
-        userId={userId}
-        contextType="goal"
-        goalId={goalId}
-        goalText={goal}
-        userBackground={onboardingInfo}
-      />
+      {shouldShowSidePanels && (
+        <FeedPanel
+          userId={userId}
+          contextType="goal"
+          goalId={goalId}
+          goalText={goal}
+          userBackground={onboardingInfo}
+        />
+      )}
 
       <div className="goal-chat-layout">
         {/* Chat Area */}
@@ -418,7 +425,7 @@ export default function GoalChat({
                 <div className="teaching-confirmation">
                   <div className="teaching-candidate-preview">
                     <h4>Suggested Starting Point</h4>
-                    <p className="teaching-topic">{msg.teachingCandidate.topic}</p>
+                    <p className="teaching-topic">{stripMarkdown(msg.teachingCandidate.topic)}</p>
                     {msg.teachingCandidate.focus_question && (
                       <p className="teaching-question">"{msg.teachingCandidate.focus_question}"</p>
                     )}
@@ -504,11 +511,13 @@ export default function GoalChat({
       </div>
 
         {/* Profile Panel */}
-        <ProfilePanel 
-          sessionId={actualSessionId} 
-          isConnected={isConnected} 
-          initialSummary={profileSummary}
-        />
+        {shouldShowSidePanels && (
+          <ProfilePanel 
+            sessionId={actualSessionId} 
+            isConnected={isConnected} 
+            initialSummary={profileSummary}
+          />
+        )}
       </div>
     </div>
   )

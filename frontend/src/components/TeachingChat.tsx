@@ -6,6 +6,7 @@ import ProfilePanel from './ProfilePanel'
 import FeedPanel from './FeedPanel'
 import AudioToggle from './AudioToggle'
 import BreathingCircle from './BreathingCircle'
+import { stripMarkdown } from '../utils/textUtils'
 
 interface TeachingCandidate {
   id: number
@@ -499,7 +500,7 @@ export default function TeachingChat({
           <div className="goal-chat-header">
             <div className="goal-chat-title">
               <span className="goal-icon">📚</span>
-              <h2>{candidate.topic}</h2>
+              <h2>{stripMarkdown(candidate.topic)}</h2>
               {isResumed && <span className="resumed-badge">Resumed</span>}
             </div>
             <div className="goal-chat-status">
@@ -514,7 +515,7 @@ export default function TeachingChat({
                 </span>
               )}
               
-              <span className="goal-context-badge">Goal: {goalText}</span>
+              <span className="goal-context-badge">Goal: {stripMarkdown(goalText)}</span>
               
               {/* Connection status */}
               <span className={`connection-status ${isConnected ? 'connected' : 'disconnected'}`}>

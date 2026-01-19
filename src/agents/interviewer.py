@@ -1,7 +1,8 @@
 """Interviewer agent for conducting natural conversation."""
-from typing import List, Dict, Generator
+from typing import List, Dict, Generator, Union
 import random
 import time
+import re
 from src.llm_client import LLMClient
 from src.schema.full_schema import DiscoverySchema
 from src.prompt_loader import PromptLoader
@@ -303,8 +304,9 @@ Generate ONLY the question:"""
             # Step 1: Strip any preamble (this is cheap and doesn't need regeneration)
             response = self._strip_preamble(response)
 
-            # Step 2: Lint the cleaned question
-            is_valid, error = self._lint_question(response)
+            # Step 2: Lint the cleaned question (skip for propose_tasks mode which generates curriculum, not questions)
+            is_propose_tasks = prompt_module == "propose_tasks"
+            is_valid, error = (True, "") if is_propose_tasks else self._lint_question(response)
 
             if not is_valid:
                 print(f"[Interviewer] Question failed lint: {error}")
@@ -443,6 +445,138 @@ Generate ONLY the question:"""
             print(f"Error streaming question: {e}")
             # No fallback - re-raise to show error to user
             raise Exception(f"Question streaming failed: {str(e)}")
+
+    def _extract_curriculum_tasks(self, response: str) -> List[Dict]:
+        """
+        Parse curriculum tasks from interviewer's natural language response.
+
+        Expected format:
+        1. Topic Name - Description. Why for you: justification
+        2. Another Topic - Description. Why for you: justification
+
+        Args:
+            response: The generated response with curriculum
+
+        Returns:
+            List of task dicts with id, topic, justification, prerequisites, status
+        """
+        tasks = []
+
+        # Regex pattern to match numbered items with topic and description
+        # Matches: "1. Topic - Description" or "1. Topic"
+        pattern = r'(\d+)\.\s+(.+?)(?:\s+-\s+(.+?))?(?=\n\d+\.|\nWhy for you:|Why for you:|$)'
+        matches = re.finditer(pattern, response, re.DOTALL | re.IGNORECASE)
+
+        for match in matches:
+            task_id = int(match.group(1))
+            topic = match.group(2).strip()
+            description = match.group(3).strip() if match.group(3) else ""
+
+            # Extract "Why for you" justification if present
+            justification = ""
+            # Look for "Why for you:" after this task number and before the next task
+            why_pattern = rf'{task_id}\..+?Why for you:\s*(.+?)(?=\n\d+\.|$)'
+            why_match = re.search(why_pattern, response, re.DOTALL | re.IGNORECASE)
+            if why_match:
+                justification = why_match.group(1).strip()
+                # Clean up - remove leading/trailing whitespace and newlines
+                justification = ' '.join(justification.split())
+
+            # If no justification found, use description as fallback
+            if not justification and description:
+                justification = description
+
+            tasks.append({
+                "id": task_id,
+                "topic": topic,
+                "description": description,
+                "justification": justification if justification else f"Explore {topic}",
+                "prerequisites": [],  # Will be set based on order
+                "status": "locked" if task_id > 1 else "available"
+            })
+
+        # Set prerequisites based on sequential order
+        for i, task in enumerate(tasks):
+            if i > 0:
+                task["prerequisites"] = [tasks[i-1]["id"]]
+
+        print(f"[Interviewer] Extracted {len(tasks)} tasks from curriculum proposal")
+        for task in tasks:
+            print(f"  - Task {task['id']}: {task['topic']}")
+
+        return tasks
+
+    def generate_response(
+        self,
+        user_message: str,
+        schema: DiscoverySchema,
+        conversation_history: List[Dict]
+    ) -> Union[str, Dict]:
+        """
+        Generate interviewer response.
+
+        This is the main entry point that replaces generate_next_question for
+        cases where we need to detect curriculum proposals.
+
+        Args:
+            user_message: User's message
+            schema: Current discovery schema
+            conversation_history: Full conversation history
+
+        Returns:
+            - str: Regular conversation message
+            - Dict: Structured response for curriculum proposal
+                {
+                    "type": "curriculum_proposal",
+                    "text": "...",
+                    "tasks": [...],
+                    "goal": "..."
+                }
+        """
+        # Generate the response using the existing question generation logic
+        response = self.generate_next_question(schema, conversation_history)
+
+        # BETTER: Check controller mode instead of parsing text
+        # If controller forced propose_tasks mode, we know it's proposing curriculum
+        is_proposing_curriculum = schema.controller.conversation_mode == "propose_tasks"
+
+        if is_proposing_curriculum:
+            print("[Interviewer] Controller in propose_tasks mode - parsing curriculum from response")
+
+            # Extract tasks from the response
+            tasks = self._extract_curriculum_tasks(response)
+
+            if len(tasks) == 0:
+                print("[Interviewer] WARNING: propose_tasks mode but no tasks extracted from response")
+                print(f"[Interviewer] Response text: {response[:200]}...")
+                # Fallback: Use teaching candidates to create tasks
+                if len(schema.teaching_candidates) > 0:
+                    print(f"[Interviewer] Falling back to {len(schema.teaching_candidates)} teaching candidates")
+                    tasks = [
+                        {
+                            "id": i + 1,
+                            "topic": tc.topic,
+                            "justification": tc.identified_gap or f"Explore {tc.topic}",
+                            "prerequisites": [i] if i > 0 else [],
+                            "status": "available" if i == 0 else "locked"
+                        }
+                        for i, tc in enumerate(schema.teaching_candidates[:7])
+                    ]
+                else:
+                    # Really can't extract anything - return regular response
+                    return response
+
+            print(f"[Interviewer] Extracted {len(tasks)} tasks from curriculum")
+
+            return {
+                "type": "curriculum_proposal",
+                "text": response,
+                "tasks": tasks,
+                "goal": schema.interview_state.user_goal
+            }
+
+        # Regular message
+        return response
 
     def _check_early_banned_phrases(self, text: str) -> bool:
         """
@@ -601,6 +735,9 @@ Generate ONLY the question:"""
             'and', 'but', 'or', 'nor', 'yet', 'so',  # conjunctions
             'which', 'who', 'that', 'where', 'when',  # relative pronouns
             'this', 'these', 'it',  # demonstratives pointing back
+            'like', 'such as', 'as',  # comparative/exemplifying words
+            'for', 'to', 'by', 'with', 'from',  # prepositions
+            'into', 'through', 'about',  # more prepositions
         ]
         
         for pattern in preamble_patterns:
@@ -682,6 +819,30 @@ Generate ONLY the question:"""
             reverse=True
         )[:3]
 
+        # Extract prior knowledge assessment data for propose_tasks prompt
+        prior_knowledge = schema.prior_knowledge_assessment
+        
+        # Get concept knowledge as strings
+        concepts_known = []
+        concepts_unclear = []
+        if prior_knowledge.concept_knowledge:
+            for ck in prior_knowledge.concept_knowledge:
+                # Handle both string format (legacy) and ConceptKnowledge object format
+                if isinstance(ck, str):
+                    concepts_known.append(ck)
+                elif hasattr(ck, 'concept'):
+                    # Get proficiency - might be string or enum
+                    prof = getattr(ck, 'proficiency', None)
+                    if prof:
+                        prof_str = prof.value if hasattr(prof, 'value') else str(prof)
+                        concepts_known.append(f"{ck.concept} ({prof_str})")
+                    else:
+                        concepts_known.append(ck.concept)
+        elif prior_knowledge.concepts_known:
+            concepts_known = prior_knowledge.concepts_known
+        if prior_knowledge.concepts_unclear:
+            concepts_unclear = prior_knowledge.concepts_unclear
+
         return {
             "user_curiosity_type": schema.user_profile.curiosity_type.value or "unknown",
             "user_pacing": schema.user_profile.pacing_preference.value or "unknown",
@@ -712,7 +873,13 @@ Generate ONLY the question:"""
             "ready_for_teach": schema.teaching_recommendation.ready,
             "turns_elapsed": schema.interview_state.turns_elapsed,
             "topics_mentioned": schema.interview_state.topics_mentioned,
-            "frameworks_offered": schema.interview_state.frameworks_offered
+            "frameworks_offered": schema.interview_state.frameworks_offered,
+            # Prior knowledge assessment data for propose_tasks prompt
+            "assessed_level": prior_knowledge.assessed_level or "intermediate",
+            "concepts_known": ", ".join(concepts_known) if concepts_known else "Not yet assessed",
+            "concepts_unclear": ", ".join(concepts_unclear) if concepts_unclear else "Not yet identified",
+            "practical_experience": prior_knowledge.practical_experience or "Not yet assessed",
+            "learning_style_hints": ", ".join(prior_knowledge.learning_style_hints) if prior_knowledge.learning_style_hints else "Not yet identified"
         }
 
     def _format_prompt(self, prompt_template: str, context: Dict) -> str:

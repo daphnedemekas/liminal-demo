@@ -96,30 +96,49 @@ export function useAudio(): UseAudioReturn {
 
   const playAudio = useCallback(async (audioUrl: string) => {
     try {
+      console.log('[Audio] Attempting to play:', audioUrl)
+      
       // Stop any currently playing audio
       if (currentAudioRef.current) {
         currentAudioRef.current.pause()
         currentAudioRef.current = null
       }
 
+      // Build full URL if relative
+      const fullUrl = audioUrl.startsWith('http') 
+        ? audioUrl 
+        : `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}${audioUrl}`
+      
+      console.log('[Audio] Full URL:', fullUrl)
+
       // Create and play new audio
-      const audio = new Audio(audioUrl)
+      const audio = new Audio(fullUrl)
       currentAudioRef.current = audio
 
-      setIsPlaying(true)
-      await audio.play()
-
-      // Clean up after playback
+      // Set up event handlers BEFORE playing
       audio.onended = () => {
+        console.log('[Audio] Playback ended')
         currentAudioRef.current = null
         setIsPlaying(false)
       }
 
-      audio.onerror = () => {
+      audio.onerror = (e) => {
+        console.error('[Audio] Playback error:', e)
         setIsPlaying(false)
       }
+
+      audio.oncanplay = () => {
+        console.log('[Audio] Audio can play, duration:', audio.duration)
+      }
+
+      setIsPlaying(true)
+      
+      // Wait for audio to be ready
+      await audio.play()
+      console.log('[Audio] Play started successfully')
+
     } catch (error) {
-      console.error('Error playing audio:', error)
+      console.error('[Audio] Error playing audio:', error)
       setIsPlaying(false)
     }
   }, [])

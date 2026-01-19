@@ -926,6 +926,13 @@ class DatabaseManager:
         finally:
             session.close()
 
+    def get_conversation_history(self, session_id: str) -> list:
+        """Get conversation history for a session."""
+        session_data = self.get_session_by_id(session_id)
+        if session_data:
+            return session_data.get("conversation_history", [])
+        return []
+
     def get_session_by_id(self, session_id: str) -> Optional[Dict[str, Any]]:
         """Get a session by its ID."""
         session = self._get_session()

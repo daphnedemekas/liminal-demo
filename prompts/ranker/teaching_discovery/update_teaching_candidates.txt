@@ -49,6 +49,9 @@ CURRENT TEACHING CANDIDATES:
 CURRENT CONVERSATIONAL THEMES (for context):
 {conversational_themes}
 
+CURRENT TASK CURRICULUM (if proposed):
+{task_curriculum}
+
 CONVERSATION:
 {conversation}
 
@@ -201,7 +204,42 @@ CRITICAL RULES FOR STAKES:
 
 === OUTPUT FORMAT ===
 
-Return a JSON object with teaching candidates AND task curriculum proposal:
+Return a JSON object with teaching candidates AND task curriculum tracking.
+
+TASK CURRICULUM TRACKING (IMPORTANT CHANGE):
+- You track teaching_candidates (individual topics with readiness scores) from conversation
+- The task_curriculum is NOW controlled by the interviewer, NOT you
+- You can populate task_curriculum.tasks with candidate topics based on teaching_candidates, but:
+  - Do NOT set proposed=True (the interviewer decides when to propose the curriculum)
+  - Do NOT set accepted=True (the orchestrator sets this when user accepts)
+  - Focus on identifying concrete teaching candidates with accurate readiness scores
+  - The interviewer will detect when to propose a curriculum and extract tasks automatically
+
+WHAT YOU SHOULD DO:
+- Track teaching_candidates with readiness scores, gaps, and focus questions
+- Optionally populate task_curriculum.tasks with candidate topics if you have strong candidates
+- But ALWAYS set proposed=false and accepted=false in your output
+- Your job is candidate identification, not curriculum proposal
+
+CURRICULUM MODIFICATION HANDLING:
+If you receive task_curriculum with proposed=true (already proposed by interviewer):
+1. CHECK if user is requesting modifications:
+   - Keywords: "change", "modify", "adjust", "different", "instead", "rather", "prefer", "can we", "what if", "start with"
+   - Examples: "Can we start with X instead?", "I'd rather learn Y first", "Can we skip Z?"
+
+2. If modification requested:
+   a) Update the task_curriculum.tasks array based on their feedback:
+      - Reorder tasks if they want different sequencing
+      - Add tasks if they mention missing topics
+      - Remove tasks if they want to skip things they know
+   b) Add entry to task_curriculum.modification_history
+   c) Keep proposed: true (preserve proposal state during modifications)
+
+3. If NO modification requested:
+   - Keep curriculum unchanged
+   - Preserve proposed: true
+
+Return a JSON object:
 
 {{
   "teaching_candidates": [
@@ -230,7 +268,7 @@ Return a JSON object with teaching candidates AND task curriculum proposal:
     }}
   ],
   "task_curriculum": {{
-    "proposed": true,
+    "proposed": false,
     "accepted": false,
     "tasks": [
       {{

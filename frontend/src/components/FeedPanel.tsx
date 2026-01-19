@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import { api } from '../services/api'
+import { stripMarkdown } from '../utils/textUtils'
 
 interface FeedItem {
   id: number
@@ -99,9 +100,9 @@ export default function FeedPanel({
       case 'exploration':
         return 'Feed'
       case 'goal':
-        return goalText ? `About: ${goalText.slice(0, 40)}...` : 'Learning Goal'
+        return goalText ? `About: ${stripMarkdown(goalText).slice(0, 40)}...` : 'Learning Goal'
       case 'teaching_candidate':
-        return teachingTopic ? `Deep Dive: ${teachingTopic.slice(0, 30)}...` : 'Topic Focus'
+        return teachingTopic ? `Deep Dive: ${stripMarkdown(teachingTopic).slice(0, 30)}...` : 'Topic Focus'
       default:
         return 'Related Content'
     }
@@ -184,7 +185,7 @@ export default function FeedPanel({
         ) : (
           items.map((item) => (
             <div key={item.id} className="feed-item">
-              <h4 className="feed-item-title">{item.title}</h4>
+              <h4 className="feed-item-title">{stripMarkdown(item.title)}</h4>
               <p className="feed-item-content">{item.content}</p>
               {item.source_citation && (
                 <div className="feed-item-source">

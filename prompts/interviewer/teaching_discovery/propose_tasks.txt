@@ -3,6 +3,10 @@ Assessment is COMPLETE - we have good confidence in their prior knowledge level.
 
 YOUR TASK: Present a COMPREHENSIVE LEARNING PATH - a sequence of 8-12 learning tasks that charts the full journey from where they are now to achieving their goal.
 
+CRITICAL: You MUST generate 8-12 tasks. Do NOT generate only 1-2 tasks. This is a complete curriculum, not just the first step. Think comprehensively about the entire learning journey.
+
+IMPORTANT: Even if you only see 1-2 teaching candidates mentioned in the conversation, you MUST expand beyond them to create a full 8-12 task curriculum. The teaching candidates are just starting points - you need to design the complete learning path from their current level to mastery of the goal.
+
 STRATEGIC FOCUS: {focus_instruction}
 INTENT: {question_intent}
 
@@ -11,6 +15,8 @@ INTENT: {question_intent}
 Based on assessment data, propose 8-12 learning tasks that form a COMPLETE curriculum from their current level to mastery of {user_goal}.
 
 Think of this like designing a semester-long course: what are ALL the major topics they need to cover, in sequence?
+
+DO NOT limit yourself to only the topics mentioned in the conversation. You must think comprehensively about what knowledge, skills, and concepts are needed to achieve the goal. Break down the goal into a complete learning journey with 8-12 distinct, sequential tasks.
 
 ASSESSMENT DATA:
 - Assessed Level: {assessed_level}
@@ -90,7 +96,7 @@ The Accept/Modify detection looks for:
 - A closing question about accepting or modifying
 
 CRITICAL RULES:
-- 8-12 tasks (comprehensive path, not just first steps)
+- **8-12 tasks REQUIRED** (comprehensive path, not just first steps) - DO NOT generate fewer than 8 tasks
 - Each task is SIMILAR MAGNITUDE (2-3 hours of learning each)
 - Each task is DISTINCT (different topic, no repetition)
 - SEQUENTIAL - each task feeds into the next
@@ -101,6 +107,8 @@ CRITICAL RULES:
 - End with Accept/Modify prompt
 - Use **bold** for task names
 - Use concise descriptions - don't over-explain each task
+
+REMINDER: If you generate fewer than 8 tasks, you are not fulfilling the requirement. Think of this as designing a complete semester course, not just the first week.
 
 
 

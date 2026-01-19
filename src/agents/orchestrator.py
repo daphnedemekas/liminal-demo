@@ -123,19 +123,28 @@ class DiscoveryOrchestrator:
         Returns:
             Next question from interviewer
         """
+        # Check if this is the first user message (onboarding background)
+        is_first_message = len([m for m in self.conversation_history if m["role"] == "user"]) == 0
+        
+        # If this is the first message, prepend the standard opening prompt
+        if is_first_message and len(self.conversation_history) == 0:
+            opening_prompt = "Before we begin exploring, tell me a bit about yourself - what do you do, what are you interested in, and what's been on your mind lately?"
+            self.conversation_history.append({
+                "role": "assistant",
+                "content": opening_prompt
+            })
+        
         # Add user message to history
         self.conversation_history.append({
             "role": "user",
             "content": user_message
         })
 
-        # Check if this is the first user message (onboarding background)
-        is_first_message = len([m for m in self.conversation_history if m["role"] == "user"]) == 1
-
-        # If this is the first message, generate contextual opening question
+        # For first message: Generate response FIRST, then run ranker (faster UX)
+        # The opening question doesn't need ranker output - it only uses user_background
         if is_first_message:
-            # Check if user has a goal
-            user_goal = self.schema.interview_state.user_goal if self.schema.interview_state.goal_provided else None
+            # Check if user has a goal (from schema init, not ranker)
+            user_goal = self.user_goal  # Use stored goal from __init__
 
             if user_goal:
                 print(f"[Interviewer] Generating goal-directed opening question (goal: {user_goal})...")
@@ -157,9 +166,47 @@ class DiscoveryOrchestrator:
             print("[DB] Saving opening question to conversation history...")
             self.db.save_conversation_history(self.session_id, self.conversation_history)
 
+            # NOW run ranker to extract themes/goals for next turn (after user sees response)
+            print("[Ranker] Running ranker in background after first response...")
+            ranker = self._get_ranker()
+            self.schema = ranker.update_schema(
+                self.schema,
+                self.conversation_history,
+                user_message
+            )
+            # Save schema state
+            self.db.save_session_state(self.session_id, self.schema.model_dump())
+
             return opening_question
 
-        # Step 1: Select appropriate ranker and update schema
+        # BEFORE running ranker: Check if curriculum is already proposed and user is accepting
+        # This prevents the ranker from resetting proposed=False when user says "yes"
+        curriculum_acceptance_phrases = [
+            "yes", "yeah", "yep", "sounds good", "looks good", "that works",
+            "perfect", "great", "let's do it", "let's start", "i'm ready",
+            "that sounds great", "sounds great", "looks great", "yes that sounds great",
+            "yes!", "let's go", "i'm in"
+        ]
+
+        curriculum_already_proposed = (
+            self.schema.task_curriculum.proposed and
+            not self.schema.task_curriculum.accepted and
+            len(self.schema.task_curriculum.tasks) > 0
+        )
+
+        if curriculum_already_proposed:
+            user_lower = user_message.lower().strip()
+            is_acceptance = (
+                user_lower in curriculum_acceptance_phrases or
+                any(phrase in user_lower for phrase in ["yes!", "sounds great", "looks good", "let's start", "i'm ready"])
+            )
+
+            if is_acceptance:
+                print(f"[Orchestrator] Detected curriculum acceptance: '{user_message}'")
+                # Return special marker to trigger acceptance flow
+                return "__ACCEPT_CURRICULUM_DETECTED__"
+
+        # For subsequent messages: Run ranker first (needed for controller guidance)
         ranker = self._get_ranker()
         print(f"[Ranker] Analyzing conversation using {ranker.__class__.__name__}...")
         self.schema = ranker.update_schema(
@@ -210,9 +257,127 @@ class DiscoveryOrchestrator:
             # Return special marker that tells the caller to show goal confirmation UI
             return f"__GOAL_PROPOSED__:{self.schema.interview_state.proposed_goal}"
 
+        # Step 4c: Check if ready for teaching
+        # BUT: If controller wants to propose curriculum, skip transition and let interviewer propose first
+        controller_wants_curriculum = (
+            self.schema.controller and 
+            self.schema.controller.conversation_mode == "propose_tasks"
+        )
+        
+        if self.schema.teaching_recommendation.ready and not controller_wants_curriculum:
+            # Only send transition if we haven't already
+            if self.schema.interview_state.transition_message_sent:
+                print("[Orchestrator] Already sent transition message, continuing conversation...")
+                # Continue to interviewer instead of repeating transition
+            else:
+                print("[Orchestrator] Ready for teaching phase!")
+                transition_msg = self._create_transition_message()
+                self.schema.interview_state.transition_message_sent = True
+                return transition_msg
+
+        # Step 5: Interviewer generates next question (or curriculum proposal)
+        print("[Interviewer] Generating response...")
+        interviewer_response = self.interviewer.generate_response(
+            user_message,
+            self.schema,
+            self.conversation_history
+        )
+
+        # PHASE 2: Check if interviewer returned structured curriculum proposal
+        if isinstance(interviewer_response, dict) and interviewer_response.get("type") == "curriculum_proposal":
+            print("[Orchestrator] Interviewer proposed curriculum")
+
+            # Programmatically set curriculum state (no LLM dependency!)
+            from src.schema.full_schema import ProposedTask, TaskCurriculum
+
+            # ALWAYS use tasks extracted from interviewer's response (the interviewer generates the full 8-12 task curriculum)
+            # The ranker's task_curriculum.tasks are just candidates, not the full curriculum
+            tasks_data = interviewer_response.get("tasks", [])
+            
+            if len(tasks_data) == 0:
+                print("[Orchestrator] WARNING: Curriculum proposed but no tasks extracted!")
+                # Fallback: Try to extract from teaching_candidates
+                if len(self.schema.teaching_candidates) > 0:
+                    print(f"[Orchestrator] Using {len(self.schema.teaching_candidates)} teaching candidates as fallback")
+                    tasks_data = [
+                        {
+                            "id": i + 1,
+                            "topic": tc.topic,
+                            "justification": tc.identified_gap or "Explore this topic",
+                            "prerequisites": [i] if i > 0 else [],
+                            "status": "available" if i == 0 else "locked"
+                        }
+                        for i, tc in enumerate(self.schema.teaching_candidates[:7])
+                    ]
+                else:
+                    print("[Orchestrator] ERROR: No tasks and no candidates, cannot create curriculum")
+                    # Return regular response instead
+                    next_question = interviewer_response["text"]
+                    # Add to history
+                    self.conversation_history.append({
+                        "role": "assistant",
+                        "content": next_question
+                    })
+                    self.db.save_session_state(self.session_id, self.schema.model_dump())
+                    self.db.save_conversation_history(self.session_id, self.conversation_history)
+                    return next_question
+
+            # Create ProposedTask objects from extracted tasks
+            tasks = [
+                ProposedTask(
+                    id=t["id"],
+                    topic=t["topic"],
+                    justification=t["justification"],
+                    prerequisites=t["prerequisites"],
+                    status=t["status"]
+                )
+                for t in tasks_data
+            ]
+
+            # Set curriculum state programmatically - this is the key fix!
+            self.schema.task_curriculum = TaskCurriculum(
+                proposed=True,  # Set programmatically, not by ranker LLM!
+                accepted=False,
+                tasks=tasks,
+                modification_history=[]
+            )
+
+            print(f"[Orchestrator] Set task_curriculum.proposed=True with {len(tasks)} tasks")
+
+            # Save updated schema
+            self.db.save_session_state(self.session_id, self.schema.model_dump())
+
+            # Add the text to conversation history
+            next_question = interviewer_response["text"]
+            self.conversation_history.append({
+                "role": "assistant",
+                "content": next_question
+            })
+            self.db.save_conversation_history(self.session_id, self.conversation_history)
+
+            # Return curriculum proposal marker
+            import json
+            curriculum_info = {
+                "tasks": [t.model_dump() for t in tasks],
+                "overall_justification": f"Based on your goal '{self.schema.interview_state.user_goal}' and what I've learned about your background, here's my best guess at a complete learning path. This is just a starting point - we can adjust as we go based on what works for you:"
+            }
+            return f"__TASK_CURRICULUM_PROPOSED__:{json.dumps(curriculum_info)}"
+
         # Step 4b: Check if a task curriculum has been proposed (needs user confirmation)
-        if self.schema.task_curriculum.proposed and not self.schema.task_curriculum.accepted and len(self.schema.task_curriculum.tasks) > 0:
-            print(f"[Orchestrator] Task curriculum proposed: {len(self.schema.task_curriculum.tasks)} tasks")
+        # This check happens AFTER the interviewer has had a chance to generate the curriculum
+        # Only return if curriculum was already proposed in a previous turn AND controller doesn't want to propose again
+        # (If controller wants to propose, we already handled it above)
+        controller_wants_curriculum = (
+            self.schema.controller and 
+            self.schema.controller.conversation_mode == "propose_tasks"
+        )
+        
+        # Only return existing curriculum if controller is NOT trying to propose a new one
+        if (not controller_wants_curriculum and 
+            self.schema.task_curriculum.proposed and 
+            not self.schema.task_curriculum.accepted and 
+            len(self.schema.task_curriculum.tasks) > 0):
+            print(f"[Orchestrator] Task curriculum already proposed from previous turn: {len(self.schema.task_curriculum.tasks)} tasks")
             
             # Return special marker with curriculum info
             import json
@@ -231,17 +396,11 @@ class DiscoveryOrchestrator:
             }
             return f"__TASK_CURRICULUM_PROPOSED__:{json.dumps(curriculum_info)}"
 
-        # Step 4c: Check if ready for teaching
-        if self.schema.teaching_recommendation.ready:
-            print("[Orchestrator] Ready for teaching phase!")
-            return self._create_transition_message()
-
-        # Step 5: Interviewer generates next question
-        print("[Interviewer] Generating next question...")
-        next_question = self.interviewer.generate_next_question(
-            self.schema,
-            self.conversation_history
-        )
+        # Extract text from structured response if needed
+        if isinstance(interviewer_response, dict):
+            next_question = interviewer_response["text"]
+        else:
+            next_question = interviewer_response
 
         # Check if a cognitive framework was used
         if self.interviewer.contains_framework(next_question):
@@ -253,7 +412,7 @@ class DiscoveryOrchestrator:
             self.schema.interview_state.recent_question_intents.append(self.schema.controller.question_intent)
             # Keep only last 5
             self.schema.interview_state.recent_question_intents = self.schema.interview_state.recent_question_intents[-5:]
-        
+
         # Store brief summary of question (first 50 chars)
         question_summary = next_question[:50] + "..." if len(next_question) > 50 else next_question
         self.schema.interview_state.recent_question_summaries.append(question_summary)
@@ -295,9 +454,10 @@ class DiscoveryOrchestrator:
         is_first_message = len([m for m in self.conversation_history if m["role"] == "user"]) == 1
 
         # If this is the first message, generate contextual opening question (non-streaming for simplicity)
+        # Generate response FIRST for fast UX, then run ranker after
         if is_first_message:
-            # Check if user has a goal
-            user_goal = self.schema.interview_state.user_goal if self.schema.interview_state.goal_provided else None
+            # Check if user has a goal (from stored value, not schema)
+            user_goal = self.user_goal
 
             if user_goal:
                 print(f"[Interviewer] Generating goal-directed opening question (goal: {user_goal})...")
@@ -319,6 +479,17 @@ class DiscoveryOrchestrator:
             self.db.save_conversation_history(self.session_id, self.conversation_history)
             
             yield opening_question
+            
+            # NOW run ranker to extract themes/goals for next turn (after user sees response)
+            print("[Ranker] Running ranker after first response...")
+            ranker = self._get_ranker()
+            self.schema = ranker.update_schema(
+                self.schema,
+                self.conversation_history,
+                user_message
+            )
+            # Save schema state
+            self.db.save_session_state(self.session_id, self.schema.model_dump())
             return
 
         # Step 1: Select appropriate ranker and update schema (blocking - must complete before interviewer)
@@ -367,10 +538,16 @@ class DiscoveryOrchestrator:
 
         # Step 4: Check if ready for teaching
         if self.schema.teaching_recommendation.ready:
-            print("[Orchestrator] Ready for teaching phase!")
-            transition_msg = self._create_transition_message()
-            yield transition_msg
-            return
+            # Only send transition if we haven't already
+            if self.schema.interview_state.transition_message_sent:
+                print("[Orchestrator] Already sent transition message, continuing conversation...")
+                # Fall through to interviewer instead of repeating transition
+            else:
+                print("[Orchestrator] Ready for teaching phase!")
+                transition_msg = self._create_transition_message()
+                self.schema.interview_state.transition_message_sent = True
+                yield transition_msg
+                return
 
         # Step 5: Stream interviewer response
         print("[Interviewer] Streaming next question...")

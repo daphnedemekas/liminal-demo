@@ -165,6 +165,7 @@ async def update_onboarding(user_id: str, onboarding_info: str):
 
 class ProfileSummaryRequest(BaseModel):
     schema: dict
+    session_id: Optional[str] = None
 
 
 # ============================================
@@ -238,81 +239,84 @@ async def generate_ai_reasoning(request: ProfileSummaryRequest):
         from src.llm_client import LLMClient
         
         schema = request.schema
+        session_id = getattr(request, 'session_id', None) or schema.get("session_id")
+        
+        # Fetch actual conversation history if we have session_id
+        conversation_text = ""
+        if session_id:
+            try:
+                history = db.get_conversation_history(session_id)
+                if history:
+                    # Format last few exchanges (up to 4 messages)
+                    recent = history[-4:] if len(history) > 4 else history
+                    conversation_text = "\n".join([
+                        f"{'User' if msg['role'] == 'user' else 'AI'}: {msg['content'][:300]}..."
+                        if len(msg['content']) > 300 else f"{'User' if msg['role'] == 'user' else 'AI'}: {msg['content']}"
+                        for msg in recent
+                    ])
+            except Exception as e:
+                print(f"[Reasoning] Could not fetch conversation: {e}")
+        
         controller = schema.get("controller", {})
         prior_knowledge = schema.get("prior_knowledge_assessment", {})
-        interview_state = schema.get("interview_state", {})
-        teaching_candidates = schema.get("teaching_candidates", [])
         goals = schema.get("goal_candidates", [])
+        themes = schema.get("conversational_themes", [])
+        interview_state = schema.get("interview_state", {})
+        scope_goal = interview_state.get("user_goal")
+        scope_line = (
+            f"Scope: Current learning path is '{scope_goal}'. Focus on this path and its conversation context."
+            if scope_goal
+            else "Scope: Exploration session. Focus on the learner broadly across interests (not any single path)."
+        )
         
-        # Build context for the reasoning
+        # Build context
         context_parts = []
         
-        # What we just learned from the last exchange
-        if prior_knowledge.get("evidence"):
-            latest_evidence = prior_knowledge["evidence"][-1] if prior_knowledge["evidence"] else None
-            if latest_evidence:
-                context_parts.append(f"Last insight: {latest_evidence.get('revealed', '')}")
+        # Add actual conversation
+        if conversation_text:
+            context_parts.append(f"Recent conversation:\n{conversation_text}")
         
-        if controller.get("focus_instruction"):
-            context_parts.append(f"Current focus: {controller['focus_instruction']}")
-        
-        # What we're trying to figure out
-        if controller.get("question_intent"):
-            context_parts.append(f"Trying to understand: {controller['question_intent'].replace('_', ' ')}")
-        
-        if controller.get("target_ambiguity"):
-            target = controller['target_ambiguity'].replace('_', ' ')
-            context_parts.append(f"Resolving ambiguity about: {target}")
-        
-        # Knowledge gaps identified
-        concepts_unclear = prior_knowledge.get("concepts_unclear", [])
-        if concepts_unclear:
-            context_parts.append(f"Unclear concepts: {', '.join(concepts_unclear[:3])}")
-        
-        # Assessment level
+        # Add schema insights
         if prior_knowledge.get("assessed_level"):
-            context_parts.append(f"User's level appears to be: {prior_knowledge['assessed_level']}")
+            context_parts.append(f"Assessed knowledge level: {prior_knowledge['assessed_level']}")
         
-        # Goals context
-        if interview_state.get("proposed_goal"):
-            context_parts.append(f"Considering proposing goal: {interview_state['proposed_goal']}")
-        elif goals:
+        if goals:
             top_goals = [g.get("goal", "") for g in goals[:2] if g.get("goal")]
             if top_goals:
                 context_parts.append(f"Emerging goals: {'; '.join(top_goals)}")
         
-        # Teaching candidates context
-        if teaching_candidates:
-            topics = [tc.get("topic", "") for tc in teaching_candidates[:2] if tc.get("topic")]
-            if topics:
-                context_parts.append(f"Potential teaching topics: {', '.join(topics)}")
+        if themes:
+            theme_names = [t.get("theme_seed", "") for t in themes[:3] if t.get("theme_seed")]
+            if theme_names:
+                context_parts.append(f"Topics of interest: {', '.join(theme_names)}")
         
         if not context_parts:
-            return {"reasoning": "Getting to know this learner... I'll ask some questions to understand their interests and background."}
+            return {"reasoning": "Getting to know this learner..."}
         
         # Generate inner monologue with LLM
         llm = LLMClient()
-        prompt = f"""You are an AI tutor. Write your INNER MONOLOGUE - your private thoughts about this learner after the last exchange. Write in first person, as if thinking to yourself.
+        prompt = f"""You are an AI tutor. Write your INNER MONOLOGUE - your private thoughts about this learner based on the conversation so far. Write in first person, as if thinking to yourself.
 
-Context from the conversation:
-{chr(10).join(f"- {p}" for p in context_parts)}
+{chr(10).join(context_parts)}
+
+{scope_line}
 
 RULES:
-- Write 2-4 sentences of natural inner monologue
-- First person, present tense ("I notice...", "I'm wondering...", "I think I should...")
-- Be genuine and thoughtful, like a tutor reflecting between exchanges
-- Focus on: what you learned, what's still unclear, what you want to explore next
-- NO meta-commentary, just the thoughts themselves
-- Maximum 60 words
+- Write 2-3 sentences of natural inner monologue
+- First person, present tense ("I notice...", "I'm wondering...", "I think...")
+- Be specific to what the user actually said - reference their actual words/interests
+- Focus on: what you learned about them, what intrigues you, what to explore next
+- Be warm and genuinely curious, not clinical or generic
+- Maximum 50 words
 
-Example: "Interesting - they clearly understand the basics of RAG but seem fuzzy on how vector similarity actually works. I should probe that more. Their mention of 'production systems' suggests practical experience, so maybe concrete examples would resonate better than theory."
+Example: "They mentioned balancing analytical and creative work - that's interesting. Their background in ML gives them strong foundations, but they seem most excited about the learning loop design. I should dig into what specific outcomes they envision."
 
 Write the inner monologue:"""
 
         reasoning = llm.chat(
             messages=[{"role": "user", "content": prompt}],
             model="openai:gpt-4o-mini",
-            max_tokens=150
+            max_tokens=120
         )
         
         return {"reasoning": reasoning.strip()}
@@ -332,6 +336,12 @@ async def generate_profile_summary(request: ProfileSummaryRequest):
         goals = schema.get("goal_candidates", [])
         themes = schema.get("conversational_themes", [])
         interview_state = schema.get("interview_state", {})
+        scope_goal = interview_state.get("user_goal")
+        scope_line = (
+            f"Scope: This is the learner's current understanding on their path to '{scope_goal}'."
+            if scope_goal
+            else "Scope: This is the learner's current understanding across exploration topics (not tied to a single path)."
+        )
         
         # Build a concise context for the LLM
         context_parts = []
@@ -382,6 +392,8 @@ async def generate_profile_summary(request: ProfileSummaryRequest):
 
 Profile data:
 {chr(10).join(f"- {p}" for p in context_parts)}
+
+{scope_line}
 
 RULES:
 - Maximum 80 words
@@ -611,8 +623,8 @@ class TeachingStartRequest(BaseModel):
     goal_text: str
     teaching_candidate_id: int
     topic: str
-    identified_gap: str
-    focus_question: str
+    identified_gap: Optional[str] = ""  # Make optional with default
+    focus_question: Optional[str] = ""  # Make optional with default
     goal_conversation_history: list = []  # Context from goal chat
     user_background: str = ""
     current_model_summary: Optional[str] = None
@@ -1109,51 +1121,98 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
             if not user_message:
                 continue
 
-            # Send status: analyzing
+            # Check if we should be proposing a curriculum (better UX feedback)
+            should_propose_curriculum = False
+            try:
+                schema = session_data.discovery_session.schema
+                assessment_conf = schema.prior_knowledge_assessment.confidence
+                turns = schema.interview_state.turns_elapsed + 1
+                has_candidates = len(schema.teaching_candidates) > 0
+                already_proposed = schema.task_curriculum.proposed
+
+                should_propose_curriculum = (
+                    not already_proposed and
+                    has_candidates and
+                    (assessment_conf >= 0.5 or turns >= 8)
+                )
+            except:
+                pass  # If anything goes wrong, just use default status
+
+            # Send status: analyzing or proposing
+            status_message = "Proposing curriculum..." if should_propose_curriculum else "Analyzing your response..."
             await websocket.send_json({
                 "type": "status",
-                "status": "Analyzing your response..."
+                "status": status_message
             })
 
             # Wrap all command processing in try-except for safety
             try:
-                # Voice command detection for goal/teaching accept/reject
-                lower_msg = user_message.lower().strip()
+                # Skip voice detection for explicit commands (they start with __)
+                is_explicit_command = user_message.startswith("__") and user_message.endswith("__")
                 
-                # Check if there's a pending goal proposal
-                has_pending_goal = session_data.discovery_session.schema.interview_state.proposed_goal is not None
-                
-                # Check if there's a pending teaching proposal (batch mode)
-                has_pending_teaching = (
-                    len(session_data.discovery_session.schema.interview_state.proposed_teaching_ids) > 0 or
-                    session_data.discovery_session.schema.interview_state.batch_proposal_pending
-                )
-                
-                # Detect voice commands for acceptance
-                accept_phrases = ['yes', 'yeah', 'yep', 'sounds good', 'sounds great', 'accept', 'let\'s do it', 
-                                 'perfect', 'that works', 'i like it', 'go for it', 'absolutely', 'sure', 'ok', 'okay']
-                reject_phrases = ['no', 'nope', 'not quite', 'not really', 'something else', 'different', 
-                                 'reject', 'pass', 'skip', 'change', 'try again']
-                
-                is_accept = any(phrase in lower_msg for phrase in accept_phrases) and len(lower_msg) < 50
-                is_reject = any(phrase in lower_msg for phrase in reject_phrases) and len(lower_msg) < 50
-                
-                # Convert voice accept/reject to commands
-                if has_pending_goal and is_accept:
-                    print(f"[Voice] Detected goal acceptance: '{user_message}'")
-                    user_message = "__ACCEPT_GOAL__"
-                elif has_pending_goal and is_reject:
-                    print(f"[Voice] Detected goal rejection: '{user_message}'")
-                    user_message = "__REJECT_GOAL__"
-                elif has_pending_teaching and is_accept:
-                    print(f"[Voice] Detected teaching acceptance: '{user_message}'")
-                    user_message = "__ACCEPT_TEACHING__"
-                elif has_pending_teaching and is_reject:
-                    print(f"[Voice] Detected teaching rejection: '{user_message}'")
-                    user_message = "__REJECT_TEACHING__"
+                if not is_explicit_command:
+                    # Voice command detection for goal/teaching accept/reject (only for natural language)
+                    lower_msg = user_message.lower().strip()
+                    
+                    # Check if there's a pending goal proposal
+                    has_pending_goal = session_data.discovery_session.schema.interview_state.proposed_goal is not None
+                    
+                    # Check if there's a pending task curriculum proposal
+                    has_pending_curriculum = (
+                        session_data.discovery_session.schema.task_curriculum.proposed and
+                        not session_data.discovery_session.schema.task_curriculum.accepted and
+                        len(session_data.discovery_session.schema.task_curriculum.tasks) > 0
+                    )
+                    
+                    # Check if there's a pending single teaching candidate (legacy)
+                    # Note: proposed_teaching_ids may not exist in all schema versions
+                    has_pending_teaching = False
+                    try:
+                        interview_state = session_data.discovery_session.schema.interview_state
+                        if hasattr(interview_state, 'proposed_teaching_ids') and interview_state.proposed_teaching_ids:
+                            has_pending_teaching = (
+                                len(interview_state.proposed_teaching_ids) > 0 and
+                                (not hasattr(interview_state, 'batch_proposal_pending') or interview_state.batch_proposal_pending == False)
+                            )
+                    except (AttributeError, TypeError):
+                        has_pending_teaching = False
+                    
+                    # Detect voice commands for acceptance
+                    accept_phrases = ['yes', 'yeah', 'yep', 'sounds good', 'sounds great', 'accept', 'let\'s do it', 
+                                     'perfect', 'that works', 'i like it', 'go for it', 'absolutely', 'sure', 'ok', 'okay', 'i accept']
+                    reject_phrases = ['no', 'nope', 'not quite', 'not really', 'something else', 'different', 
+                                     'reject', 'pass', 'skip', 'change', 'try again']
+                    
+                    is_accept = any(phrase in lower_msg for phrase in accept_phrases) and len(lower_msg) < 50
+                    is_reject = any(phrase in lower_msg for phrase in reject_phrases) and len(lower_msg) < 50
+                    
+                    # Convert voice accept/reject to commands
+                    if has_pending_goal and is_accept:
+                        print(f"[Voice] Detected goal acceptance: '{user_message}'")
+                        user_message = "__ACCEPT_GOAL__"
+                    elif has_pending_goal and is_reject:
+                        print(f"[Voice] Detected goal rejection: '{user_message}'")
+                        user_message = "__REJECT_GOAL__"
+                    elif has_pending_curriculum and is_accept:
+                        print(f"[Voice] Detected curriculum acceptance: '{user_message}'")
+                        user_message = "__ACCEPT_CURRICULUM__"
+                    elif has_pending_curriculum and is_reject:
+                        print(f"[Voice] Detected curriculum rejection: '{user_message}'")
+                        user_message = "__REJECT_CURRICULUM__"
+                    elif has_pending_teaching and is_accept:
+                        print(f"[Voice] Detected teaching acceptance: '{user_message}'")
+                        user_message = "__ACCEPT_TEACHING__"
+                    elif has_pending_teaching and is_reject:
+                        print(f"[Voice] Detected teaching rejection: '{user_message}'")
+                        user_message = "__REJECT_TEACHING__"
                 
                 # Check for special commands (goal accept/reject)
                 if user_message == "__ACCEPT_GOAL__":
+                    # Clear status
+                    await websocket.send_json({
+                        "type": "status",
+                        "status": ""
+                    })
                     result = session_data.discovery_session.accept_proposed_goal()
 
                     # Check for error
@@ -1183,6 +1242,11 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
                     continue
 
                 if user_message == "__REJECT_GOAL__":
+                    # Clear status
+                    await websocket.send_json({
+                        "type": "status",
+                        "status": ""
+                    })
                     import asyncio
                     loop = asyncio.get_event_loop()
                     response = await loop.run_in_executor(
@@ -1199,6 +1263,11 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
 
                 # Check for teaching candidate accept/reject commands
                 if user_message == "__ACCEPT_TEACHING__":
+                    # Clear status
+                    await websocket.send_json({
+                        "type": "status",
+                        "status": ""
+                    })
                     result = session_data.discovery_session.accept_proposed_teaching()
 
                     # Check for error
@@ -1231,6 +1300,11 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
                     continue
 
                 if user_message == "__REJECT_TEACHING__":
+                    # Clear status
+                    await websocket.send_json({
+                        "type": "status",
+                        "status": ""
+                    })
                     import asyncio
                     loop = asyncio.get_event_loop()
                     response = await loop.run_in_executor(
@@ -1247,6 +1321,11 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
 
                 # Check for curriculum accept command (batch task proposal)
                 if user_message == "__ACCEPT_CURRICULUM__":
+                    # Clear status
+                    await websocket.send_json({
+                        "type": "status",
+                        "status": ""
+                    })
                     result = session_data.discovery_session.accept_proposed_curriculum()
 
                     if not result.get("success"):
@@ -1294,6 +1373,51 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
                     user_message
                 )
 
+                # Check if orchestrator detected curriculum acceptance
+                if response == "__ACCEPT_CURRICULUM_DETECTED__":
+                    print(f"[Curriculum] Orchestrator detected natural language acceptance")
+                    # Clear status
+                    await websocket.send_json({
+                        "type": "status",
+                        "status": ""
+                    })
+                    result = session_data.discovery_session.accept_proposed_curriculum()
+
+                    if not result.get("success"):
+                        await websocket.send_json({
+                            "type": "error",
+                            "message": result.get("message", "Failed to accept curriculum")
+                        })
+                        continue
+
+                    # Save all tasks to the goal in database as an array
+                    try:
+                        session_info = db.get_session_by_id(session_id)
+                        if session_info and session_info.get("goal_id"):
+                            tasks = result.get("tasks", [])
+                            # Save entire task list as teaching candidates array
+                            db.set_goal_teaching_candidates(
+                                session_info["goal_id"],
+                                tasks
+                            )
+                            print(f"[Curriculum] Saved {len(tasks)} tasks to goal {session_info['goal_id']}")
+                    except Exception as e:
+                        print(f"[Curriculum] Failed to save tasks to DB: {e}")
+
+                    # Send data for frontend - first task is available, others locked
+                    tasks = result.get("tasks", [])
+                    first_task = tasks[0] if tasks else None
+
+                    await websocket.send_json({
+                        "type": "task_curriculum_accepted",
+                        "tasks": tasks,
+                        "first_task": first_task,
+                        "content": f"Great! Let's start with: **{first_task['topic']}**" if first_task else "Curriculum accepted!",
+                        "message": result.get("message", "Curriculum accepted")
+                    })
+                    _maybe_checkpoint()
+                    continue
+
                 # Check if a goal was proposed (needs user confirmation)
                 if response.startswith("__GOAL_PROPOSED__:"):
                     proposed_goal = response.split(":", 1)[1]
@@ -1307,6 +1431,11 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
                     except Exception as e:
                         print(f"[Audio] TTS for goal proposal failed: {e}")
                     
+                    # Clear status before sending goal proposal
+                    await websocket.send_json({
+                        "type": "status",
+                        "status": ""
+                    })
                     await websocket.send_json({
                         "type": "goal_proposed",
                         "goal": proposed_goal,
@@ -1338,6 +1467,11 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
                     except Exception as e:
                         print(f"[Audio] TTS for curriculum proposal failed: {e}")
                     
+                    # Clear status before sending curriculum proposal
+                    await websocket.send_json({
+                        "type": "status",
+                        "status": ""
+                    })
                     await websocket.send_json({
                         "type": "task_curriculum_proposed",
                         "curriculum": curriculum,
@@ -1363,6 +1497,11 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
                     except Exception as e:
                         print(f"[Audio] TTS for teaching proposal failed: {e}")
                     
+                    # Clear status before sending teaching proposal
+                    await websocket.send_json({
+                        "type": "status",
+                        "status": ""
+                    })
                     await websocket.send_json({
                         "type": "teaching_proposed",
                         "candidate": candidate,
@@ -1386,6 +1525,11 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
 
                 # Check if discovery is complete
                 if session_data.discovery_session.is_complete():
+                    # Clear status
+                    await websocket.send_json({
+                        "type": "status",
+                        "status": ""
+                    })
                     final_topic = session_data.discovery_session.get_final_topic()
 
                     # Validate final_topic before using it
@@ -1415,6 +1559,11 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
                     })
                     _maybe_checkpoint()
                 else:
+                    # Clear status before sending message
+                    await websocket.send_json({
+                        "type": "status",
+                        "status": ""  # Empty status clears it
+                    })
                     # Send regular message
                     await websocket.send_json({
                         "type": "message",

@@ -32,6 +32,13 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const { messages, sendMessage, sendCommand, isConnected, status, addMessage, setMessages } = useWebSocket(actualSessionId || '', 'discovery')
+  
+  // These must be after useWebSocket since they depend on messages
+  // Count assistant messages - need at least 2 (background prompt + response) before showing panels
+  const assistantMessageCount = messages.filter((msg) => msg.role === 'assistant').length
+  const userMessageCount = messages.filter((msg) => msg.role === 'user').length
+  // Show panels only after first exchange is complete (user sent background AND got response)
+  const shouldShowSidePanels = assistantMessageCount >= 2 || (assistantMessageCount >= 1 && userMessageCount >= 1 && !status)
   const { isAudioMode, isPlaying, toggleAudioMode, playAudio } = useAudio()
   const {
     isListening,
@@ -47,27 +54,32 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
     const messageText = text || inputText.trim()
     if (!messageText || !isConnected) return
 
-    // If we're awaiting background info, treat the first message specially
+    // If we're awaiting background info, this is the first real exchange
     if (awaitingBackground) {
       setAwaitingBackground(false)
-      // Save background info via API
+      
+      // Save background info via API for the user profile
       if (userId) {
         try {
           await api.updateOnboarding(userId, messageText)
-          console.log('[DiscoveryChat] Saved background info')
+          console.log('[DiscoveryChat] Saved background info to user profile')
         } catch (err) {
           console.error('[DiscoveryChat] Failed to save background info:', err)
         }
       }
-      // Notify parent component
+      
+      // Notify parent component so Feed/Profile panels appear
       if (onBackgroundCollected) {
         onBackgroundCollected(messageText)
       }
+      
+      // Note: Don't call addMessage here - sendMessage already adds the user message to UI
     }
 
+    // Send to backend via WebSocket (this saves to conversation history and adds to UI)
     sendMessage(messageText)
     setInputText('')
-  }, [inputText, isConnected, sendMessage, awaitingBackground, userId, onBackgroundCollected])
+  }, [inputText, isConnected, sendMessage, awaitingBackground, userId, onBackgroundCollected, addMessage])
 
   // Reset initRef when component unmounts to allow re-initialization on remount
   useEffect(() => {
@@ -110,13 +122,8 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
       // If resuming, load the conversation history
       if (response.is_resumed && response.conversation_history?.length > 0) {
         console.log('[DiscoveryChat] Resuming with', response.conversation_history.length, 'messages')
-        // Skip the first user message if it's the onboarding/background info
-        // (the AI's first response already incorporates this context)
-        let historyToRestore = response.conversation_history
-        if (historyToRestore.length > 0 && historyToRestore[0].role === 'user') {
-          historyToRestore = historyToRestore.slice(1)
-        }
-        const restoredMessages = historyToRestore.map((msg: any, idx: number) => ({
+        // Restore ALL messages - background is now part of the regular conversation
+        const restoredMessages = response.conversation_history.map((msg: any, idx: number) => ({
           id: `restored-${idx}`,
           role: msg.role as 'user' | 'assistant',
           content: msg.content,
@@ -368,8 +375,8 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
 
   return (
     <div className="discovery-with-feed">
-      {/* Feed Panel - only show after user provides background */}
-      {userId && onboardingInfo && (
+      {/* Feed Panel - show after first assistant message */}
+      {userId && onboardingInfo && shouldShowSidePanels && (
         <FeedPanel
           userId={userId}
           contextType="exploration"
@@ -424,6 +431,7 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
                 content={msg.content}
                 audioUrl={msg.audio_url}
                 isAudioMode={isAudioMode}
+                isUserRecording={isListening}
                 onAudioPlay={() => msg.audio_url && playAudio(msg.audio_url)}
               />
               {/* Show goal confirmation buttons for pending goal proposals */}
@@ -502,8 +510,8 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
         )}
       </div>
 
-        {/* Profile Panel - only show after user provides background */}
-        {onboardingInfo && (
+        {/* Profile Panel - show after first assistant message */}
+        {onboardingInfo && shouldShowSidePanels && (
           <ProfilePanel 
             sessionId={actualSessionId} 
             isConnected={isConnected} 

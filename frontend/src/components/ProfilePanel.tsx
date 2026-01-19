@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { api, TeachingSchema, UnderstandingMarker } from '../services/api'
+import { stripMarkdown } from '../utils/textUtils'
 
 interface ProfilePanelProps {
   sessionId: string | null
@@ -148,50 +149,69 @@ export default function ProfilePanel({ sessionId, isConnected, initialSummary, i
   }, [schema, sessionId, summary, lastSummaryTurn, isGeneratingSummary, isTeachingSession])
 
   // Auto-generate summary on first load and every 2 turns
+  // Delay first generation to let the main chat response complete first
   useEffect(() => {
     if (schema && !isTeachingSession) {
       const currentTurn = schema.interview_state?.turns_elapsed || 0
       // Generate if no summary OR if enough turns have passed
       if (!summary || currentTurn - lastSummaryTurn >= 2) {
-        generateSummary()
+        // Delay summary generation to prioritize chat response
+        const delay = !summary ? 3000 : 0  // 3s delay for first summary
+        const timer = setTimeout(() => generateSummary(), delay)
+        return () => clearTimeout(timer)
       }
     }
   }, [schema, isTeachingSession]) // Intentionally exclude summary and lastSummaryTurn to allow re-generation
 
   // Generate AI reasoning / inner monologue
   const generateReasoning = useCallback(async () => {
-    if (isTeachingSession || !schema || !sessionId || isGeneratingReasoning) return
+    if (isTeachingSession || !schema || !sessionId || isGeneratingReasoning) {
+      console.log('[Reasoning] Skipping - conditions not met:', { isTeachingSession, hasSchema: !!schema, sessionId, isGeneratingReasoning })
+      return
+    }
     
     const currentTurn = schema.interview_state?.turns_elapsed || 0
-    // Generate every turn (more frequent than summary)
-    if (aiReasoning && currentTurn === lastReasoningTurn) return
     
+    // Skip if we already have reasoning for this turn
+    if (aiReasoning && currentTurn === lastReasoningTurn) {
+      console.log('[Reasoning] Skipping - already have reasoning for turn', currentTurn)
+      return
+    }
+    
+    console.log('[Reasoning] Generating reasoning for turn', currentTurn)
     setIsGeneratingReasoning(true)
     try {
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
       const response = await fetch(`${apiUrl}/api/profile/reasoning`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ schema })
+        body: JSON.stringify({ schema, session_id: sessionId })
       })
       if (response.ok) {
         const data = await response.json()
+        console.log('[Reasoning] Received:', data.reasoning?.substring(0, 100))
         setAiReasoning(data.reasoning)
         setLastReasoningTurn(currentTurn)
+      } else {
+        console.error('[Reasoning] API error:', response.status)
       }
     } catch (err) {
-      console.error('Failed to generate reasoning:', err)
+      console.error('[Reasoning] Failed:', err)
     } finally {
       setIsGeneratingReasoning(false)
     }
   }, [schema, sessionId, aiReasoning, lastReasoningTurn, isGeneratingReasoning, isTeachingSession])
 
   // Auto-generate reasoning on schema change
+  // Delay first generation to let the main chat response complete first
   useEffect(() => {
     if (schema && !isTeachingSession) {
       const currentTurn = schema.interview_state?.turns_elapsed || 0
       if (!aiReasoning || currentTurn !== lastReasoningTurn) {
-        generateReasoning()
+        // Delay reasoning generation to prioritize chat response
+        const delay = !aiReasoning ? 4000 : 0  // 4s delay for first reasoning
+        const timer = setTimeout(() => generateReasoning(), delay)
+        return () => clearTimeout(timer)
       }
     }
   }, [schema, isTeachingSession]) // Intentionally minimal deps for re-generation
@@ -529,7 +549,7 @@ export default function ProfilePanel({ sessionId, isConnected, initialSummary, i
                 const readiness = getReadinessLabel(tc.readiness_score)
                 return (
                   <div key={idx} className="teaching-item">
-                    <p className="teaching-topic">{tc.topic}</p>
+                    <p className="teaching-topic">{stripMarkdown(tc.topic)}</p>
                     {tc.identified_gap && (
                       <p className="teaching-gap">Gap: {tc.identified_gap}</p>
                     )}

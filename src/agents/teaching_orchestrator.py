@@ -569,12 +569,25 @@ Return ONLY valid JSON."""
             temperature=0.5,
             max_tokens=500
         )
-        
+
         if result:
-            # Apply modifications (simplified - just record the feedback for now)
+            action = result.get('action', 'unknown')
+            reasoning = result.get('reasoning', 'User requested modification')
+
+            # Record the modification
             self.schema.curriculum_plan.adaptation_history.append(
-                f"User requested: {user_message[:100]}. Action: {result.get('action', 'unknown')}"
+                f"User requested: {user_message[:100]}. Action: {action}. {reasoning}"
             )
+
+            # Actually apply the modifications
+            if action != "no_change":
+                adaptation_for_apply = {
+                    "adaptation_type": action,
+                    "changes": result,
+                    "adaptation_note": reasoning
+                }
+                self._apply_curriculum_adaptation(adaptation_for_apply)
+                print(f"[TeachingOrchestrator] Applied {action} modification based on user feedback")
     
     def _process_teaching_phase(self, user_message: str) -> dict:
         """Process message during active teaching phase."""

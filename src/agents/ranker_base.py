@@ -515,9 +515,16 @@ Respond with ONLY the category name, nothing else."""
             prompt_template = self.prompt_loader.load_ranker_prompt("update_teaching_candidates", variant=self.get_prompt_variant())
 
             # Format with current schema context
+            # Include task_curriculum if it exists (for modification detection)
+            task_curriculum_str = "None (not yet proposed)"
+            if schema.task_curriculum and (schema.task_curriculum.proposed or len(schema.task_curriculum.tasks) > 0):
+                import json
+                task_curriculum_str = json.dumps(schema.task_curriculum.model_dump(), indent=2)
+            
             formatted_prompt = prompt_template.format(
                 teaching_candidates=[t.model_dump() for t in schema.teaching_candidates],
                 conversational_themes=[t.model_dump() for t in schema.conversational_themes],
+                task_curriculum=task_curriculum_str,
                 conversation=self._format_conversation(history),
                 user_goal=schema.interview_state.user_goal or "Not yet identified"
             )
@@ -550,16 +557,44 @@ Respond with ONLY the category name, nothing else."""
             if not isinstance(response, list):
                 response = []
             
-            # Update task_curriculum in schema if provided
+            # PHASE 3: Update task_curriculum with state preservation
+            # CRITICAL: Don't overwrite curriculum state once it's been set by orchestrator
             if task_curriculum_data and task_curriculum_data.get('tasks'):
                 from src.schema.full_schema import ProposedTask, TaskCurriculum
-                schema.task_curriculum = TaskCurriculum(
-                    proposed=task_curriculum_data.get('proposed', True),
-                    accepted=task_curriculum_data.get('accepted', False),
-                    tasks=[ProposedTask(**t) for t in task_curriculum_data.get('tasks', [])],
-                    modification_history=task_curriculum_data.get('modification_history', [])
-                )
-                print(f"[DEBUG] Updated schema.task_curriculum with {len(schema.task_curriculum.tasks)} tasks")
+
+                # If curriculum is already accepted, DON'T overwrite it
+                if schema.task_curriculum.accepted:
+                    print("[Ranker] Curriculum already accepted, preserving state")
+                    # Don't update task_curriculum at all
+
+                # If curriculum is proposed but not accepted, preserve proposal state
+                elif schema.task_curriculum.proposed and not schema.task_curriculum.accepted:
+                    print("[Ranker] Curriculum proposed, preserving proposal state")
+                    # Ranker CAN update tasks during modification flow, but must preserve proposed=True
+                    # This allows ranker to handle curriculum modifications
+                    new_tasks = [ProposedTask(**t) for t in task_curriculum_data.get('tasks', [])]
+                    modification_history = task_curriculum_data.get('modification_history', schema.task_curriculum.modification_history)
+
+                    schema.task_curriculum = TaskCurriculum(
+                        proposed=True,  # Preserve proposed state!
+                        accepted=False,  # Keep accepting state
+                        tasks=new_tasks,
+                        modification_history=modification_history
+                    )
+                    print(f"[Ranker] Updated curriculum tasks ({len(new_tasks)} tasks) while preserving proposed=True")
+
+                # Only update task_curriculum if it's NOT proposed yet
+                else:
+                    # Ranker can populate task_curriculum with candidates, but NOT set proposed=True
+                    # That's now the interviewer's job
+                    new_tasks = [ProposedTask(**t) for t in task_curriculum_data.get('tasks', [])]
+                    schema.task_curriculum = TaskCurriculum(
+                        proposed=False,  # DON'T set proposed=True - interviewer controls that
+                        accepted=False,
+                        tasks=new_tasks,
+                        modification_history=[]
+                    )
+                    print(f"[Ranker] Populated task_curriculum with {len(new_tasks)} candidate tasks (proposed=False)")
 
             sanitized: List[Dict[str, Any]] = []
             for c in response:

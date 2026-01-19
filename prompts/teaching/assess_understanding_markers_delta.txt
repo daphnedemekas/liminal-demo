@@ -8,6 +8,9 @@ CURRICULUM CONTEXT:
 - Current Step: {current_step}
 - Current Step Objective: {current_step_objective}
 
+SCOPE NOTE:
+- The overall_assessment must be scoped to this specific teaching topic and curriculum step, not the user's broader interests.
+
 RECENT CONVERSATION (last 4-6 messages):
 {conversation}
 
@@ -115,7 +118,7 @@ Return a delta update - only include markers that have new evidence:
       "notes": "Good probing question showing engagement"
     }}
   ],
-  "overall_assessment": "Brief 1-2 sentence summary of current understanding state",
+  "overall_assessment": "Brief 1-2 sentence summary of current understanding state for this topic and step",
   "concerning_gaps": ["List any worrying gaps that need attention"],
   "strengths": ["List demonstrated strengths"]
 }}

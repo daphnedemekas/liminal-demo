@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { stripMarkdown } from '../utils/textUtils'
 
 export type TaskStatus = 'locked' | 'available' | 'in_progress' | 'completed'
 
@@ -33,6 +34,9 @@ interface SidebarProps {
   isExplorationActive: boolean
   username?: string
   onLogout?: () => void
+  // Model selection
+  currentModel?: string
+  onModelChange?: (model: string) => void
 }
 
 export default function Sidebar({ 
@@ -46,7 +50,9 @@ export default function Sidebar({
   onNewExploration,
   isExplorationActive,
   username,
-  onLogout
+  onLogout,
+  currentModel = 'openai:gpt-4o',
+  onModelChange
 }: SidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [expandedGoals, setExpandedGoals] = useState<Set<string>>(new Set())
@@ -108,7 +114,7 @@ export default function Sidebar({
 
           {/* Goals Section */}
           <div className="sidebar-section">
-            <div className="sidebar-section-label">Learning Goals</div>
+            <div className="sidebar-section-label">Paths</div>
             <div className="sidebar-sessions">
               {goalSessions.length === 0 ? (
                 <div className="sidebar-empty">
@@ -160,7 +166,7 @@ export default function Sidebar({
                               className={`sidebar-teaching-item ${activeTeachingId === tc.id ? 'active' : ''} ${isLocked ? 'locked' : ''} ${isCompleted ? 'completed' : ''} ${isInProgress ? 'in-progress' : ''}`}
                               onClick={() => !isLocked && onSelectTeaching(session.id, tc.id)}
                               disabled={isLocked}
-                              title={isLocked ? 'Complete previous tasks to unlock' : tc.topic}
+                              title={isLocked ? 'Complete previous tasks to unlock' : stripMarkdown(tc.topic)}
                             >
                               <span className="sidebar-teaching-status">
                                 {isLocked && '🔒'}
@@ -168,7 +174,7 @@ export default function Sidebar({
                                 {isInProgress && '▶'}
                                 {tc.status === 'available' && `${idx + 1}`}
                               </span>
-                              <span className="sidebar-teaching-topic">{tc.topic}</span>
+                              <span className="sidebar-teaching-topic">{stripMarkdown(tc.topic)}</span>
                             </button>
                           )
                         })}
@@ -180,6 +186,23 @@ export default function Sidebar({
             </div>
           </div>
         </>
+      )}
+
+      {/* Model Selector */}
+      {!isCollapsed && onModelChange && (
+        <div className="sidebar-model-selector">
+          <select 
+            value={currentModel} 
+            onChange={(e) => onModelChange(e.target.value)}
+            className="model-dropdown"
+          >
+            <option value="openai:gpt-4o">GPT-4o</option>
+            <option value="openai:gpt-4o-mini">GPT-4o Mini</option>
+            <option value="anthropic:claude-sonnet-4-20250514">Claude Sonnet 4</option>
+            <option value="anthropic:claude-3-5-haiku-20241022">Claude Haiku 3.5</option>
+            <option value="cerebras:llama-3.3-70b">Llama 3.3 70B</option>
+          </select>
+        </div>
       )}
 
       {/* User Footer */}

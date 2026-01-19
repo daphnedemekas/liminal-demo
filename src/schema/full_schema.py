@@ -444,6 +444,7 @@ class InterviewState(BaseModel):
     # Teaching candidate tracking (Phase 2)
     teaching_candidate_identified: bool = False  # Has a teaching candidate been selected?
     rejected_teaching_ids: List[int] = Field(default_factory=list)  # Teaching candidates user rejected
+    transition_message_sent: bool = False  # Has the teaching transition message been sent?
 
 
 # ============================================================================
@@ -459,18 +460,18 @@ class Controller(BaseModel):
     branch_condition: str = "unclear"  # topic_mentioned, personal_shared, deflection, preference_signal, question_asked, unclear
     
     # Conversation mode selection for recognition-based patterns
+    # IMPORTANT: Each mode must have a corresponding prompt file in prompts/interviewer/{phase}/
     conversation_mode: Optional[Literal[
         "calibration",        # Early turns, forced-choice A/B questions
         "grounded_offer",     # Mid-game, offer content + reaction question
         "hypothesis_correct", # Stuck on fuzzy topic, guess + ask what's wrong
         "direct_probe",       # Standard question without grounding
-        # NEW: Assessment techniques for prior knowledge probing
+        # Assessment techniques for prior knowledge probing
         "topic_probe",        # Present a concept, ask what they think it means
         "explain_back",       # Ask user to walk through something
         "scenario_probe",     # Pose a practical situation, see how they reason
-        # NEW: Curriculum proposal modes
+        # Curriculum proposal mode
         "propose_tasks",      # Present batch of learning tasks with justifications
-        "propose_curriculum"  # Present step-by-step curriculum for a task
     ]] = None
     
     # Ambiguity targeting for intentional progress

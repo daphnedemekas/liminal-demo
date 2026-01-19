@@ -150,7 +150,11 @@ class TeachingCandidateRanker(RankerAgentBase):
         
         return False, f"Score {candidate.readiness_score:.2f} < {READINESS_THRESHOLD}"
 
-    def _check_teaching_readiness(self, schema: DiscoverySchema) -> Dict[str, Any]:
+    def _check_teaching_readiness(
+        self, 
+        schema: DiscoverySchema,
+        conversation_history: List[Dict[str, str]]
+    ) -> Dict[str, Any]:
         """
         Check if any teaching candidate is ready.
 
@@ -183,29 +187,28 @@ class TeachingCandidateRanker(RankerAgentBase):
 
             # Build recommendation
             pacing = schema.user_profile.pacing_preference.value or "exploratory"
-            focus_q = getattr(best, "focus_question", None) or None
             user_goal = schema.interview_state.user_goal if schema.interview_state else None
 
             print(f"[TEACHING_DISCOVERY] Ready! Teaching '{best.topic}'")
+            
+            # Generate a sophisticated transition message using LLM
+            first_move = self._generate_transition_message(
+                schema=schema,
+                conversation_history=conversation_history,
+                teaching_candidate=best,
+                user_goal=user_goal
+            )
 
             return {
                 "ready": True,
                 "target_topic_id": best.id,
                 "target_topic": best.topic,
-                "focus_question": focus_q,
+                "focus_question": first_move,  # Use the generated message
                 "angle": getattr(best, "angle", None),
-                "difficulty_calibration": (
-                    f"Entry point toward goal: {user_goal}" 
-                    if user_goal 
-                    else "Best first step toward your learning goal"
-                ),
+                "difficulty_calibration": f"Calibrated to user's {schema.prior_knowledge_assessment.assessed_level or 'intermediate'} level",
                 "format": "short explanation + check understanding",
                 "pacing": pacing,
-                "first_move": (
-                    f"This is a great starting point toward {user_goal}. {focus_q}"
-                    if (user_goal and focus_q)
-                    else f"This is the right first step. {focus_q if focus_q else 'Ready to dive in?'}"
-                )
+                "first_move": first_move
             }
 
         except Exception as e:
@@ -213,6 +216,84 @@ class TeachingCandidateRanker(RankerAgentBase):
             import traceback
             traceback.print_exc()
             return self._not_ready_recommendation()
+
+    def _generate_transition_message(
+        self,
+        schema: DiscoverySchema,
+        conversation_history: List[Dict[str, str]],
+        teaching_candidate: TeachingCandidate,
+        user_goal: str
+    ) -> str:
+        """
+        Generate a sophisticated, personalized transition message using LLM.
+        
+        This creates a natural bridge from the goal chat to the specific teaching
+        candidate, using all collected context about the user.
+        """
+        try:
+            # Gather context
+            prior_knowledge = schema.prior_knowledge_assessment
+            concepts_known = []
+            if prior_knowledge:
+                # Use granular concept_knowledge if available (has proficiency info)
+                if prior_knowledge.concept_knowledge:
+                    for ck in prior_knowledge.concept_knowledge[:5]:
+                        concepts_known.append(f"- {ck.concept} ({ck.proficiency})")
+                # Fall back to simple concepts_known strings
+                elif prior_knowledge.concepts_known:
+                    for concept in prior_knowledge.concepts_known[:5]:
+                        concepts_known.append(f"- {concept}")
+            
+            learning_style = []
+            if schema.user_profile:
+                if schema.user_profile.pacing_preference.value:
+                    learning_style.append(f"Pacing: {schema.user_profile.pacing_preference.value}")
+                if schema.user_profile.curiosity_type.value:
+                    learning_style.append(f"Curiosity: {schema.user_profile.curiosity_type.value}")
+            
+            # Get recent conversation for context
+            recent_exchange = ""
+            if conversation_history and len(conversation_history) >= 2:
+                last_user = next((m["content"] for m in reversed(conversation_history) if m["role"] == "user"), "")
+                recent_exchange = f"User's last message: {last_user[:300]}" if last_user else ""
+            
+            prompt = f"""You are a learning guide transitioning from exploration to focused teaching.
+
+CONTEXT:
+- User's goal: {user_goal or "General learning"}
+- Teaching topic: {teaching_candidate.topic}
+- User's knowledge level: {prior_knowledge.assessed_level if prior_knowledge else "intermediate"}
+- Why this topic matters: {teaching_candidate.stakes_summary or teaching_candidate.identified_gap or "Key building block for their goal"}
+{f"- Concepts they know: {chr(10).join(concepts_known)}" if concepts_known else ""}
+{f"- Learning preferences: {', '.join(learning_style)}" if learning_style else ""}
+{recent_exchange}
+
+TASK: Write a short, natural transition (2-3 sentences) that:
+1. Acknowledges what they shared and connects it to the teaching topic
+2. Frames WHY this specific topic is a good starting point for THEM
+3. Ends with an engaging question that invites them to explore deeper
+
+STYLE:
+- Conversational and warm, not formal
+- Specific to their interests, not generic
+- Shows you understood their background
+- NO templated phrases like "Great starting point" or "Let's explore"
+- NO flattery or over-enthusiasm
+
+Write the transition:"""
+
+            response = self.llm.chat(
+                messages=[{"role": "user", "content": prompt}],
+                model=self.model_override or "openai:gpt-4o"
+            )
+            
+            print(f"[TRANSITION] Generated personalized transition message")
+            return response.strip()
+            
+        except Exception as e:
+            print(f"[ERROR] Failed to generate transition message: {e}")
+            # Fallback to a simple but natural message
+            return f"Based on what you've shared, {teaching_candidate.topic} seems like a natural place to start. What aspects of this are you most curious about?"
 
     def _update_prior_knowledge_assessment(
         self,
@@ -498,10 +579,21 @@ class TeachingCandidateRanker(RankerAgentBase):
         # ===== PHASE 2: Teaching candidates (GATED on assessment confidence) =====
         # Only discover teaching candidates when we've assessed the user's level
         assessment_confidence = temp_schema.prior_knowledge_assessment.confidence
-        ASSESSMENT_THRESHOLD = 0.6  # Need at least 60% confidence before proposing tasks
-        
-        if assessment_confidence >= ASSESSMENT_THRESHOLD:
-            print(f"[TIMING] Phase 2: teaching candidates (assessment confidence {assessment_confidence:.2f} >= {ASSESSMENT_THRESHOLD})")
+        ASSESSMENT_THRESHOLD = 0.5  # Sweet spot: not too conservative, not too aggressive
+        turns_elapsed = current_schema.interview_state.turns_elapsed + 1
+        TURN_LIMIT = 8  # Safety valve: if taking too long, propose anyway
+
+        # Propose if we have enough confidence OR assessment is taking too long
+        should_assess = (
+            assessment_confidence >= ASSESSMENT_THRESHOLD or
+            (temp_schema.interview_state.goal_identified and turns_elapsed >= TURN_LIMIT)
+        )
+
+        if should_assess:
+            if turns_elapsed >= TURN_LIMIT and assessment_confidence < ASSESSMENT_THRESHOLD:
+                print(f"[ASSESSMENT] Turn limit reached ({turns_elapsed} >= {TURN_LIMIT}), proposing despite low confidence ({assessment_confidence:.2f})")
+            else:
+                print(f"[TIMING] Phase 2: teaching candidates (assessment confidence {assessment_confidence:.2f} >= {ASSESSMENT_THRESHOLD})")
             phase2_start = time.time()
 
             teaching_updates = self._update_teaching_candidates(
@@ -516,7 +608,7 @@ class TeachingCandidateRanker(RankerAgentBase):
             
             print(f"[TIMING] Phase 2 completed: {time.time() - phase2_start:.2f}s")
         else:
-            print(f"[ASSESSMENT] Skipping Phase 2 - assessment confidence {assessment_confidence:.2f} < {ASSESSMENT_THRESHOLD}")
+            print(f"[ASSESSMENT] Skipping Phase 2 - assessment confidence {assessment_confidence:.2f} < {ASSESSMENT_THRESHOLD} and turns {turns_elapsed} < {TURN_LIMIT}")
             print(f"[ASSESSMENT] Still gathering prior knowledge. Techniques used: {temp_schema.prior_knowledge_assessment.techniques_used}")
             # Keep existing teaching candidates (don't wipe them)
             temp_schema.teaching_candidates = current_schema.teaching_candidates
@@ -530,7 +622,7 @@ class TeachingCandidateRanker(RankerAgentBase):
 
         def _teaching_rec_task() -> Dict[str, Any]:
             # Check teaching readiness (no minimum turn requirement)
-            return self._check_teaching_readiness(temp_schema)
+            return self._check_teaching_readiness(temp_schema, conversation_history)
 
         with ThreadPoolExecutor(max_workers=2) as executor:
             future_controller = executor.submit(self._generate_controller, temp_schema, branch_condition)
@@ -543,7 +635,46 @@ class TeachingCandidateRanker(RankerAgentBase):
 
         # Build final schema
         final_schema = temp_schema.model_copy(deep=True)
-        final_schema.controller = Controller(**controller_dict)
+
+        # DETERMINISTIC FIX: Force propose_tasks mode when conditions are met
+        # Don't rely on LLM to follow the decision tree - make it deterministic
+        assessment_conf = temp_schema.prior_knowledge_assessment.confidence
+        turns_elapsed = current_schema.interview_state.turns_elapsed + 1
+        has_candidates = len(temp_schema.teaching_candidates) > 0
+        already_proposed = temp_schema.task_curriculum.proposed
+
+        should_propose = (
+            not already_proposed and
+            has_candidates and
+            (assessment_conf >= 0.5 or turns_elapsed >= 8)
+        )
+
+        if should_propose:
+            print(f"[CONTROLLER OVERRIDE] Forcing propose_tasks mode (confidence={assessment_conf:.2f}, turns={turns_elapsed}, candidates={len(temp_schema.teaching_candidates)})")
+            controller_dict["conversation_mode"] = "propose_tasks"
+            controller_dict["next_action"] = "propose_task_curriculum"
+            controller_dict["question_intent"] = "present_learning_path"
+            controller_dict["focus_instruction"] = f"Based on assessment, propose {len(temp_schema.teaching_candidates)} learning tasks with personalized justifications. Include Accept/Modify options."
+
+        # INFRASTRUCTURE FIX: Handle invalid conversation_mode gracefully
+        try:
+            final_schema.controller = Controller(**controller_dict)
+        except Exception as e:
+            print(f"[CONTROLLER ERROR] Failed to create Controller: {e}")
+
+            # If conversation_mode is invalid, try fallback to direct_probe
+            if "conversation_mode" in str(e):
+                invalid_mode = controller_dict.get("conversation_mode")
+                print(f"[CONTROLLER ERROR] Invalid conversation_mode: '{invalid_mode}'")
+                print(f"[CONTROLLER ERROR] Falling back to 'direct_probe'")
+
+                # Create fallback controller with safe mode
+                controller_dict["conversation_mode"] = "direct_probe"
+                final_schema.controller = Controller(**controller_dict)
+            else:
+                # Other validation error - re-raise
+                raise
+
         final_schema.teaching_recommendation = TeachingRecommendation(**teaching_rec_dict)
 
         # Update interview state

@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import ReactMarkdown from 'react-markdown'
 
 interface MessageBubbleProps {
@@ -6,6 +6,7 @@ interface MessageBubbleProps {
   content: string
   audioUrl?: string
   isAudioMode?: boolean
+  isUserRecording?: boolean  // Don't auto-play while user is recording
   onAudioPlay?: () => void
 }
 
@@ -24,14 +25,42 @@ export default function MessageBubble({
   content,
   audioUrl,
   isAudioMode,
+  isUserRecording,
   onAudioPlay,
 }: MessageBubbleProps) {
-  // Auto-play audio if in audio mode
+  // Track if we've already played audio for this message to prevent loops
+  const hasPlayedAudioRef = useRef(false)
+  // Track the previous audio URL to detect NEW audio arriving
+  const prevAudioUrlRef = useRef<string | undefined>(undefined)
+  
+  // Auto-play audio ONLY when:
+  // 1. Audio mode is on
+  // 2. This is a NEW audio URL (just arrived), not an existing one
+  // 3. User is not recording
+  // 4. Haven't already played it
   useEffect(() => {
-    if (isAudioMode && audioUrl && role === 'assistant' && onAudioPlay) {
+    // Don't auto-play while user is actively recording
+    if (isUserRecording) {
+      return
+    }
+    
+    // Check if this is a NEW audio URL arriving (not one that existed before)
+    const isNewAudio = audioUrl && audioUrl !== prevAudioUrlRef.current
+    prevAudioUrlRef.current = audioUrl
+    
+    // Only auto-play if:
+    // - Audio mode is on
+    // - This is an assistant message
+    // - Audio URL is new (just arrived)
+    // - We haven't played it yet
+    // - Audio mode was ALREADY on before this audio arrived (or was on when component mounted)
+    if (isAudioMode && audioUrl && role === 'assistant' && isNewAudio && !hasPlayedAudioRef.current && onAudioPlay) {
+      // Small delay to ensure we're not interrupting anything
+      console.log('[MessageBubble] New audio arrived, playing...')
+      hasPlayedAudioRef.current = true
       onAudioPlay()
     }
-  }, [isAudioMode, audioUrl, role, onAudioPlay])
+  }, [isAudioMode, isUserRecording, audioUrl, role, onAudioPlay])
 
   // Strip quotes from assistant messages
   const displayContent = useMemo(() => {

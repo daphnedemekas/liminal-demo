@@ -2,13 +2,13 @@ import { useState, useCallback, useEffect } from 'react'
 import DiscoveryChat from './components/DiscoveryChat'
 import GoalChat from './components/GoalChat'
 import TeachingChat from './components/TeachingChat'
-import ModelSelector, { ModelConfig } from './components/ModelSelector'
+import { ModelConfig } from './components/ModelSelector'
 import LoginScreen from './components/LoginScreen'
 import TrajectoryPanel from './components/TrajectoryPanel'
 import Sidebar, { GoalSession, TeachingCandidate } from './components/Sidebar'
 import { api, GoalData } from './services/api'
 
-type Phase = 'login' | 'config' | 'discovery'
+type Phase = 'login' | 'discovery'
 type MainView = 'trajectory' | 'exploration' | 'goal' | 'teaching'
 
 interface User {
@@ -19,10 +19,17 @@ interface User {
 function App() {
   const [phase, setPhase] = useState<Phase>('login')
   const [onboardingInfo, setOnboardingInfo] = useState<string>('')
-  const [modelConfig, setModelConfig] = useState<ModelConfig>({
-    interviewer: 'openai:gpt-4o',
-    ranker: 'openai:gpt-4o',
-  })
+  const [currentModel, setCurrentModel] = useState<string>('openai:gpt-4o')
+  
+  // Derive modelConfig from single model selection (both interviewer and ranker use same model)
+  const modelConfig: ModelConfig = {
+    interviewer: currentModel,
+    ranker: currentModel,
+  }
+  
+  const handleModelChange = (model: string) => {
+    setCurrentModel(model)
+  }
 
   // User state
   const [user, setUser] = useState<User | null>(null)
@@ -73,31 +80,24 @@ function App() {
     }
   }, [])
 
-  // Handle login
+  // Handle login - go directly to discovery (skip model selection)
   const handleLogin = useCallback(async (userId: string, username: string, isNewUser: boolean, savedOnboardingInfo?: string) => {
     setUser({ id: userId, username })
     
-    if (isNewUser) {
-      setPhase('config')
-    } else {
+    if (!isNewUser) {
       await loadUserData(userId)
       if (savedOnboardingInfo) {
         setOnboardingInfo(savedOnboardingInfo)
-        setPhase('discovery')
-      } else {
-        setPhase('config')
       }
     }
-  }, [loadUserData])
-
-  const handleModelSelect = (config: ModelConfig) => {
-    setModelConfig(config)
-    // Go directly to discovery - background info will be collected in the first chat message
+    
+    // Always go directly to discovery
     setActiveGoalSessionId(null)
     setActiveTeachingId(null)
     setActiveMainView('exploration')
     setPhase('discovery')
-  }
+  }, [loadUserData])
+
 
   // Handle when a goal is accepted in discovery chat
   const handleGoalAccepted = useCallback(async (goal: string, discoverySessionId: string) => {
@@ -235,24 +235,6 @@ function App() {
         <LoginScreen onLogin={handleLogin} />
       )}
 
-      {phase === 'config' && (
-        <div className="config-screen">
-          <div className="config-header">
-            {user && (
-              <div className="user-info">
-                <span className="user-greeting">Welcome, {user.username}!</span>
-                <button className="logout-btn" onClick={handleLogout}>Logout</button>
-              </div>
-            )}
-          </div>
-          <h1>Liminal Discovery</h1>
-          <p>Choose your AI models to begin</p>
-          <ModelSelector
-            onModelSelect={handleModelSelect}
-            initialConfig={modelConfig}
-          />
-        </div>
-      )}
 
       {showSidebar && (
         <div className="app-with-sidebar">
@@ -268,6 +250,8 @@ function App() {
             isExplorationActive={isViewingExploration}
             username={user?.username}
             onLogout={handleLogout}
+            currentModel={currentModel}
+            onModelChange={handleModelChange}
           />
           
           <div className="main-content">

@@ -99,9 +99,9 @@ Track evidence in prior_knowledge_assessment schema:
 - Update assessed_level, concepts_known, concepts_unclear
 - Set confidence based on accumulated evidence
 
-**PHASE 1: ASSESSMENT (Turns 1-3, until confidence > 0.7)**
+**PHASE 1: ASSESSMENT (Turns 1-5, until confidence > 0.5)**
 
-1) IF assessment_confidence < 0.7 AND turns <= 3:
+1) IF assessment_confidence < 0.5 AND turns <= 5:
    - next_action: "assess_prior_knowledge"
    - question_intent: "probe_understanding"
    - target_ambiguity: "T2_model"
@@ -109,9 +109,9 @@ Track evidence in prior_knowledge_assessment schema:
      (rotate through them, don't repeat same technique twice in a row)
    - focus_instruction: "Use [chosen_technique] to understand their level. For the user's goal, try: [specific example question]"
 
-**PHASE 2: TASK CURRICULUM PROPOSAL (When assessment_confidence >= 0.7)**
+**PHASE 2: TASK CURRICULUM PROPOSAL (When assessment_confidence >= 0.5 OR turns >= 8)**
 
-2) IF assessment_confidence >= 0.7 AND NOT task_curriculum.proposed:
+2) IF (assessment_confidence >= 0.5 OR turns_elapsed >= 8) AND NOT task_curriculum.proposed:
    - next_action: "propose_task_curriculum"
    - question_intent: "present_learning_path"
    - target_ambiguity: null
@@ -175,9 +175,9 @@ Conversation mode is defined by the decision tree above. Do not override it sepa
     "Alternative question 2"
   ],
   "branch_condition": "topic_mentioned" | "personal_shared" | "deflection" | "preference_signal" | "question_asked" | "task_accepted" | "task_modified" | "unclear",
-  "conversation_mode": "topic_probe" | "explain_back" | "scenario_probe" | "calibration" | "propose_tasks" | "grounded_offer" | "direct_probe" | null,
+  "conversation_mode": "topic_probe" | "explain_back" | "scenario_probe" | "calibration" | "propose_tasks" | "grounded_offer" | "direct_probe" | "hypothesis_correct" | null,
   "target_ambiguity": "T2_model" | "T3_gap" | null,
-  "assessment_technique": "topic_probe" | "explain_back" | "scenario_probe" | "recognition" | "connection" | "calibration" | null,
+  "assessment_technique": "topic_probe" | "explain_back" | "scenario_probe" | "calibration" | null,
   "assessment_confidence": 0.0-1.0
 }}
 
@@ -185,5 +185,7 @@ Conversation mode is defined by the decision tree above. Do not override it sepa
 - focus_instruction must be STRATEGIC: Tell the Interviewer WHAT information to get, don't just write the question.
 - Explicitly reference schema elements (e.g., "Probe the gap in Candidate #2").
 - Do NOT output "next_question" anymore.
+- **conversation_mode MUST be one of these EXACT values**: "topic_probe", "explain_back", "scenario_probe", "calibration", "propose_tasks", "grounded_offer", "direct_probe", "hypothesis_correct", or null
+- **DO NOT invent new conversation_mode values** - if unsure, use "direct_probe"
 
 IMPORTANT: Return ONLY valid JSON - no explanatory text before or after. Do not wrap in markdown code blocks.

@@ -1381,8 +1381,35 @@ body {
   font-size: 16px;
 }
 
+/* Model Selector in Sidebar */
+.sidebar-model-selector {
+  padding: 12px 16px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.model-dropdown {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.model-dropdown:hover {
+  border-color: #94a3b8;
+  background: #f1f5f9;
+}
+
+.model-dropdown:focus {
+  outline: none;
+  border-color: #64748b;
+}
+
 .sidebar-footer {
-  margin-top: auto;
   padding: 16px;
   border-top: 1px solid #e2e8f0;
   display: flex;

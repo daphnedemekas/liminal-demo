@@ -36,6 +36,7 @@ interface SpeechRecognition extends EventTarget {
   onresult: ((event: SpeechRecognitionEvent) => void) | null
   onerror: ((event: Event) => void) | null
   onend: (() => void) | null
+  onstart: (() => void) | null
 }
 
 declare global {
@@ -92,6 +93,12 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
       if (silenceTimerRef.current) {
         clearTimeout(silenceTimerRef.current)
       }
+    }
+
+    // Use onstart to accurately track when recognition is active
+    recognition.onstart = () => {
+      console.log('[SpeechRecognition] Recognition started - ready to listen')
+      setIsListening(true)
     }
 
     recognitionRef.current = recognition

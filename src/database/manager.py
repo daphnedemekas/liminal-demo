@@ -25,8 +25,12 @@ class DatabaseManager:
         """
         Initialize database manager.
 
+        Priority:
+        1. DATABASE_URL (Postgres) - Used in production (Railway, etc.)
+        2. db_path (SQLite) - Used for local development only
+
         Args:
-            db_path: Path to SQLite database file (used if database_url is not provided)
+            db_path: Path to SQLite database file (only used if DATABASE_URL is not set)
             database_url: PostgreSQL connection URL (e.g., from Railway DATABASE_URL env var)
         """
         # Check for DATABASE_URL environment variable first (Railway Postgres)
@@ -42,10 +46,11 @@ class DatabaseManager:
             print(f"[Database] Using PostgreSQL connection from DATABASE_URL")
             self.engine = create_engine(database_url, echo=False, pool_pre_ping=True)
         else:
-            # SQLite fallback for local development
+            # SQLite fallback for local development only
+            # Note: In production (Railway), use Postgres via DATABASE_URL instead
             # Ensure data directory exists
             Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-            print(f"[Database] Using SQLite database at {db_path}")
+            print(f"[Database] Using SQLite database at {db_path} (local development only)")
             self.engine = create_engine(f'sqlite:///{db_path}', echo=False)
         
         # Create all tables

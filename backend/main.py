@@ -58,9 +58,11 @@ from src.database.manager import DatabaseManager
 from pydantic import BaseModel, Field
 from typing import Optional, List, Union
 
-# Initialize database - use DATABASE_URL for Postgres (Railway), or DATABASE_PATH for SQLite
-database_url = os.getenv("DATABASE_URL")  # Railway Postgres connection string
-db_path = os.getenv("DATABASE_PATH", "data/liminal.db")  # SQLite fallback
+# Initialize database
+# Priority: DATABASE_URL (Postgres in production) → SQLite fallback (local dev only)
+# Note: DATABASE_PATH is NOT needed when using Postgres - only for local SQLite development
+database_url = os.getenv("DATABASE_URL")  # Railway Postgres connection string (production)
+db_path = os.getenv("DATABASE_PATH", "data/liminal.db")  # SQLite fallback (local dev only)
 db = DatabaseManager(db_path=db_path, database_url=database_url)
 
 class LoginRequest(BaseModel):

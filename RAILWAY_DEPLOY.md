@@ -13,7 +13,8 @@ Set these in Railway dashboard:
 - `ELEVENLABS_API_KEY` - For text-to-speech features (optional)
 - `PORT` - Railway sets this automatically, don't override
 - `DATABASE_URL` - PostgreSQL connection string (automatically set when using Railway Postgres service)
-- `DATABASE_PATH` - SQLite database file path (default: `data/liminal.db`, only used if DATABASE_URL is not set)
+  - **You do NOT need to set this manually** - Railway sets it automatically when you add a Postgres service
+  - **You do NOT need DATABASE_PATH** when using Postgres - that's only for SQLite (local development)
 - `LIMINAL_CONFIG_PATH` - Override config.yaml path (optional)
 
 ### Frontend (if deploying separately)
@@ -44,7 +45,12 @@ Railway provides persistent storage, so data will persist across deployments.
 - All user profiles, sessions, and learning data are stored in this SQLite database
 - **Note**: If you're using SQLite and redeploy, make sure your filesystem is persistent
 
-**Priority**: The app checks for `DATABASE_URL` first (Postgres), then falls back to `DATABASE_PATH` (SQLite).
+**Priority**: The app checks for `DATABASE_URL` first (Postgres), then falls back to SQLite for local development only.
+
+**Important**: 
+- In production (Railway with Postgres): Only `DATABASE_URL` is needed (set automatically by Railway)
+- For local development: You can use SQLite by not setting `DATABASE_URL`, and optionally set `DATABASE_PATH` to customize the SQLite file location
+- **Do NOT set DATABASE_PATH in Railway** when using Postgres - it's not needed and will be ignored
 
 ## Deployment Steps
 

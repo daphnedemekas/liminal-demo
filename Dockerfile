@@ -23,12 +23,12 @@ WORKDIR /app/frontend
 RUN npm install
 RUN npm run build
 
-# Return to app root
-WORKDIR /app
+# Set working directory to backend for execution
+WORKDIR /app/backend
 
 # Expose port (Railway will set PORT env var)
 ENV PORT=8000
 EXPOSE 8000
 
 # Start the backend
-CMD ["sh", "-c", "cd backend && python main.py"]
+CMD ["python", "main.py"]

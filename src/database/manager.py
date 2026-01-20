@@ -44,7 +44,19 @@ class DatabaseManager:
                 database_url = database_url.replace("postgres://", "postgresql://", 1)
             
             print(f"[Database] Using PostgreSQL connection from DATABASE_URL")
-            self.engine = create_engine(database_url, echo=False, pool_pre_ping=True)
+            try:
+                self.engine = create_engine(database_url, echo=False, pool_pre_ping=True)
+                # Test connection immediately
+                from sqlalchemy import text
+                with self.engine.connect() as conn:
+                    conn.execute(text("SELECT 1"))
+                print(f"[Database] PostgreSQL connection successful")
+            except Exception as e:
+                print(f"[Database] ERROR: Failed to connect to PostgreSQL: {e}")
+                print(f"[Database] Falling back to SQLite...")
+                # Fall back to SQLite if Postgres connection fails
+                Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+                self.engine = create_engine(f'sqlite:///{db_path}', echo=False)
         else:
             # SQLite fallback for local development only
             # Note: In production (Railway), use Postgres via DATABASE_URL instead
@@ -54,7 +66,13 @@ class DatabaseManager:
             self.engine = create_engine(f'sqlite:///{db_path}', echo=False)
         
         # Create all tables
-        Base.metadata.create_all(self.engine)
+        try:
+            Base.metadata.create_all(self.engine)
+            print(f"[Database] Tables created/verified successfully")
+        except Exception as e:
+            print(f"[Database] ERROR: Failed to create tables: {e}")
+            raise
+        
         self.SessionLocal = sessionmaker(bind=self.engine, autoflush=False, autocommit=False)
 
     # ============================================

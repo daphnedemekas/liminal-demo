@@ -90,6 +90,7 @@ export default function TrajectoryPanel({ userId }: TrajectoryPanelProps) {
   }, [userId])
 
   // Fetch curriculum for each goal to show progress
+  // @ts-ignore - unused for now, may be needed later
   const _fetchGoalCurriculums = useCallback(async (goalIds: number[]) => {
     const curriculums: Record<number, any> = {}
     await Promise.all(
@@ -287,6 +288,7 @@ export default function TrajectoryPanel({ userId }: TrajectoryPanelProps) {
 
 function GoalsCardView({ goals, userData, userId, onGoalClick }: any) {
   const [curriculums, setCurriculums] = useState<Record<number, any>>({})
+  // @ts-ignore - unused for now, may be needed later
   const [_loadingCurriculums, setLoadingCurriculums] = useState(false)
 
   useEffect(() => {

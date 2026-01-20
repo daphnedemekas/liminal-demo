@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 
 export interface Message {
   id: string
@@ -39,7 +39,7 @@ interface UseWebSocketReturn {
   sendMessage: (content: string) => void
   sendCommand: (command: string) => void  // Send without showing in UI
   addMessage: (message: Message) => void
-  setMessages: (messages: Message[]) => void  // For restoring history
+  setMessages: React.Dispatch<React.SetStateAction<Message[]>>  // For restoring history - supports both direct value and updater function
   isConnected: boolean
   status: string | null
 }

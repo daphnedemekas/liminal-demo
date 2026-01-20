@@ -65,7 +65,10 @@ class TeachingOrchestrator:
         """
         self.llm = LLMClient()
         self.model_config = model_config or {}
-        self.db = DatabaseManager(db_path)
+        # Support both DATABASE_URL (Postgres) and db_path (SQLite)
+        import os
+        database_url = os.getenv("DATABASE_URL")
+        self.db = DatabaseManager(db_path=db_path, database_url=database_url)
         
         self.user_id = user_id
         self.goal_id = goal_id

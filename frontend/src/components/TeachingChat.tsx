@@ -7,6 +7,7 @@ import FeedPanel from './FeedPanel'
 import AudioToggle from './AudioToggle'
 import BreathingCircle from './BreathingCircle'
 import { stripMarkdown } from '../utils/textUtils'
+import { getApiBaseUrl } from '../config'
 
 interface TeachingCandidate {
   id: number
@@ -40,10 +41,12 @@ interface CurriculumProgress {
   completed_steps: number
 }
 
-// Use API URL for WebSocket, converting http to ws
-const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-const WS_URL = apiUrl.replace('http://', 'ws://').replace('https://', 'wss://')
-const API_URL = apiUrl
+// Helper to get API URL dynamically (for runtime, not module load time)
+const getApiUrl = () => getApiBaseUrl()
+const getWsUrl = () => {
+  const apiUrl = getApiBaseUrl()
+  return apiUrl.replace('http://', 'ws://').replace('https://', 'wss://')
+}
 
 export default function TeachingChat({ 
   candidate, 
@@ -87,7 +90,7 @@ export default function TeachingChat({
       setStatus('Initializing teaching session...')
       
       try {
-        const response = await fetch(`${API_URL}/api/teaching/start`, {
+        const response = await fetch(`${getApiUrl()}/api/teaching/start`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -183,7 +186,7 @@ export default function TeachingChat({
     }
 
     console.log(`[TeachingChat] Connecting WebSocket for session ${sid.slice(0, 8)}...`)
-    const ws = new WebSocket(`${WS_URL}/ws/teaching/${sid}`)
+    const ws = new WebSocket(`${getWsUrl()}/ws/teaching/${sid}`)
 
     ws.onopen = () => {
       console.log('[TeachingChat] WebSocket connected')

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { api, TeachingSchema, UnderstandingMarker } from '../services/api'
 import { stripMarkdown } from '../utils/textUtils'
+import { getApiBaseUrl } from '../config'
 
 interface ProfilePanelProps {
   sessionId: string | null
@@ -127,7 +128,7 @@ export default function ProfilePanel({ sessionId, isConnected, initialSummary, i
     
     setIsGeneratingSummary(true)
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const apiUrl = getApiBaseUrl()
       const response = await fetch(`${apiUrl}/api/profile/summary`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -183,7 +184,7 @@ export default function ProfilePanel({ sessionId, isConnected, initialSummary, i
     console.log('[Reasoning] Generating reasoning for turn', currentTurn)
     setIsGeneratingReasoning(true)
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const apiUrl = getApiBaseUrl()
       const response = await fetch(`${apiUrl}/api/profile/reasoning`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

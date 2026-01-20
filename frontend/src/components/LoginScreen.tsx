@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { getApiBaseUrl } from '../config'
 
 interface LoginScreenProps {
   onLogin: (userId: string, username: string, isNewUser: boolean, onboardingInfo?: string) => void
@@ -21,7 +22,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
     setError(null)
 
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const apiUrl = getApiBaseUrl()
       const response = await fetch(`${apiUrl}/api/auth/login`, {
         method: 'POST',
         headers: {

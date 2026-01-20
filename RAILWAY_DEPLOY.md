@@ -12,13 +12,28 @@ Set these in Railway dashboard:
 ### Optional
 - `ELEVENLABS_API_KEY` - For text-to-speech features (optional)
 - `PORT` - Railway sets this automatically, don't override
-- `DATABASE_PATH` - Database file path (default: `data/liminal.db`)
+- `DATABASE_URL` - PostgreSQL connection string (automatically set when using Railway Postgres service)
+- `DATABASE_PATH` - SQLite database file path (default: `data/liminal.db`, only used if DATABASE_URL is not set)
 - `LIMINAL_CONFIG_PATH` - Override config.yaml path (optional)
 
 ### Frontend (if deploying separately)
 - `VITE_API_URL` - Backend API URL (e.g., `https://your-backend.railway.app`)
 
 ## Database
+
+### Option 1: PostgreSQL (Recommended for Production)
+
+1. **Add Postgres Service**: In Railway dashboard, click "New" → "Database" → "Add PostgreSQL"
+2. **Connect to Backend**: Railway automatically sets `DATABASE_URL` environment variable
+3. **Tables Created Automatically**: The app will create all tables on first run using SQLAlchemy
+
+**Benefits:**
+- Data persists across deployments (not tied to filesystem)
+- Better performance and scalability
+- Supports concurrent connections
+- Automatic backups via Railway
+
+### Option 2: SQLite (Development/Simple Deployments)
 
 SQLite database will be created automatically at `data/liminal.db`. 
 Railway provides persistent storage, so data will persist across deployments.
@@ -27,7 +42,9 @@ Railway provides persistent storage, so data will persist across deployments.
 - Railway's filesystem is persistent by default - your `data/` directory will survive redeployments
 - The database path is configurable via `DATABASE_PATH` environment variable (default: `data/liminal.db`)
 - All user profiles, sessions, and learning data are stored in this SQLite database
-- **No additional configuration needed** - Railway automatically persists the filesystem
+- **Note**: If you're using SQLite and redeploy, make sure your filesystem is persistent
+
+**Priority**: The app checks for `DATABASE_URL` first (Postgres), then falls back to `DATABASE_PATH` (SQLite).
 
 ## Deployment Steps
 

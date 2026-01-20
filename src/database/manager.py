@@ -4,6 +4,7 @@ from sqlalchemy.orm import sessionmaker, Session
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 import json
+import os
 
 from .models import (
     Base,
@@ -20,17 +21,34 @@ from .models import (
 class DatabaseManager:
     """Manages database operations for user profiles, sessions, and signals."""
 
-    def __init__(self, db_path: str = "data/liminal.db"):
+    def __init__(self, db_path: str = "data/liminal.db", database_url: Optional[str] = None):
         """
         Initialize database manager.
 
         Args:
-            db_path: Path to SQLite database file
+            db_path: Path to SQLite database file (used if database_url is not provided)
+            database_url: PostgreSQL connection URL (e.g., from Railway DATABASE_URL env var)
         """
-        # Ensure data directory exists
-        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-
-        self.engine = create_engine(f'sqlite:///{db_path}', echo=False)
+        # Check for DATABASE_URL environment variable first (Railway Postgres)
+        database_url = database_url or os.getenv("DATABASE_URL")
+        
+        if database_url:
+            # PostgreSQL connection (Railway or other Postgres provider)
+            # Railway provides DATABASE_URL in format: postgres://user:password@host:port/dbname
+            # SQLAlchemy needs postgresql:// (not postgres://) for newer versions
+            if database_url.startswith("postgres://"):
+                database_url = database_url.replace("postgres://", "postgresql://", 1)
+            
+            print(f"[Database] Using PostgreSQL connection from DATABASE_URL")
+            self.engine = create_engine(database_url, echo=False, pool_pre_ping=True)
+        else:
+            # SQLite fallback for local development
+            # Ensure data directory exists
+            Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+            print(f"[Database] Using SQLite database at {db_path}")
+            self.engine = create_engine(f'sqlite:///{db_path}', echo=False)
+        
+        # Create all tables
         Base.metadata.create_all(self.engine)
         self.SessionLocal = sessionmaker(bind=self.engine, autoflush=False, autocommit=False)
 

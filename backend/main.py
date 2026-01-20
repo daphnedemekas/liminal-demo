@@ -46,11 +46,8 @@ app.add_middleware(
 audio_service = get_audio_service()
 app.mount("/audio", StaticFiles(directory=str(audio_service.audio_dir)), name="audio")
 
-
-@app.get("/")
-def read_root():
-    """Root endpoint."""
-    return {"message": "Liminal Discovery API", "version": "1.0.0"}
+# Store frontend path for later (will be mounted after all API routes)
+frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
 
 
 # ============================================
@@ -1913,6 +1910,41 @@ async def get_discovery_schema(session_id: str):
     # Get schema from discovery session
     schema = session_data.discovery_session.get_schema()
     return schema
+
+
+# ============================================
+# Frontend Static File Serving (must be last)
+# ============================================
+
+# Serve frontend static files (if built)
+if frontend_dist.exists():
+    # Serve static assets (JS, CSS, etc.)
+    assets_dir = frontend_dist / "assets"
+    if assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
+    
+    # Serve the frontend HTML for all non-API routes (SPA routing)
+    @app.get("/{full_path:path}")
+    async def serve_frontend(full_path: str):
+        """Serve frontend for all non-API routes."""
+        # Don't serve frontend for API routes, WebSocket, or audio
+        if full_path.startswith(("api/", "ws/", "audio/", "assets/")):
+            raise HTTPException(status_code=404, detail="Not found")
+        # Serve index.html for all other routes (SPA routing)
+        index_path = frontend_dist / "index.html"
+        if index_path.exists():
+            return FileResponse(str(index_path))
+        raise HTTPException(status_code=404, detail="Frontend index.html not found")
+else:
+    # Frontend not built - show API info at root
+    @app.get("/")
+    def read_root():
+        """Root endpoint - frontend not built."""
+        return {
+            "message": "Liminal Discovery API", 
+            "version": "1.0.0", 
+            "note": "Frontend not built. Build with: cd frontend && npm run build"
+        }
 
 
 if __name__ == "__main__":

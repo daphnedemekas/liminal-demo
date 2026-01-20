@@ -37,7 +37,7 @@ export interface Message {
 
 interface UseWebSocketReturn {
   messages: Message[]
-  sendMessage: (content: string) => void
+  sendMessage: (content: string, audioMode?: boolean) => void
   sendCommand: (command: string) => void  // Send without showing in UI
   addMessage: (message: Message) => void
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>  // For restoring history - supports both direct value and updater function

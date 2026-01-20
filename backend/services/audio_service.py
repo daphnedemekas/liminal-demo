@@ -11,11 +11,28 @@ class AudioService:
     """Handles text-to-speech conversion using ElevenLabs."""
 
     def __init__(self, api_key: Optional[str] = None, voice_id: Optional[str] = None):
-        self.api_key = api_key or os.getenv("ELEVENLABS_API_KEY")
+        # Directory to store temporary audio files (always set, even if audio is disabled)
+        self.audio_dir = Path(tempfile.gettempdir()) / "liminal_audio"
+        self.audio_dir.mkdir(exist_ok=True)
+        
+        # Debug: Check environment variables
+        env_key = os.getenv("ELEVENLABS_API_KEY")
+        print(f"[Audio] DEBUG: Checking for ELEVENLABS_API_KEY in environment...")
+        print(f"[Audio] DEBUG: Key found: {bool(env_key)}")
+        if env_key:
+            print(f"[Audio] DEBUG: Key length: {len(env_key)}")
+            print(f"[Audio] DEBUG: Key starts with: {env_key[:10]}...")
+        
+        self.api_key = api_key or env_key
         if not self.api_key:
-            print("[Audio] WARNING: ELEVENLABS_API_KEY not found in environment!")
-            print(f"[Audio] Available env vars: {[k for k in os.environ.keys() if 'ELEVEN' in k.upper()]}")
-            raise ValueError("ELEVENLABS_API_KEY not found in environment")
+            # Audio service disabled if no API key
+            self.client = None
+            print("[Audio] WARNING: ELEVENLABS_API_KEY not found in environment. Audio features will be disabled.")
+            print(f"[Audio] DEBUG: All env vars containing 'ELEVEN': {[k for k in os.environ.keys() if 'ELEVEN' in k.upper()]}")
+            # Set default values even when disabled
+            self.voice_id = voice_id or "c4NIULtANlpduSDihsKJ"
+            self.model = "eleven_turbo_v2"
+            return
 
         print(f"[Audio] ElevenLabs API key loaded: {self.api_key[:10]}...")
         self.client = ElevenLabs(api_key=self.api_key)
@@ -24,10 +41,6 @@ class AudioService:
         # You can change this to any ElevenLabs voice ID
         self.voice_id = voice_id or "c4NIULtANlpduSDihsKJ"  # Custom voice
         self.model = "eleven_turbo_v2"  # Fast model for real-time feel
-
-        # Directory to store temporary audio files
-        self.audio_dir = Path(tempfile.gettempdir()) / "liminal_audio"
-        self.audio_dir.mkdir(exist_ok=True)
 
     def text_to_speech(self, text: str) -> Path:
         """
@@ -39,6 +52,8 @@ class AudioService:
         Returns:
             Path to the audio file
         """
+        if not self.client:
+            raise ValueError("Audio service not available (ELEVENLABS_API_KEY not set)")
         print(f"[Audio] TTS called with {len(text)} chars: {text[:50]}...")
         try:
             # Generate audio using the new SDK API
@@ -79,6 +94,8 @@ class AudioService:
         Returns:
             Generator yielding audio chunks
         """
+        if not self.client:
+            raise ValueError("Audio service not available (ELEVENLABS_API_KEY not set)")
         try:
             audio_stream = self.client.text_to_speech.convert(
                 text=text,

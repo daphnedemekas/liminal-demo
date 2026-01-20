@@ -2,9 +2,15 @@
 import sys
 from pathlib import Path
 
-# Load environment variables from .env file FIRST
+# Load environment variables from .env file (only if it exists, for local development)
+# In Railway, environment variables are set directly, so this won't override them
 from dotenv import load_dotenv
-load_dotenv(Path(__file__).parent.parent / ".env")
+env_path = Path(__file__).parent.parent / ".env"
+if env_path.exists():
+    load_dotenv(env_path, override=False)  # Don't override existing env vars (Railway's)
+else:
+    # In Railway/production, just load from environment
+    load_dotenv(override=False)
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware

@@ -21,77 +21,22 @@ from .models import (
 class DatabaseManager:
     """Manages database operations for user profiles, sessions, and signals."""
 
-    def __init__(self, db_path: str = "data/liminal.db", database_url: Optional[str] = None):
+    def __init__(self, db_path: str = "data/liminal.db"):
         """
         Initialize database manager.
 
-        Priority:
-        1. DATABASE_URL (Postgres) - Used in production (Railway, etc.)
-        2. db_path (SQLite) - Used for local development only
-
         Args:
-            db_path: Path to SQLite database file (only used if DATABASE_URL is not set)
-            database_url: PostgreSQL connection URL (e.g., from Railway DATABASE_URL env var)
+            db_path: Path to SQLite database file
         """
-        # Check for DATABASE_URL environment variable first (Railway Postgres)
-        database_url = database_url or os.getenv("DATABASE_URL")
+        # Ensure data directory exists
+        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+
+        print(f"[Database] Using SQLite database at {db_path}")
+        self.engine = create_engine(f'sqlite:///{db_path}', echo=False)
         
-        if database_url:
-            # PostgreSQL connection (Railway or other Postgres provider)
-            # Railway provides DATABASE_URL in format: postgres://user:password@host:port/dbname
-            # SQLAlchemy needs postgresql:// (not postgres://) for newer versions
-            if database_url.startswith("postgres://"):
-                database_url = database_url.replace("postgres://", "postgresql://", 1)
-            
-            print(f"[Database] Attempting PostgreSQL connection from DATABASE_URL")
-            try:
-                # Add fast timeout to prevent hanging on connection attempts
-                # connect_args with connect_timeout prevents long waits if Postgres isn't available
-                self.engine = create_engine(
-                    database_url, 
-                    echo=False, 
-                    pool_pre_ping=True,
-                    connect_args={"connect_timeout": 3}  # 3 second timeout - fail fast
-                )
-                # Test connection with timeout
-                from sqlalchemy import text
-                
-                # Use a quick connection test (connect_timeout in connect_args handles timeout)
-                with self.engine.connect() as conn:
-                    conn.execute(text("SELECT 1"))
-                print(f"[Database] PostgreSQL connection test successful")
-                
-                # Create all tables
-                Base.metadata.create_all(self.engine)
-                print(f"[Database] PostgreSQL tables created/verified successfully")
-                
-            except Exception as e:
-                print(f"[Database] ERROR: Failed to connect to PostgreSQL: {e}")
-                print(f"[Database] This might mean:")
-                print(f"[Database]   1. Postgres service isn't connected in Railway")
-                print(f"[Database]   2. Services are in different regions")
-                print(f"[Database]   3. Internal DNS not resolving yet")
-                print(f"[Database] Falling back to SQLite immediately...")
-                # Fall back to SQLite if Postgres connection fails
-                database_url = None  # Clear so we use SQLite path below
-        else:
-            print(f"[Database] No DATABASE_URL found, using SQLite")
-        
-        # Use SQLite if no DATABASE_URL or if Postgres failed
-        if not database_url:
-            # SQLite fallback for local development or when Postgres unavailable
-            # Ensure data directory exists
-            Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-            print(f"[Database] Using SQLite database at {db_path}")
-            self.engine = create_engine(f'sqlite:///{db_path}', echo=False)
-            
-            # Create all tables for SQLite
-            try:
-                Base.metadata.create_all(self.engine)
-                print(f"[Database] SQLite tables created/verified successfully")
-            except Exception as e:
-                print(f"[Database] ERROR: Failed to create SQLite tables: {e}")
-                raise
+        # Create all tables
+        Base.metadata.create_all(self.engine)
+        print(f"[Database] Tables created/verified successfully")
         
         self.SessionLocal = sessionmaker(bind=self.engine, autoflush=False, autocommit=False)
 

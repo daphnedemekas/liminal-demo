@@ -12,9 +12,9 @@ Set these in Railway dashboard:
 ### Optional
 - `ELEVENLABS_API_KEY` - For text-to-speech features (optional)
 - `PORT` - Railway sets this automatically, don't override
-- `DATABASE_URL` - PostgreSQL connection string (automatically set when using Railway Postgres service)
-  - **You do NOT need to set this manually** - Railway sets it automatically when you add a Postgres service
-  - **You do NOT need DATABASE_PATH** when using Postgres - that's only for SQLite (local development)
+- `DATABASE_PATH` - SQLite database file path (default: `data/liminal.db`)
+  - **Important**: Add a persistent volume mounted at `/data` in Railway Settings → Volumes
+  - This ensures your database persists across deployments
 - `LIMINAL_CONFIG_PATH` - Override config.yaml path (optional)
 
 ### Frontend (if deploying separately)
@@ -22,35 +22,27 @@ Set these in Railway dashboard:
 
 ## Database
 
-### Option 1: PostgreSQL (Recommended for Production)
+SQLite database is used for all deployments. The database will be created automatically at the path specified by `DATABASE_PATH` (default: `data/liminal.db`).
 
-1. **Add Postgres Service**: In Railway dashboard, click "New" → "Database" → "Add PostgreSQL"
-2. **Connect to Backend**: Railway automatically sets `DATABASE_URL` environment variable
+**Important for Data Persistence on Railway:**
+
+1. **Add a Persistent Volume**:
+   - Go to your Railway service → Settings tab
+   - Scroll to "Volumes" section
+   - Click "Add Volume"
+   - Mount path: `/data`
+   - Click Add
+
+2. **Set DATABASE_PATH**:
+   - In your service Variables, set: `DATABASE_PATH=/data/liminal.db`
+   - This ensures the database is stored in the persistent volume
+
 3. **Tables Created Automatically**: The app will create all tables on first run using SQLAlchemy
 
-**Benefits:**
-- Data persists across deployments (not tied to filesystem)
-- Better performance and scalability
-- Supports concurrent connections
-- Automatic backups via Railway
-
-### Option 2: SQLite (Development/Simple Deployments)
-
-SQLite database will be created automatically at `data/liminal.db`. 
-Railway provides persistent storage, so data will persist across deployments.
-
-**Important for Data Persistence:**
-- Railway's filesystem is persistent by default - your `data/` directory will survive redeployments
-- The database path is configurable via `DATABASE_PATH` environment variable (default: `data/liminal.db`)
+**Why a Persistent Volume?**
+- Railway's default filesystem is ephemeral - files can be lost on redeploy
+- Mounting a volume at `/data` ensures your database persists across deployments
 - All user profiles, sessions, and learning data are stored in this SQLite database
-- **Note**: If you're using SQLite and redeploy, make sure your filesystem is persistent
-
-**Priority**: The app checks for `DATABASE_URL` first (Postgres), then falls back to SQLite for local development only.
-
-**Important**: 
-- In production (Railway with Postgres): Only `DATABASE_URL` is needed (set automatically by Railway)
-- For local development: You can use SQLite by not setting `DATABASE_URL`, and optionally set `DATABASE_PATH` to customize the SQLite file location
-- **Do NOT set DATABASE_PATH in Railway** when using Postgres - it's not needed and will be ignored
 
 ## Deployment Steps
 

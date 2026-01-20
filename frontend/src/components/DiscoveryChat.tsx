@@ -77,9 +77,10 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
     }
 
     // Send to backend via WebSocket (this saves to conversation history and adds to UI)
-    sendMessage(messageText)
+    // Include audio mode preference so backend knows to generate TTS
+    sendMessage(messageText, isAudioMode)
     setInputText('')
-  }, [inputText, isConnected, sendMessage, awaitingBackground, userId, onBackgroundCollected, addMessage])
+  }, [inputText, isConnected, sendMessage, isAudioMode, awaitingBackground, userId, onBackgroundCollected, addMessage])
 
   // Reset initRef when component unmounts to allow re-initialization on remount
   useEffect(() => {
@@ -453,7 +454,7 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
                           // Continue on this thread - let AI continue the conversation
                           // Remove the resume options message and send continuation message
                           setMessages(prev => prev.filter(m => m.id !== 'welcome-back'))
-                          sendMessage("Let's continue from where we left off")
+                          sendMessage("Let's continue from where we left off", isAudioMode)
                         }}
                         disabled={!isConnected}
                       >
@@ -464,7 +465,7 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
                         onClick={() => {
                           // Suggest a new direction - send message asking for new direction
                           setMessages(prev => prev.filter(m => m.id !== 'welcome-back'))
-                          sendMessage("I'd like to explore a new direction")
+                          sendMessage("I'd like to explore a new direction", isAudioMode)
                         }}
                         disabled={!isConnected}
                       >
@@ -475,7 +476,7 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
                         onClick={() => {
                           // AI suggests something - ask AI to suggest what to explore next
                           setMessages(prev => prev.filter(m => m.id !== 'welcome-back'))
-                          sendMessage("What should we explore next?")
+                          sendMessage("What should we explore next?", isAudioMode)
                         }}
                         disabled={!isConnected}
                       >

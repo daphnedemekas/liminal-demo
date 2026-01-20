@@ -332,15 +332,18 @@ export default function TeachingChat({
     setIsLoading(true)
     setStatus('Processing...')
 
-    // Send via WebSocket
+    // Send via WebSocket with audio mode preference
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ content: messageText }))
+      wsRef.current.send(JSON.stringify({ 
+        content: messageText,
+        audio_mode: isAudioMode  // Tell backend if user wants audio
+      }))
     } else {
       console.error('[TeachingChat] WebSocket not connected')
       setIsLoading(false)
       setStatus('Connection lost. Please refresh.')
     }
-  }, [inputText, isLoading, isConnected])
+  }, [inputText, isLoading, isConnected, isAudioMode])
 
   // Track when audio finished to add delay before recording
   const [audioEndTime, setAudioEndTime] = useState<number>(0)

@@ -58,20 +58,11 @@ from src.database.manager import DatabaseManager
 from pydantic import BaseModel, Field
 from typing import Optional, List, Union
 
-# Initialize database
-# Priority: DATABASE_URL (Postgres in production) → SQLite fallback (local dev only)
-# Note: DATABASE_PATH is NOT needed when using Postgres - only for local SQLite development
-try:
-    database_url = os.getenv("DATABASE_URL")  # Railway Postgres connection string (production)
-    db_path = os.getenv("DATABASE_PATH", "data/liminal.db")  # SQLite fallback (local dev only)
-    print(f"[Backend] Initializing database...")
-    db = DatabaseManager(db_path=db_path, database_url=database_url)
-    print(f"[Backend] Database initialized successfully")
-except Exception as e:
-    print(f"[Backend] CRITICAL: Failed to initialize database: {e}")
-    import traceback
-    traceback.print_exc()
-    raise
+# Initialize database - using SQLite
+db_path = os.getenv("DATABASE_PATH", "data/liminal.db")
+print(f"[Backend] Initializing SQLite database at {db_path}...")
+db = DatabaseManager(db_path=db_path)
+print(f"[Backend] Database initialized successfully")
 
 class LoginRequest(BaseModel):
     username: str
@@ -1040,6 +1031,7 @@ async def teaching_websocket(websocket: WebSocket, session_id: str):
             # Receive message from frontend
             data = await websocket.receive_json()
             user_message = data.get("content", "")
+            wants_audio = data.get("audio_mode", False) or data.get("audio", False)  # Check if user wants audio
 
             # Check for special commands (curriculum accept/modify) first
             command = data.get("command")
@@ -1114,6 +1106,25 @@ async def teaching_websocket(websocket: WebSocket, session_id: str):
                             for m in schema.get("understanding_markers", [])
                             if m.get("level") != "not_yet"
                         ]
+                    
+                    # Generate TTS if audio mode is enabled
+                    if wants_audio and message_content and message_content.strip():
+                        try:
+                            import asyncio
+                            loop = asyncio.get_event_loop()
+                            audio_path = await asyncio.wait_for(
+                                loop.run_in_executor(
+                                    None,
+                                    audio_service.text_to_speech,
+                                    message_content
+                                ),
+                                timeout=5.0  # Only wait 5 seconds - fail fast
+                            )
+                            response_data["audio_url"] = f"/audio/{audio_path.name}"
+                        except asyncio.TimeoutError:
+                            print(f"[Audio] TTS generation timed out after 5s - sending response without audio")
+                        except Exception as e:
+                            print(f"[Audio] TTS generation failed: {e}")
                     
                     await websocket.send_json(response_data)
                     _maybe_checkpoint(schema)
@@ -1247,26 +1258,8 @@ async def start_discovery(request: SessionCreateRequest = SessionCreateRequest()
         needs_opening = not is_resumed or len(conversation_history) == 0
         if needs_opening:
             opening_message = session_data.discovery_session.start()
-            # Generate audio for opening message (non-blocking with timeout)
-            try:
-                if opening_message and opening_message.strip():
-                    import asyncio
-                    loop = asyncio.get_event_loop()
-                    audio_path = await asyncio.wait_for(
-                        loop.run_in_executor(
-                            None,
-                            audio_service.text_to_speech,
-                            opening_message
-                        ),
-                        timeout=30.0  # 30 second timeout
-                    )
-                    audio_url = f"/audio/{audio_path.name}"
-            except asyncio.TimeoutError:
-                print(f"[Audio] TTS generation for opening message timed out after 30s")
-                audio_url = None
-            except Exception as e:
-                print(f"[Audio] TTS generation failed for opening message: {e}")
-                audio_url = None
+            # Skip TTS for opening message - only generate if user explicitly enables audio mode
+            audio_url = None
 
         return SessionCreateResponse(
             session_id=session_id,
@@ -1679,24 +1672,8 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
                     proposed_goal = response.split(":", 1)[1]
                     goal_message = f"I think I've identified a learning goal for you: {proposed_goal}. Does this sound right?"
                     
-                    # Generate TTS for goal proposal (non-blocking with timeout)
+                    # Skip TTS for goal proposal - only generate if audio mode enabled
                     goal_audio_url = None
-                    try:
-                        import asyncio
-                        loop = asyncio.get_event_loop()
-                        audio_path = await asyncio.wait_for(
-                            loop.run_in_executor(
-                                None,
-                                audio_service.text_to_speech,
-                                goal_message
-                            ),
-                            timeout=30.0  # 30 second timeout
-                        )
-                        goal_audio_url = f"/audio/{audio_path.name}"
-                    except asyncio.TimeoutError:
-                        print(f"[Audio] TTS for goal proposal timed out after 30s")
-                    except Exception as e:
-                        print(f"[Audio] TTS for goal proposal failed: {e}")
                     
                     # Clear status before sending goal proposal
                     await websocket.send_json({
@@ -1801,28 +1778,32 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
                     _maybe_checkpoint()
                     continue
 
-                # Generate audio with ElevenLabs TTS (non-blocking with timeout)
-                try:
-                    if response and response.strip():  # Only generate for non-empty responses
+                # Skip TTS by default - only generate if user explicitly enables audio mode
+                # This prevents hanging on slow ElevenLabs API calls
+                audio_url = None
+                wants_audio = data.get("audio_mode", False) or data.get("audio", False)
+                
+                if wants_audio and response and response.strip():  # Only generate if explicitly requested
+                    try:
                         import asyncio
                         loop = asyncio.get_event_loop()
+                        # Very short timeout - if TTS takes more than 5 seconds, skip it
                         audio_path = await asyncio.wait_for(
                             loop.run_in_executor(
                                 None,
                                 audio_service.text_to_speech,
                                 response
                             ),
-                            timeout=30.0  # 30 second timeout
+                            timeout=5.0  # Only wait 5 seconds - fail fast
                         )
                         audio_url = f"/audio/{audio_path.name}"
-                    else:
+                    except asyncio.TimeoutError:
+                        print(f"[Audio] TTS generation timed out after 5s - sending response without audio")
                         audio_url = None
-                except asyncio.TimeoutError:
-                    print(f"[Audio] TTS generation timed out after 30s")
-                    audio_url = None
-                except Exception as e:
-                    print(f"[Audio] TTS generation failed: {e}")
-                    audio_url = None
+                    except Exception as e:
+                        print(f"[Audio] TTS generation failed: {e}")
+                        audio_url = None
+                # If audio_mode not enabled, skip TTS entirely (no logging needed)
 
                 # Check if discovery is complete
                 if session_data.discovery_session.is_complete():

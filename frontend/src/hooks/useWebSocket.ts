@@ -345,12 +345,13 @@ export function useWebSocket(sessionId: string, phase: 'discovery' | 'learning')
   }, [sessionId, phase])
 
   // Send message function
-  const sendMessage = useCallback((content: string) => {
+  const sendMessage = useCallback((content: string, audioMode: boolean = false) => {
     console.log('[useWebSocket] sendMessage called:', {
       hasWs: !!wsRef.current,
       readyState: wsRef.current?.readyState,
       isOpen: wsRef.current?.readyState === WebSocket.OPEN,
-      contentLength: content.length
+      contentLength: content.length,
+      audioMode
     })
 
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -363,8 +364,11 @@ export function useWebSocket(sessionId: string, phase: 'discovery' | 'learning')
       }
       setMessages(prev => [...prev, userMessage])
 
-      // Send to server
-      wsRef.current.send(JSON.stringify({ content }))
+      // Send to server with audio mode preference
+      wsRef.current.send(JSON.stringify({ 
+        content,
+        audio_mode: audioMode  // Tell backend if user wants audio
+      }))
     } else {
       console.error('[useWebSocket] Cannot send - WebSocket not ready!', {
         current: wsRef.current,

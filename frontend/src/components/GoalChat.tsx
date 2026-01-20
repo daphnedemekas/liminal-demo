@@ -67,9 +67,10 @@ export default function GoalChat({
     const messageText = text || inputText.trim()
     if (!messageText || !isConnected) return
 
-    sendMessage(messageText)
+    // Include audio mode preference so backend knows to generate TTS
+    sendMessage(messageText, isAudioMode)
     setInputText('')
-  }, [inputText, isConnected, sendMessage])
+  }, [inputText, isConnected, sendMessage, isAudioMode])
 
   // Initialize or resume goal-specific session
   useEffect(() => {

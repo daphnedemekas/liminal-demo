@@ -66,10 +66,7 @@ class DiscoveryOrchestrator:
         else:
             print("[Orchestrator] No goal provided - starting in Phase 1 (Goal Discovery)")
 
-        # Support both DATABASE_URL (Postgres) and db_path (SQLite)
-        import os
-        database_url = os.getenv("DATABASE_URL")
-        self.db = DatabaseManager(db_path=db_path, database_url=database_url)
+        self.db = DatabaseManager(db_path=db_path)
         self._last_phase = None  # Track phase for logging transitions
 
         # User and session tracking

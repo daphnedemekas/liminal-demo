@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 import json
 import uuid
+import os
 
 # Add parent directory to path
 sys.path.append(str(Path(__file__).parent.parent))
@@ -54,8 +55,9 @@ from src.database.manager import DatabaseManager
 from pydantic import BaseModel
 from typing import Optional, List, Union
 
-# Initialize database
-db = DatabaseManager()
+# Initialize database - use env var for deployment, fallback to default
+db_path = os.getenv("DATABASE_PATH", "data/liminal.db")
+db = DatabaseManager(db_path=db_path)
 
 class LoginRequest(BaseModel):
     username: str
@@ -841,6 +843,9 @@ async def start_teaching(request: TeachingStartRequest):
                 "stakes_summary": request.stakes_summary
             }
             
+            # Get database path from environment
+            db_path = os.getenv("DATABASE_PATH", "data/liminal.db")
+            
             orchestrator = TeachingOrchestrator(
                 user_id=request.user_id,
                 goal_id=request.goal_id,
@@ -849,6 +854,7 @@ async def start_teaching(request: TeachingStartRequest):
                 goal_text=request.goal_text,
                 user_background=request.user_background,
                 goal_conversation_history=request.goal_conversation_history,
+                db_path=db_path,
                 model_config=request.llm_config,
                 session_id=session_id,
                 conversation_history=conversation_history,
@@ -875,6 +881,9 @@ async def start_teaching(request: TeachingStartRequest):
             "stakes_summary": request.stakes_summary
         }
         
+        # Get database path from environment
+        db_path = os.getenv("DATABASE_PATH", "data/liminal.db")
+        
         orchestrator = TeachingOrchestrator(
             user_id=request.user_id,
             goal_id=request.goal_id,
@@ -883,6 +892,7 @@ async def start_teaching(request: TeachingStartRequest):
             goal_text=request.goal_text,
             user_background=request.user_background,
             goal_conversation_history=request.goal_conversation_history,
+            db_path=db_path,
             model_config=request.llm_config
         )
         
@@ -1894,4 +1904,7 @@ async def get_discovery_schema(session_id: str):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    import os
+    # Railway provides PORT env var, fallback to 8000 for local dev
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)

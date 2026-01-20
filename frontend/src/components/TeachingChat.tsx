@@ -40,8 +40,10 @@ interface CurriculumProgress {
   completed_steps: number
 }
 
-const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8000'
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+// Use API URL for WebSocket, converting http to ws
+const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const WS_URL = apiUrl.replace('http://', 'ws://').replace('https://', 'wss://')
+const API_URL = apiUrl
 
 export default function TeachingChat({ 
   candidate, 

@@ -63,9 +63,14 @@ class SessionManager:
         async with self._get_lock(session_id):
             session_data = SessionData(session_id)
 
+            # Get database path from environment or use default
+            import os
+            db_path = os.getenv("DATABASE_PATH", "data/liminal.db")
+            
             # Pass all parameters to orchestrator
             session_data.discovery_session = DiscoveryOrchestrator(
                 user_id=user_id or session_id,
+                db_path=db_path,
                 model_config=model_config,
                 user_goal=user_goal,
                 session_id=session_id,  # Always pass session_id - database ID is source of truth

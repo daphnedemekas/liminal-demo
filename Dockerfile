@@ -16,8 +16,9 @@ WORKDIR /app
 # Copy all files
 COPY . .
 
-# Install Python dependencies
+# Install Python dependencies from both root and backend
 RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r backend/requirements.txt
 
 # Build frontend
 WORKDIR /app/frontend

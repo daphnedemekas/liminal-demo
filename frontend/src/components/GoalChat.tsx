@@ -312,13 +312,13 @@ export default function GoalChat({
   const lastTeachingProposedIndex = messages.map((m, i) => m.type === 'teaching_proposed' ? i : -1).filter(i => i >= 0).pop() ?? -1
   const lastTeachingPanelIndex = messages.map((m, i) => (m.type === 'create_teaching_panel' || m.type === 'teaching_accepted') ? i : -1).filter(i => i >= 0).pop() ?? -1
   const hasPendingTeaching = lastTeachingProposedIndex > lastTeachingPanelIndex && lastTeachingProposedIndex >= 0
-  const pendingTeachingProposal = hasPendingTeaching ? messages[lastTeachingProposedIndex] : null
+  const _pendingTeachingProposal = hasPendingTeaching ? messages[lastTeachingProposedIndex] : null
 
   // Check for task curriculum proposed (new batch proposal flow)
   const lastCurriculumProposedIndex = messages.map((m, i) => m.type === 'task_curriculum_proposed' ? i : -1).filter(i => i >= 0).pop() ?? -1
   const lastCurriculumAcceptedIndex = messages.map((m, i) => m.type === 'task_curriculum_accepted' ? i : -1).filter(i => i >= 0).pop() ?? -1
   const hasPendingCurriculum = lastCurriculumProposedIndex > lastCurriculumAcceptedIndex && lastCurriculumProposedIndex >= 0
-  const pendingCurriculumProposal = hasPendingCurriculum ? messages[lastCurriculumProposedIndex] : null
+  const _pendingCurriculumProposal = hasPendingCurriculum ? messages[lastCurriculumProposedIndex] : null
 
   // Handle teaching candidate accept/reject (legacy)
   const handleAcceptTeaching = () => {

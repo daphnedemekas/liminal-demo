@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+*.egg-info/
+.pytest_cache/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Local development
+*.log
+backend.log
+*.db
+*.sqlite
+*.sqlite3
+
+# Build artifacts
+dist/
+build/
+*.egg
+
+# Environment files (these should be set in Railway)
+.env
+.env.local
+
+# Documentation
+README.md
+WELCOME_MESSAGE.md
+docs/
+
+# Frontend source (we only need the build)
+# Actually, we need the source to build, so don't ignore frontend/src
+# But we can ignore the build output from local dev
+frontend/dist/

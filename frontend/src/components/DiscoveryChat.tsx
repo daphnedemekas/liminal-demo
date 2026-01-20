@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useWebSocket } from '../hooks/useWebSocket'
+import { useWebSocket, Message } from '../hooks/useWebSocket'
 import { useAudio } from '../hooks/useAudio'
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition'
 import { api } from '../services/api'
@@ -432,7 +432,7 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
 
           {/* All messages in unified array */}
           {messages.map((msg, index) => {
-            const isLastResumeOptions = msg.type === 'resume_options' && index === messages.length - 1
+            const isLastResumeOptions = msg.id === 'welcome-back' && index === messages.length - 1
             return (
               <div key={msg.id}>
                 <MessageBubble
@@ -452,7 +452,7 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
                         onClick={() => {
                           // Continue on this thread - let AI continue the conversation
                           // Remove the resume options message and send continuation message
-                          setMessages(prev => prev.filter(m => m.id !== 'welcome-back'))
+                          setMessages((prev: Message[]) => prev.filter((m: Message) => m.id !== 'welcome-back'))
                           sendMessage("Let's continue from where we left off")
                         }}
                         disabled={!isConnected}
@@ -463,7 +463,7 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
                         className="resume-option-btn"
                         onClick={() => {
                           // Suggest a new direction - send message asking for new direction
-                          setMessages(prev => prev.filter(m => m.id !== 'welcome-back'))
+                          setMessages((prev: Message[]) => prev.filter((m: Message) => m.id !== 'welcome-back'))
                           sendMessage("I'd like to explore a new direction")
                         }}
                         disabled={!isConnected}
@@ -474,7 +474,7 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
                         className="resume-option-btn"
                         onClick={() => {
                           // AI suggests something - ask AI to suggest what to explore next
-                          setMessages(prev => prev.filter(m => m.id !== 'welcome-back'))
+                          setMessages((prev: Message[]) => prev.filter((m: Message) => m.id !== 'welcome-back'))
                           sendMessage("What should we explore next?")
                         }}
                         disabled={!isConnected}

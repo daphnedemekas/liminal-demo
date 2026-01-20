@@ -1,0 +1,34 @@
+# Use Python 3.11 as base
+FROM python:3.11-slim
+
+# Install Node.js 18.x
+RUN apt-get update && apt-get install -y \
+    curl \
+    && curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+    && apt-get install -y nodejs \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy all files
+COPY . .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Build frontend
+WORKDIR /app/frontend
+RUN npm install
+RUN npm run build
+
+# Return to app root
+WORKDIR /app
+
+# Expose port (Railway will set PORT env var)
+ENV PORT=8000
+EXPOSE 8000
+
+# Start the backend
+CMD ["sh", "-c", "cd backend && python main.py"]

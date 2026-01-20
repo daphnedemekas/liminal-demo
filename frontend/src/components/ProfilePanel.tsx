@@ -19,7 +19,7 @@ const getReadinessLabel = (score: number | undefined): { label: string; level: s
   return { label: 'Emerging', level: 'low' }
 }
 
-const getDominantEntryMode = (entryMode: any): { mode: string; icon: string } => {
+const _getDominantEntryMode = (entryMode: any): { mode: string; icon: string } => {
   if (!entryMode) return { mode: 'Exploring', icon: '🔍' }
   const { people = 0, problems = 0, ideas = 0 } = entryMode
   const max = Math.max(people, problems, ideas)
@@ -36,7 +36,7 @@ const getConfidenceLabel = (confidence: number | undefined): string => {
   return 'Weak signal'
 }
 
-const formatTraitValue = (trait: any): { value: string; confidence: string } => {
+const _formatTraitValue = (trait: any): { value: string; confidence: string } => {
   if (!trait) return { value: '—', confidence: '' }
   
   if (typeof trait === 'object') {
@@ -394,7 +394,7 @@ export default function ProfilePanel({ sessionId, isConnected, initialSummary, i
   const teachingCandidates = schema.teaching_candidates || []
   const themes = schema.conversational_themes || []
   const interviewState = schema.interview_state || {}
-  const controller = schema.controller || {}
+  const _controller = schema.controller || {}
   const priorKnowledgeAssessment = schema.prior_knowledge_assessment || {}
 
   return (

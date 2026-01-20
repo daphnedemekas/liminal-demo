@@ -265,7 +265,7 @@ function App() {
   }
 
   // Get the active goal session data
-  const activeGoalSession = goalSessions.find(s => s.id === activeGoalSessionId)
+  // const activeGoalSession = goalSessions.find(s => s.id === activeGoalSessionId)
   
   // Get the active teaching candidate (if any) - commented out for now
   // const activeTeachingCandidate = activeGoalSession?.teachingCandidates.find(

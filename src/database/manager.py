@@ -43,35 +43,46 @@ class DatabaseManager:
             if database_url.startswith("postgres://"):
                 database_url = database_url.replace("postgres://", "postgresql://", 1)
             
-            print(f"[Database] Using PostgreSQL connection from DATABASE_URL")
+            print(f"[Database] Attempting PostgreSQL connection from DATABASE_URL")
             try:
                 self.engine = create_engine(database_url, echo=False, pool_pre_ping=True)
-                # Test connection immediately
+                # Test connection and create tables in one try block
                 from sqlalchemy import text
                 with self.engine.connect() as conn:
                     conn.execute(text("SELECT 1"))
-                print(f"[Database] PostgreSQL connection successful")
+                print(f"[Database] PostgreSQL connection test successful")
+                
+                # Create all tables
+                Base.metadata.create_all(self.engine)
+                print(f"[Database] PostgreSQL tables created/verified successfully")
+                
             except Exception as e:
                 print(f"[Database] ERROR: Failed to connect to PostgreSQL: {e}")
+                print(f"[Database] This might mean:")
+                print(f"[Database]   1. Postgres service isn't connected in Railway")
+                print(f"[Database]   2. Services are in different regions")
+                print(f"[Database]   3. Internal DNS not resolving yet")
                 print(f"[Database] Falling back to SQLite...")
                 # Fall back to SQLite if Postgres connection fails
-                Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-                self.engine = create_engine(f'sqlite:///{db_path}', echo=False)
+                database_url = None  # Clear so we use SQLite path below
         else:
-            # SQLite fallback for local development only
-            # Note: In production (Railway), use Postgres via DATABASE_URL instead
+            print(f"[Database] No DATABASE_URL found, using SQLite")
+        
+        # Use SQLite if no DATABASE_URL or if Postgres failed
+        if not database_url:
+            # SQLite fallback for local development or when Postgres unavailable
             # Ensure data directory exists
             Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-            print(f"[Database] Using SQLite database at {db_path} (local development only)")
+            print(f"[Database] Using SQLite database at {db_path}")
             self.engine = create_engine(f'sqlite:///{db_path}', echo=False)
-        
-        # Create all tables
-        try:
-            Base.metadata.create_all(self.engine)
-            print(f"[Database] Tables created/verified successfully")
-        except Exception as e:
-            print(f"[Database] ERROR: Failed to create tables: {e}")
-            raise
+            
+            # Create all tables for SQLite
+            try:
+                Base.metadata.create_all(self.engine)
+                print(f"[Database] SQLite tables created/verified successfully")
+            except Exception as e:
+                print(f"[Database] ERROR: Failed to create SQLite tables: {e}")
+                raise
         
         self.SessionLocal = sessionmaker(bind=self.engine, autoflush=False, autocommit=False)
 

@@ -45,9 +45,18 @@ class DatabaseManager:
             
             print(f"[Database] Attempting PostgreSQL connection from DATABASE_URL")
             try:
-                self.engine = create_engine(database_url, echo=False, pool_pre_ping=True)
-                # Test connection and create tables in one try block
+                # Add fast timeout to prevent hanging on connection attempts
+                # connect_args with connect_timeout prevents long waits if Postgres isn't available
+                self.engine = create_engine(
+                    database_url, 
+                    echo=False, 
+                    pool_pre_ping=True,
+                    connect_args={"connect_timeout": 3}  # 3 second timeout - fail fast
+                )
+                # Test connection with timeout
                 from sqlalchemy import text
+                
+                # Use a quick connection test (connect_timeout in connect_args handles timeout)
                 with self.engine.connect() as conn:
                     conn.execute(text("SELECT 1"))
                 print(f"[Database] PostgreSQL connection test successful")
@@ -62,7 +71,7 @@ class DatabaseManager:
                 print(f"[Database]   1. Postgres service isn't connected in Railway")
                 print(f"[Database]   2. Services are in different regions")
                 print(f"[Database]   3. Internal DNS not resolving yet")
-                print(f"[Database] Falling back to SQLite...")
+                print(f"[Database] Falling back to SQLite immediately...")
                 # Fall back to SQLite if Postgres connection fails
                 database_url = None  # Clear so we use SQLite path below
         else:

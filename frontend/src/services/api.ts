@@ -1,7 +1,15 @@
-import { getApiBaseUrl } from '../config'
-
-// Don't cache API_BASE_URL as a constant - call getApiBaseUrl() fresh each time
-// so it can detect the environment at runtime, not build time
+// Helper to get API URL - inline to prevent Vite from evaluating at build time
+const getApiUrl = () => {
+  // For local dev with VITE_API_URL set
+  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL
+  // For production/Railway - use same origin if not localhost
+  const hostname = window?.location?.hostname || 'localhost'
+  if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
+    return window.location.origin
+  }
+  // Local dev default
+  return 'http://localhost:8000'
+}
 
 export interface ModelConfig {
   interviewer?: string
@@ -71,7 +79,7 @@ export const api = {
     userId?: string,
     goalId?: number
   ): Promise<SessionCreateResponse> {
-    const response = await fetch(`${getApiBaseUrl()}/api/discovery/start`, {
+    const response = await fetch(`${getApiUrl()}/api/discovery/start`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -92,7 +100,7 @@ export const api = {
   },
 
   async getDiscoverySchema(sessionId: string): Promise<any> {
-    const response = await fetch(`${getApiBaseUrl()}/api/discovery/${sessionId}/schema`, {
+    const response = await fetch(`${getApiUrl()}/api/discovery/${sessionId}/schema`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -108,7 +116,7 @@ export const api = {
 
   // User authentication and data
   async login(username: string): Promise<LoginResponse> {
-    const response = await fetch(`${getApiBaseUrl()}/api/auth/login`, {
+    const response = await fetch(`${getApiUrl()}/api/auth/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -124,7 +132,7 @@ export const api = {
   },
 
   async getUserData(userId: string): Promise<UserData> {
-    const response = await fetch(`${getApiBaseUrl()}/api/user/${userId}/data`, {
+    const response = await fetch(`${getApiUrl()}/api/user/${userId}/data`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -139,7 +147,7 @@ export const api = {
   },
 
   async createGoal(userId: string, goalText: string): Promise<{ id: number; goal_text: string }> {
-    const response = await fetch(`${getApiBaseUrl()}/api/user/goals`, {
+    const response = await fetch(`${getApiUrl()}/api/user/goals`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -155,7 +163,7 @@ export const api = {
   },
 
   async updateOnboarding(userId: string, onboardingInfo: string): Promise<void> {
-    const response = await fetch(`${getApiBaseUrl()}/api/user/${userId}/onboarding?onboarding_info=${encodeURIComponent(onboardingInfo)}`, {
+    const response = await fetch(`${getApiUrl()}/api/user/${userId}/onboarding?onboarding_info=${encodeURIComponent(onboardingInfo)}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -168,7 +176,7 @@ export const api = {
   },
 
   async saveProfileSummary(sessionId: string, summary: string): Promise<void> {
-    const response = await fetch(`${getApiBaseUrl()}/api/profile/summary/save`, {
+    const response = await fetch(`${getApiUrl()}/api/profile/summary/save`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -192,7 +200,7 @@ export const api = {
     user_background?: string
     goals_summary?: string
   }): Promise<{ items: FeedItem[]; generated: boolean }> {
-    const response = await fetch(`${getApiBaseUrl()}/api/feed`, {
+    const response = await fetch(`${getApiUrl()}/api/feed`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -222,7 +230,7 @@ export const api = {
     stakes_summary?: string
     llm_config?: { interviewer?: string; ranker?: string }
   }): Promise<TeachingStartResponse> {
-    const response = await fetch(`${getApiBaseUrl()}/api/teaching/start`, {
+    const response = await fetch(`${getApiUrl()}/api/teaching/start`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -238,7 +246,7 @@ export const api = {
   },
 
   async getTeachingState(sessionId: string): Promise<TeachingSchema> {
-    const response = await fetch(`${getApiBaseUrl()}/api/teaching/${sessionId}/state`, {
+    const response = await fetch(`${getApiUrl()}/api/teaching/${sessionId}/state`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -254,7 +262,7 @@ export const api = {
 
   // Learner trajectory dashboard
   async getTrajectory(userId: string): Promise<LearnerTrajectoryDashboard> {
-    const response = await fetch(`${getApiBaseUrl()}/api/trajectory/${userId}`, {
+    const response = await fetch(`${getApiUrl()}/api/trajectory/${userId}`, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
     })
@@ -267,7 +275,7 @@ export const api = {
   },
 
   async refreshTrajectory(userId: string): Promise<LearnerTrajectoryDashboard> {
-    const response = await fetch(`${getApiBaseUrl()}/api/trajectory/${userId}/refresh`, {
+    const response = await fetch(`${getApiUrl()}/api/trajectory/${userId}/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
     })

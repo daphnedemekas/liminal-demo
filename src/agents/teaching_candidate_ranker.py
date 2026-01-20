@@ -625,7 +625,7 @@ Write the transition:"""
             return self._check_teaching_readiness(temp_schema, conversation_history)
 
         with ThreadPoolExecutor(max_workers=2) as executor:
-            future_controller = executor.submit(self._generate_controller, temp_schema, branch_condition)
+            future_controller = executor.submit(self._generate_controller, temp_schema, branch_condition, user_message)
             future_teaching_rec = executor.submit(_teaching_rec_task)
 
             controller_dict = future_controller.result()
@@ -654,7 +654,9 @@ Write the transition:"""
             controller_dict["conversation_mode"] = "propose_tasks"
             controller_dict["next_action"] = "propose_task_curriculum"
             controller_dict["question_intent"] = "present_learning_path"
-            controller_dict["focus_instruction"] = f"Based on assessment, propose {len(temp_schema.teaching_candidates)} learning tasks with personalized justifications. Include Accept/Modify options."
+            # CRITICAL: Always request 8-12 tasks, regardless of teaching_candidates count
+            # Teaching candidates are just hints - the full curriculum should cover the complete learning journey
+            controller_dict["focus_instruction"] = f"Based on assessment, propose a complete learning path with 8-12 sequential tasks. Include personalized justifications for each task. End with Accept/Modify options."
 
         # INFRASTRUCTURE FIX: Handle invalid conversation_mode gracefully
         try:

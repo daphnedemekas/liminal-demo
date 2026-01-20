@@ -2160,6 +2160,28 @@ body {
   color: #94a3b8;
 }
 
+.readiness-badge.locked {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.readiness-badge.completed {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.readiness-badge.in_progress,
+.readiness-badge.in-progress {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.readiness-badge.available {
+  background: #f1f5f9;
+  color: #475569;
+  font-weight: 600;
+}
+
 /* Teaching List */
 .teaching-list {
   display: flex;
@@ -4267,4 +4289,455 @@ body {
   font-size: 11px;
   color: #64748b;
   font-weight: 500;
+}
+
+/* ========================================
+   Trajectory Dashboard Redesign Styles
+   ======================================== */
+
+/* Goals Grid Layout */
+.goals-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 16px;
+  padding: 16px;
+}
+
+.goal-card {
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.goal-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(15, 23, 42, 0.12);
+}
+
+.goal-progress-visual {
+  margin: 12px 0;
+  padding: 12px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-hairline);
+}
+
+.goal-progress-visual .progress-bar-container {
+  margin: 0 0 8px 0;
+  height: 8px;
+  background: rgba(15, 23, 42, 0.08);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.goal-progress-visual .progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6, #10b981);
+  transition: width 0.4s ease;
+  border-radius: 4px;
+}
+
+.goal-progress-visual .progress-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.goal-narrative {
+  margin: 12px 0;
+  padding: 12px;
+  background: rgba(59, 130, 246, 0.05);
+  border-radius: var(--radius-sm);
+}
+
+.goal-narrative .summary-text {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.goal-curriculum-summary,
+.goal-current-state {
+  margin: 12px 0;
+}
+
+.goal-curriculum-summary h4,
+.goal-current-state h4 {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.goal-curriculum-summary p,
+.goal-current-state p {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
+.goal-metrics {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-hairline);
+}
+
+.metric-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.metric-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.metric-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.progress-bar-container {
+  flex: 1;
+  height: 6px;
+  background: rgba(15, 23, 42, 0.08);
+  border-radius: 3px;
+  margin: 0 12px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6, #10b981);
+  transition: width 0.3s ease;
+}
+
+/* Teachings Grid Layout */
+.teachings-view {
+  padding: 16px;
+}
+
+.view-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.back-button {
+  padding: 8px 16px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.back-button:hover {
+  background: var(--bg-app);
+}
+
+.view-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.teachings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.teaching-card {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.teaching-card:hover:not(.locked) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(15, 23, 42, 0.12);
+}
+
+.teaching-card.locked {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.teaching-progress-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-hairline);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.progress-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #3b82f6;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.teaching-summary {
+  margin: 12px 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.teaching-progress-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.mini-metric {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px;
+  background: rgba(59, 130, 246, 0.05);
+  border-radius: var(--radius-sm);
+}
+
+.mini-label {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.mini-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.teaching-steps-progress {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-hairline);
+}
+
+.steps-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.steps-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* Teaching Detail View */
+.teaching-detail-view {
+  padding: 16px;
+}
+
+.current-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin: 16px 0;
+}
+
+.metric-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.05), rgba(16, 185, 129, 0.05));
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-hairline);
+}
+
+.metric-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.metric-value-large {
+  font-size: 36px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.metric-description {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-style: italic;
+  text-align: center;
+}
+
+.chart-section {
+  margin: 16px 0;
+  padding: 16px;
+}
+
+.curriculum-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.curriculum-step {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  border-left: 3px solid var(--border-hairline);
+  background: var(--bg-app);
+  border-radius: var(--radius-sm);
+  transition: all 0.2s ease;
+}
+
+.curriculum-step.completed {
+  border-left-color: #10b981;
+  background: rgba(16, 185, 129, 0.05);
+}
+
+.curriculum-step.in_progress {
+  border-left-color: #3b82f6;
+  background: rgba(59, 130, 246, 0.05);
+}
+
+.step-number {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-hairline);
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.step-content {
+  flex: 1;
+}
+
+.step-objective {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.step-meta {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.clickable {
+  cursor: pointer;
+}
+
+/* Resume Options Overlay */
+.resume-options-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(247, 246, 243, 0.95);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 20px;
+}
+
+.resume-options {
+  margin-top: 12px;
+  max-width: 500px;
+  width: 100%;
+}
+
+.resume-options-overlay .resume-options {
+  padding: 32px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-float);
+}
+
+.resume-options-header {
+  margin-bottom: 20px;
+}
+
+.resume-options-header h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.resume-options-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.resume-option-btn {
+  padding: 14px 20px;
+  background: var(--bg-app);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  text-align: left;
+}
+
+.resume-option-btn:hover {
+  background: var(--bg-elevated);
+  border-color: var(--accent-600);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-soft);
+}
+
+.resume-option-btn:active {
+  transform: translateY(0);
 }

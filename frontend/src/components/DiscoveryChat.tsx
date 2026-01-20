@@ -119,16 +119,23 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
         setProfileSummary(response.profile_summary)
       }
       
-      // If resuming, load the conversation history
+      // If resuming, always restore conversation history and show options for how to continue
       if (response.is_resumed && response.conversation_history?.length > 0) {
         console.log('[DiscoveryChat] Resuming with', response.conversation_history.length, 'messages')
-        // Restore ALL messages - background is now part of the regular conversation
+        // Always restore messages first - they should never disappear
         const restoredMessages = response.conversation_history.map((msg: any, idx: number) => ({
           id: `restored-${idx}`,
           role: msg.role as 'user' | 'assistant',
           content: msg.content,
         }))
-        setMessages(restoredMessages)
+        // Add welcome back message as the latest assistant message
+        const welcomeMessage = {
+          id: 'welcome-back',
+          role: 'assistant' as const,
+          content: 'Welcome back! How would you like to continue?',
+          type: 'resume_options' as const,
+        }
+        setMessages([...restoredMessages, welcomeMessage])
         setOnboardingSent(true)  // Don't re-send onboarding for resumed sessions
         setQueuedOpening({ content: '', audio_url: undefined })  // No need for opening
       } else if (!onboardingInfo) {
@@ -424,42 +431,86 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
         <div className="messages" style={{ position: 'relative' }}>
 
           {/* All messages in unified array */}
-          {messages.map((msg, index) => (
-            <div key={msg.id}>
-              <MessageBubble
-                role={msg.role}
-                content={msg.content}
-                audioUrl={msg.audio_url}
-                isAudioMode={isAudioMode}
-                isUserRecording={isListening}
-                onAudioPlay={() => msg.audio_url && playAudio(msg.audio_url)}
-              />
-              {/* Show goal confirmation buttons for pending goal proposals */}
-              {msg.type === 'goal_proposed' && 
-               msg.proposedGoal && 
-               index === lastGoalProposedIndex && 
-               hasPendingGoal && (
-                <div className="goal-confirmation">
-                  <div className="goal-confirmation-buttons">
-                    <button 
-                      className="goal-accept-btn"
-                      onClick={handleAcceptGoal}
-                      disabled={!isConnected}
-                    >
-                      Yes, let's explore this
-                    </button>
-                    <button 
-                      className="goal-reject-btn"
-                      onClick={handleRejectGoal}
-                      disabled={!isConnected}
-                    >
-                      Not quite — keep exploring
-                    </button>
+          {messages.map((msg, index) => {
+            const isLastResumeOptions = msg.type === 'resume_options' && index === messages.length - 1
+            return (
+              <div key={msg.id}>
+                <MessageBubble
+                  role={msg.role}
+                  content={msg.content}
+                  audioUrl={msg.audio_url}
+                  isAudioMode={isAudioMode}
+                  isUserRecording={isListening}
+                  onAudioPlay={() => msg.audio_url && playAudio(msg.audio_url)}
+                />
+                {/* Show resume options buttons for welcome back message */}
+                {isLastResumeOptions && (
+                  <div className="resume-options">
+                    <div className="resume-options-buttons">
+                      <button
+                        className="resume-option-btn"
+                        onClick={() => {
+                          // Continue on this thread - let AI continue the conversation
+                          // Remove the resume options message and send continuation message
+                          setMessages(prev => prev.filter(m => m.id !== 'welcome-back'))
+                          sendMessage("Let's continue from where we left off")
+                        }}
+                        disabled={!isConnected}
+                      >
+                        Continue on this thread
+                      </button>
+                      <button
+                        className="resume-option-btn"
+                        onClick={() => {
+                          // Suggest a new direction - send message asking for new direction
+                          setMessages(prev => prev.filter(m => m.id !== 'welcome-back'))
+                          sendMessage("I'd like to explore a new direction")
+                        }}
+                        disabled={!isConnected}
+                      >
+                        Suggest a new direction
+                      </button>
+                      <button
+                        className="resume-option-btn"
+                        onClick={() => {
+                          // AI suggests something - ask AI to suggest what to explore next
+                          setMessages(prev => prev.filter(m => m.id !== 'welcome-back'))
+                          sendMessage("What should we explore next?")
+                        }}
+                        disabled={!isConnected}
+                      >
+                        AI suggests something
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-          ))}
+                )}
+                {/* Show goal confirmation buttons for pending goal proposals */}
+                {msg.type === 'goal_proposed' && 
+                 msg.proposedGoal && 
+                 index === lastGoalProposedIndex && 
+                 hasPendingGoal && (
+                  <div className="goal-confirmation">
+                    <div className="goal-confirmation-buttons">
+                      <button 
+                        className="goal-accept-btn"
+                        onClick={handleAcceptGoal}
+                        disabled={!isConnected}
+                      >
+                        Yes, let's explore this
+                      </button>
+                      <button 
+                        className="goal-reject-btn"
+                        onClick={handleRejectGoal}
+                        disabled={!isConnected}
+                      >
+                        Not quite — keep exploring
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
 
           {/* Status indicator */}
           {status && (

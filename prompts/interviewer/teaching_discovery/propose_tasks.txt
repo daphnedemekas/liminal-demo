@@ -3,9 +3,16 @@ Assessment is COMPLETE - we have good confidence in their prior knowledge level.
 
 YOUR TASK: Present a COMPREHENSIVE LEARNING PATH - a sequence of 8-12 learning tasks that charts the full journey from where they are now to achieving their goal.
 
-CRITICAL: You MUST generate 8-12 tasks. Do NOT generate only 1-2 tasks. This is a complete curriculum, not just the first step. Think comprehensively about the entire learning journey.
+⚠️ CRITICAL REQUIREMENT ⚠️
+You MUST generate AT LEAST 8 tasks and NO MORE than 12 tasks.
+- MINIMUM: 8 tasks
+- MAXIMUM: 12 tasks
+- Do NOT generate fewer than 8 tasks under any circumstances
+- This is a COMPLETE curriculum from beginner to mastery, not just the first few steps
 
-IMPORTANT: Even if you only see 1-2 teaching candidates mentioned in the conversation, you MUST expand beyond them to create a full 8-12 task curriculum. The teaching candidates are just starting points - you need to design the complete learning path from their current level to mastery of the goal.
+IMPORTANT: Even if you only see 1-2 teaching candidates mentioned in the conversation, you MUST expand WAY beyond them to create a full 8-12 task curriculum. The teaching candidates are just starting points - you need to design the COMPLETE learning path from their current level to mastery of the goal.
+
+Think like a course designer: If you were designing a semester-long course on {user_goal}, what would be ALL the major topics students need to cover? List EVERY major topic, not just the first one or two.
 
 STRATEGIC FOCUS: {focus_instruction}
 INTENT: {question_intent}
@@ -41,7 +48,7 @@ TASK MAGNITUDE EXAMPLES:
 - RIGHT SIZE: "How embeddings capture semantic relationships and how to evaluate them" (2-3 hours)
 - TOO BIG: "All of machine learning" (months)
 
-THE PATTERN:
+THE PATTERN (YOU MUST INCLUDE ALL 8-12 TASKS):
 
 "Based on your background in [X] and your goal of {user_goal}, here's a complete learning path I've designed for you. Don't worry - we can adjust this as we go if needed:
 
@@ -51,12 +58,39 @@ THE PATTERN:
 2. **[Second Task]** - [Short description]
    Why for you: [How this builds on #1 and connects to what they know]
 
-... (continue for 8-12 tasks) ...
+3. **[Third Task]** - [Short description]
+   Why for you: [...]
+
+4. **[Fourth Task]** - [Short description]
+   Why for you: [...]
+
+5. **[Fifth Task]** - [Short description]
+   Why for you: [...]
+
+6. **[Sixth Task]** - [Short description]
+   Why for you: [...]
+
+7. **[Seventh Task]** - [Short description]
+   Why for you: [...]
+
+8. **[Eighth Task]** - [Short description]
+   Why for you: [...]
+
+9. **[Ninth Task]** - [Short description] (if needed for comprehensive coverage)
+   Why for you: [...]
+
+10. **[Tenth Task]** - [Short description] (if needed)
+    Why for you: [...]
+
+11. **[Eleventh Task]** - [Short description] (if needed)
+    Why for you: [...]
 
 12. **[Final Task]** - [Short description]
-   Why for you: [How this brings everything together toward the goal]
+    Why for you: [How this brings everything together toward the goal]
 
 This is my best guess at the full journey. We can absolutely adjust this as we learn more about what works for you - does this overall direction make sense?"
+
+⚠️ DO NOT SKIP TASKS 3-8. You must include at least 8 tasks total.
 
 === JUSTIFICATION REQUIREMENTS ===
 

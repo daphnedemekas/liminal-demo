@@ -295,21 +295,23 @@ async def generate_ai_reasoning(request: ProfileSummaryRequest):
         
         # Generate inner monologue with LLM
         llm = LLMClient()
-        prompt = f"""You are an AI tutor. Write your INNER MONOLOGUE - your private thoughts about this learner based on the conversation so far. Write in first person, as if thinking to yourself.
+        prompt = f"""You are an AI tutor. Write your INNER MONOLOGUE - your private thoughts about advancing this learner's learning goal. Write in first person, as if thinking to yourself.
 
 {chr(10).join(context_parts)}
 
 {scope_line}
 
 RULES:
-- Write 2-3 sentences of natural inner monologue
-- First person, present tense ("I notice...", "I'm wondering...", "I think...")
+- Write 2-3 sentences of factual inner monologue
+- First person, present tense ("I notice...", "I'm considering...", "I should...")
 - Be specific to what the user actually said - reference their actual words/interests
-- Focus on: what you learned about them, what intrigues you, what to explore next
-- Be warm and genuinely curious, not clinical or generic
+- Focus on: what you learned about their understanding, what gaps exist, what to explore next to advance their learning goal
+- NO praise, NO emotional language, NO subjective judgments
+- FORBIDDEN: "impressed", "interesting", "fascinating", "great", "cool", "exciting", "amazing"
+- Be neutral and factual - focus on learning progress, not evaluation
 - Maximum 50 words
 
-Example: "They mentioned balancing analytical and creative work - that's interesting. Their background in ML gives them strong foundations, but they seem most excited about the learning loop design. I should dig into what specific outcomes they envision."
+Example: "They mentioned balancing analytical and creative work. Their background in ML provides foundations for the learning loop design topic. I should probe what specific outcomes they envision to identify the next teaching target."
 
 Write the inner monologue:"""
 
@@ -377,23 +379,40 @@ async def generate_profile_summary(request: ProfileSummaryRequest):
             if goal_texts:
                 context_parts.append(f"Exploring goals: {'; '.join(goal_texts)}")
         
-        # Add themes
+        # Add themes - filter to goal-relevant if we have a specific goal
         if themes:
             theme_seeds = [t.get("theme_seed", "") for t in themes[:3] if t.get("theme_seed")]
             if theme_seeds:
-                context_parts.append(f"Topics: {', '.join(theme_seeds)}")
+                # If we have a specific goal, only include themes that are relevant to that goal
+                if scope_goal:
+                    # Filter themes to only those relevant to the current goal
+                    goal_keywords = scope_goal.lower().split()
+                    relevant_themes = [
+                        theme for theme in theme_seeds
+                        if any(keyword in theme.lower() for keyword in goal_keywords) or len(goal_keywords) == 0
+                    ]
+                    if relevant_themes:
+                        context_parts.append(f"Topics (goal-specific): {', '.join(relevant_themes)}")
+                else:
+                    context_parts.append(f"Topics: {', '.join(theme_seeds)}")
         
         if not context_parts:
             return {"summary": "Continue the conversation to build your learner profile."}
         
         # Generate summary with LLM
         llm = LLMClient()
+        
+        # Add explicit instruction to focus on goal if we have one
+        goal_focus_instruction = ""
+        if scope_goal:
+            goal_focus_instruction = f"\nCRITICAL: Focus ONLY on traits and understanding relevant to the learning goal '{scope_goal}'. Do NOT mention general interests, skills, or topics that are not directly related to this specific goal."
+        
         prompt = f"""Write a VERY SHORT summary (2-3 sentences max, under 80 words total) of this learner's style.
 
 Profile data:
 {chr(10).join(f"- {p}" for p in context_parts)}
 
-{scope_line}
+{scope_line}{goal_focus_instruction}
 
 RULES:
 - Maximum 80 words
@@ -401,8 +420,11 @@ RULES:
 - Be direct and factual
 - Focus on 1-2 key traits, not all of them
 - No praise or flowery language
+- If a specific learning goal is mentioned, ONLY discuss traits and understanding relevant to that goal
 
-Example good output: "You show interest-driven curiosity, meaning you learn for the pleasure of understanding rather than to fill knowledge gaps. Combined with your high tolerance for uncertainty, you're well-suited for open-ended exploration of complex topics."
+Example good output (for a goal): "You approach chess endgames with a methodical, pattern-recognition style. Your high tolerance for uncertainty helps you explore complex positions without needing immediate resolution."
+
+Example good output (for exploration): "You show interest-driven curiosity, meaning you learn for the pleasure of understanding rather than to fill knowledge gaps. Combined with your high tolerance for uncertainty, you're well-suited for open-ended exploration of complex topics."
 
 Write the summary now:"""
 
@@ -436,6 +458,153 @@ async def refresh_trajectory(user_id: str):
         updater = TrajectoryUpdater(db=db)
         dashboard = updater.refresh(user_id=user_id)
         return dashboard
+    except Exception as e:
+        import traceback
+        print(f"[Trajectory Refresh Error] {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/goal/{goal_id}/progress")
+async def get_goal_progress(goal_id: int, user_id: str):
+    """
+    Get detailed progress data for a specific goal.
+
+    Returns goal metadata, teaching sessions, and temporal metrics.
+    """
+    try:
+        # Get goal
+        goal = db.get_goal_by_id(goal_id)
+        if not goal or goal.get("user_id") != user_id:
+            raise HTTPException(status_code=404, detail="Goal not found")
+
+        # Get all sessions for this goal
+        sessions = db.list_sessions_for_goal(goal_id)
+        
+        # Filter to only teaching sessions for the sessions list
+        teaching_sessions = [s for s in sessions if s.get("session_type") == "teaching"]
+        
+        # Get curriculum from goal if available
+        teaching_candidate_data = goal.get("teaching_candidate")
+        curriculum_tasks = None
+        
+        if isinstance(teaching_candidate_data, list) and len(teaching_candidate_data) > 0:
+            # Preserve original order by sorting by id (tasks should have id field from curriculum proposal)
+            curriculum_tasks = sorted(teaching_candidate_data, key=lambda x: x.get('id', x.get('index', 0)))
+        elif isinstance(teaching_candidate_data, dict):
+            # Handle case where it might be a single object instead of array
+            curriculum_tasks = [teaching_candidate_data]
+        
+        # Debug logging
+        print(f"[Goal Progress] Goal {goal_id}: teaching_sessions={len(teaching_sessions)}, curriculum_tasks={len(curriculum_tasks) if curriculum_tasks else 0}")
+        print(f"[Goal Progress] teaching_candidate type: {type(teaching_candidate_data)}, value: {teaching_candidate_data}")
+        if curriculum_tasks:
+            print(f"[Goal Progress] Curriculum tasks: {[t.get('topic', t.get('title', t.get('justification', 'Unknown'))) for t in curriculum_tasks[:3]]}")
+
+        # Get checkpoints for temporal data
+        checkpoints = []
+        for session in sessions:
+            session_checkpoints = db.list_trajectory_checkpoints_for_session(session["session_id"])
+            # Add session_id to each checkpoint for filtering
+            for cp in session_checkpoints:
+                cp["session_id"] = session["session_id"]
+            checkpoints.extend(session_checkpoints)
+
+        # Sort by timestamp
+        checkpoints.sort(key=lambda x: x.get("created_at") or "")
+
+        # Extract temporal metrics
+        temporal_data = []
+        for cp in checkpoints:
+            metrics = cp.get("metrics", {})
+            temporal_data.append({
+                "session_id": cp.get("session_id"),
+                "timestamp": cp.get("created_at"),
+                "turn": cp.get("turn_index"),
+                "foundational_understanding": metrics.get("foundational_understanding", 0),
+                "applied_mastery": metrics.get("applied_mastery", 0),
+                "metacognitive_awareness": metrics.get("metacognitive_awareness", 0),
+                "teaching_steps_completed": metrics.get("teaching_steps_completed", 0),
+                "teaching_steps_total": metrics.get("teaching_steps_total", 0)
+            })
+
+        # Compute current progress
+        total_sessions = len(teaching_sessions)
+        completed_sessions = sum(1 for s in teaching_sessions if s.get("status") == "completed")
+        progress_pct = (completed_sessions / total_sessions * 100) if total_sessions > 0 else 0
+
+        return {
+            "goal": goal,
+            "sessions": teaching_sessions,  # Only teaching sessions
+            "curriculum": curriculum_tasks,  # Curriculum tasks if available
+            "progress_percentage": progress_pct,
+            "temporal_data": temporal_data,
+            "current_metrics": temporal_data[-1] if temporal_data else None
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/teaching/{session_id}/detail")
+async def get_teaching_detail(session_id: str, user_id: str):
+    """
+    Get detailed view of a single teaching session with temporal progress.
+
+    Returns session metadata, curriculum plan, and understanding marker progression.
+    """
+    try:
+        # Get session
+        session = db.get_session_by_id(session_id)
+        if not session or session.get("user_id") != user_id:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        # Get teaching schema from session
+        schema_state = session.get("schema_state", {})
+        curriculum_plan = schema_state.get("curriculum_plan", {})
+        understanding_markers = schema_state.get("understanding_markers", {})
+
+        # Get all checkpoints for this session
+        checkpoints = db.list_trajectory_checkpoints_for_session(session_id)
+
+        # Extract temporal understanding metrics
+        timeline = []
+        for cp in checkpoints:
+            metrics = cp.get("metrics", {})
+            timeline.append({
+                "turn": cp.get("turn_index"),
+                "timestamp": cp.get("created_at"),
+                "foundational_understanding": metrics.get("foundational_understanding", 0),
+                "applied_mastery": metrics.get("applied_mastery", 0),
+                "metacognitive_awareness": metrics.get("metacognitive_awareness", 0)
+            })
+
+        # Get latest understanding marker aggregates
+        from src.trajectory.metrics import compute_all_aggregates
+
+        # Convert understanding_markers if it's a list to dict format
+        if isinstance(understanding_markers, list):
+            markers_dict = {}
+            for marker in understanding_markers:
+                if isinstance(marker, dict) and marker.get("id"):
+                    markers_dict[marker["id"]] = marker
+            understanding_markers = markers_dict
+
+        current_aggregates = compute_all_aggregates(understanding_markers) if understanding_markers else {
+            "foundational_understanding": 0,
+            "applied_mastery": 0,
+            "metacognitive_awareness": 0
+        }
+
+        return {
+            "session": session,
+            "curriculum_plan": curriculum_plan,
+            "understanding_timeline": timeline,
+            "current_aggregates": current_aggregates,
+            "all_markers": understanding_markers
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -501,23 +670,27 @@ async def get_or_generate_feed(request: FeedRequest):
         with open(prompt_path) as f:
             prompt_template = f.read()
         
-        # Build context details
+        # Build context details - only include relevant info for this context type
         context_details = ""
+        user_background_for_prompt = request.user_background or "No background provided"
+        
         if request.context_type == "exploration":
             context_details = f"User is exploring potential learning directions.\nCurrent interests/goals: {request.goals_summary or 'Still discovering'}"
         elif request.context_type == "goal":
+            # For goal context, don't pass general user background - focus only on the goal
             context_details = f"User's learning goal: {request.goal_text}"
+            user_background_for_prompt = "Focus ONLY on the learning goal specified above. Ignore any general user background that is not directly relevant to this specific goal."
         elif request.context_type == "teaching_candidate":
             context_details = f"Goal: {request.goal_text}\nSpecific topic: {request.teaching_topic}"
+            user_background_for_prompt = "Focus ONLY on the specific teaching topic mentioned above. Ignore any general user background that is not directly relevant to this specific topic."
         
-        # Format prompt
+        # Format prompt - only pass fields that are actually used in the template
+        # All context-specific info is in context_details, so we don't need separate goal_text/teaching_topic
         prompt = prompt_template.format(
             context_type=request.context_type,
             context_details=context_details,
-            user_background=request.user_background or "No background provided",
-            num_items=7,
-            goal_text=request.goal_text or "",
-            teaching_topic=request.teaching_topic or ""
+            user_background=user_background_for_prompt,
+            num_items=7
         )
         
         # Generate with LLM
@@ -807,6 +980,12 @@ async def teaching_websocket(websocket: WebSocket, session_id: str):
         except Exception:
             session_info = {}
 
+        # Send initial connection confirmation to enable input
+        await websocket.send_json({
+            "type": "status",
+            "status": ""
+        })
+
         def _maybe_checkpoint(teaching_schema: dict):
             """Persist a sparse trajectory checkpoint for this user (best-effort)."""
             try:
@@ -1037,14 +1216,26 @@ async def start_discovery(request: SessionCreateRequest = SessionCreateRequest()
         needs_opening = not is_resumed or len(conversation_history) == 0
         if needs_opening:
             opening_message = session_data.discovery_session.start()
-            # Generate audio for opening message
+            # Generate audio for opening message (non-blocking with timeout)
             try:
                 if opening_message and opening_message.strip():
-                    audio_path = audio_service.text_to_speech(opening_message)
+                    import asyncio
+                    loop = asyncio.get_event_loop()
+                    audio_path = await asyncio.wait_for(
+                        loop.run_in_executor(
+                            None,
+                            audio_service.text_to_speech,
+                            opening_message
+                        ),
+                        timeout=30.0  # 30 second timeout
+                    )
                     audio_url = f"/audio/{audio_path.name}"
+            except asyncio.TimeoutError:
+                print(f"[Audio] TTS generation for opening message timed out after 30s")
+                audio_url = None
             except Exception as e:
                 print(f"[Audio] TTS generation failed for opening message: {e}")
-        audio_url = None
+                audio_url = None
 
         return SessionCreateResponse(
             session_id=session_id,
@@ -1206,6 +1397,17 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
                         print(f"[Voice] Detected teaching rejection: '{user_message}'")
                         user_message = "__REJECT_TEACHING__"
                 
+                # Check for onboarding command (should not be displayed in chat)
+                is_onboarding_message = False
+                if user_message.startswith("__ONBOARDING__"):
+                    # Extract the actual background info
+                    background_info = user_message.replace("__ONBOARDING__", "", 1)
+                    # Process it but don't add to visible conversation history
+                    # The orchestrator will use it for context but we'll mark it as hidden
+                    user_message = background_info
+                    is_onboarding_message = True
+                    print(f"[WebSocket] Onboarding message detected - will use for context but not add to visible history")
+                
                 # Check for special commands (goal accept/reject)
                 if user_message == "__ACCEPT_GOAL__":
                     # Clear status
@@ -1338,16 +1540,34 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
                     # Save all tasks to the goal in database as an array
                     try:
                         session_info = db.get_session_by_id(session_id)
+                        goal_id = None
+                        
+                        # Try to get goal_id from session
                         if session_info and session_info.get("goal_id"):
+                            goal_id = session_info["goal_id"]
+                        # Fallback: find goal by user_id and goal_text from schema
+                        elif session_info and session_data.discovery_session.schema.interview_state.user_goal:
+                            user_id = session_info.get("user_id")
+                            goal_text = session_data.discovery_session.schema.interview_state.user_goal
+                            if user_id:
+                                # Find the most recent goal matching this text
+                                goals = db.get_user_goals(user_id)
+                                matching_goal = next((g for g in goals if g["goal_text"] == goal_text), None)
+                                if matching_goal:
+                                    goal_id = matching_goal["id"]
+                                    print(f"[Curriculum] Found goal by text: {goal_id}")
+                        
+                        if goal_id:
                             tasks = result.get("tasks", [])
                             # Save entire task list as teaching candidates array
-                            db.set_goal_teaching_candidates(
-                                session_info["goal_id"],
-                                tasks
-                            )
-                            print(f"[Curriculum] Saved {len(tasks)} tasks to goal {session_info['goal_id']}")
+                            db.set_goal_teaching_candidates(goal_id, tasks)
+                            print(f"[Curriculum] Saved {len(tasks)} tasks to goal {goal_id}")
+                        else:
+                            print(f"[Curriculum] WARNING: Could not find goal_id to save tasks. Session: {session_info}, Goal: {session_data.discovery_session.schema.interview_state.user_goal if session_data.discovery_session else 'N/A'}")
                     except Exception as e:
                         print(f"[Curriculum] Failed to save tasks to DB: {e}")
+                        import traceback
+                        traceback.print_exc()
 
                     # Send data for frontend - first task is available, others locked
                     tasks = result.get("tasks", [])
@@ -1367,10 +1587,15 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
                 # (blocking calls can cause WebSocket timeouts)
                 import asyncio
                 loop = asyncio.get_event_loop()
+                # Create a wrapper function to pass the skip_history parameter
+                def process_with_flag():
+                    return session_data.discovery_session.process_user_message(
+                        user_message, 
+                        skip_history=is_onboarding_message
+                    )
                 response = await loop.run_in_executor(
                     None,  # Use default thread pool
-                    session_data.discovery_session.process_user_message,
-                    user_message
+                    process_with_flag
                 )
 
                 # Check if orchestrator detected curriculum acceptance
@@ -1423,11 +1648,22 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
                     proposed_goal = response.split(":", 1)[1]
                     goal_message = f"I think I've identified a learning goal for you: {proposed_goal}. Does this sound right?"
                     
-                    # Generate TTS for goal proposal
+                    # Generate TTS for goal proposal (non-blocking with timeout)
                     goal_audio_url = None
                     try:
-                        audio_path = audio_service.text_to_speech(goal_message)
+                        import asyncio
+                        loop = asyncio.get_event_loop()
+                        audio_path = await asyncio.wait_for(
+                            loop.run_in_executor(
+                                None,
+                                audio_service.text_to_speech,
+                                goal_message
+                            ),
+                            timeout=30.0  # 30 second timeout
+                        )
                         goal_audio_url = f"/audio/{audio_path.name}"
+                    except asyncio.TimeoutError:
+                        print(f"[Audio] TTS for goal proposal timed out after 30s")
                     except Exception as e:
                         print(f"[Audio] TTS for goal proposal failed: {e}")
                     
@@ -1458,12 +1694,23 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
                     task_list = "\n\n".join([f"**{i+1}. {t['topic']}**\n{t['justification']}" for i, t in enumerate(tasks)])
                     curriculum_message = f"{overall_justification}\n\n{task_list}\n\n---\n\nThis is my best guess at the complete journey. We can adjust this as we learn more about what works for you."
                     
-                    # Generate TTS for curriculum proposal
+                    # Generate TTS for curriculum proposal (non-blocking with timeout)
                     curriculum_audio_url = None
                     try:
+                        import asyncio
+                        loop = asyncio.get_event_loop()
                         short_message = f"I've designed a learning path with {len(tasks)} topics. The first is {tasks[0]['topic'] if tasks else 'available'} to start."
-                        audio_path = audio_service.text_to_speech(short_message)
+                        audio_path = await asyncio.wait_for(
+                            loop.run_in_executor(
+                                None,
+                                audio_service.text_to_speech,
+                                short_message
+                            ),
+                            timeout=30.0  # 30 second timeout
+                        )
                         curriculum_audio_url = f"/audio/{audio_path.name}"
+                    except asyncio.TimeoutError:
+                        print(f"[Audio] TTS for curriculum proposal timed out after 30s")
                     except Exception as e:
                         print(f"[Audio] TTS for curriculum proposal failed: {e}")
                     
@@ -1489,11 +1736,22 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
                     candidate = json_module.loads(candidate_json)
                     teaching_message = f"I think I found a great starting point: {candidate['topic']}. Want to explore this?"
                     
-                    # Generate TTS for teaching proposal
+                    # Generate TTS for teaching proposal (non-blocking with timeout)
                     teaching_audio_url = None
                     try:
-                        audio_path = audio_service.text_to_speech(teaching_message)
+                        import asyncio
+                        loop = asyncio.get_event_loop()
+                        audio_path = await asyncio.wait_for(
+                            loop.run_in_executor(
+                                None,
+                                audio_service.text_to_speech,
+                                teaching_message
+                            ),
+                            timeout=30.0  # 30 second timeout
+                        )
                         teaching_audio_url = f"/audio/{audio_path.name}"
+                    except asyncio.TimeoutError:
+                        print(f"[Audio] TTS for teaching proposal timed out after 30s")
                     except Exception as e:
                         print(f"[Audio] TTS for teaching proposal failed: {e}")
                     
@@ -1512,13 +1770,25 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
                     _maybe_checkpoint()
                     continue
 
-                # Generate audio with ElevenLabs TTS
+                # Generate audio with ElevenLabs TTS (non-blocking with timeout)
                 try:
                     if response and response.strip():  # Only generate for non-empty responses
-                        audio_path = audio_service.text_to_speech(response)
+                        import asyncio
+                        loop = asyncio.get_event_loop()
+                        audio_path = await asyncio.wait_for(
+                            loop.run_in_executor(
+                                None,
+                                audio_service.text_to_speech,
+                                response
+                            ),
+                            timeout=30.0  # 30 second timeout
+                        )
                         audio_url = f"/audio/{audio_path.name}"
                     else:
                         audio_url = None
+                except asyncio.TimeoutError:
+                    print(f"[Audio] TTS generation timed out after 30s")
+                    audio_url = None
                 except Exception as e:
                     print(f"[Audio] TTS generation failed: {e}")
                     audio_url = None

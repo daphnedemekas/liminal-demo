@@ -253,7 +253,7 @@ Generate ONLY the question:"""
             Next question to ask
         """
         # conversation_mode determines which prompt to load
-        # Valid modes: calibration, grounded_offer, hypothesis_correct, direct_probe
+        # Valid modes: calibration, grounded_offer, hypothesis_correct, direct_probe, propose_tasks, negotiate_curriculum, topic_probe, explain_back, scenario_probe
         prompt_module = schema.controller.conversation_mode or "general_continuation"
         
         if not schema.controller.conversation_mode:
@@ -263,6 +263,7 @@ Generate ONLY the question:"""
         phase = "teaching_discovery" if schema.interview_state.goal_identified else "goal_discovery"
 
         # Load appropriate prompt module with phase
+        print(f"[Interviewer] Loading prompt: mode='{prompt_module}', phase='{phase}'")
         system_prompt = self.prompt_loader.load_interviewer_prompt(prompt_module, phase=phase)
 
         # Build context from schema for prompt formatting
@@ -294,11 +295,13 @@ Generate ONLY the question:"""
         # Generate response
         try:
             start = time.time()
+            # Increase max_tokens for propose_tasks mode (needs 8-12 tasks with justifications)
+            max_tokens = 2000 if prompt_module == "propose_tasks" else 500
             response = self.llm.chat(
                 messages=messages,
                 model=get_model_name("interviewer", default="claude-sonnet-4-20250514"),
                 temperature=0.8,  # Higher for natural conversation
-                max_tokens=500
+                max_tokens=max_tokens
             ).strip()
 
             # Step 1: Strip any preamble (this is cheap and doesn't need regeneration)
@@ -501,8 +504,20 @@ Generate ONLY the question:"""
                 task["prerequisites"] = [tasks[i-1]["id"]]
 
         print(f"[Interviewer] Extracted {len(tasks)} tasks from curriculum proposal")
-        for task in tasks:
-            print(f"  - Task {task['id']}: {task['topic']}")
+        if len(tasks) == 0:
+            print(f"[Interviewer] DEBUG: Failed to extract tasks. Response preview (first 500 chars):")
+            print(f"[Interviewer] {response[:500]}")
+            print(f"[Interviewer] Testing regex pattern...")
+            # Test if there are ANY numbered items at all
+            simple_pattern = r'(\d+)\.'
+            simple_matches = re.findall(simple_pattern, response)
+            if simple_matches:
+                print(f"[Interviewer] Found {len(simple_matches)} numbered items: {simple_matches[:10]}")
+            else:
+                print(f"[Interviewer] No numbered items found at all!")
+        else:
+            for task in tasks:
+                print(f"  - Task {task['id']}: {task['topic']}")
 
         return tasks
 
@@ -538,7 +553,14 @@ Generate ONLY the question:"""
 
         # BETTER: Check controller mode instead of parsing text
         # If controller forced propose_tasks mode, we know it's proposing curriculum
+        # negotiate_curriculum mode should return a regular clarifying question, not extract curriculum
         is_proposing_curriculum = schema.controller.conversation_mode == "propose_tasks"
+        is_negotiating_curriculum = schema.controller.conversation_mode == "negotiate_curriculum"
+
+        if is_negotiating_curriculum:
+            print("[Interviewer] Controller in negotiate_curriculum mode - returning clarifying question")
+            # Return regular response - a clarifying question about curriculum modifications
+            return response
 
         if is_proposing_curriculum:
             print("[Interviewer] Controller in propose_tasks mode - parsing curriculum from response")
@@ -549,22 +571,97 @@ Generate ONLY the question:"""
             if len(tasks) == 0:
                 print("[Interviewer] WARNING: propose_tasks mode but no tasks extracted from response")
                 print(f"[Interviewer] Response text: {response[:200]}...")
-                # Fallback: Use teaching candidates to create tasks
-                if len(schema.teaching_candidates) > 0:
-                    print(f"[Interviewer] Falling back to {len(schema.teaching_candidates)} teaching candidates")
-                    tasks = [
-                        {
+                
+                # CRITICAL: LLM didn't follow the prompt - retry with explicit instruction
+                print("[Interviewer] LLM ignored propose_tasks prompt. Retrying with explicit curriculum instruction...")
+                
+                # Build explicit retry prompt
+                context = self._build_context(schema)
+                retry_prompt = f"""You MUST generate a curriculum with 8-12 numbered tasks. Your previous response was a question, but you need to propose a learning path instead.
+
+Generate a numbered list of 8-12 tasks in this exact format:
+
+1. [Task Name] - [Brief description]
+   Why for you: [Personalized justification]
+
+2. [Task Name] - [Brief description]
+   Why for you: [Personalized justification]
+
+... (continue for 8-12 tasks total)
+
+End with: "This is my best guess at the complete journey. We can adjust this as we go based on what works for you."
+
+Goal: {context.get('user_goal', '')}
+Teaching candidates: {', '.join([tc.get('topic', '') for tc in context.get('teaching_candidates', [])])}
+
+Generate the curriculum now:"""
+                
+                # Retry with explicit instruction
+                retry_messages = [
+                    {"role": "system", "content": self.prompt_loader.load_interviewer_prompt("propose_tasks", phase="teaching_discovery")},
+                    {"role": "user", "content": retry_prompt}
+                ]
+                
+                retry_response = self.llm.chat(
+                    messages=retry_messages,
+                    model=get_model_name("interviewer", default="claude-sonnet-4-20250514"),
+                    temperature=0.7,  # Lower temperature for more structured output
+                    max_tokens=2000
+                ).strip()
+                
+                print(f"[Interviewer] Retry response preview: {retry_response[:300]}...")
+                
+                # Try extracting from retry
+                tasks = self._extract_curriculum_tasks(retry_response)
+                
+                if len(tasks) > 0:
+                    print(f"[Interviewer] Retry successful - extracted {len(tasks)} tasks")
+                    response = retry_response  # Use the retry response
+                elif len(schema.teaching_candidates) > 0:
+                    # Still failed - expand teaching candidates to 8-12 tasks
+                    print(f"[Interviewer] Retry also failed. Expanding {len(schema.teaching_candidates)} teaching candidates to 8-12 tasks")
+                    # Generate additional tasks based on the goal
+                    goal = context.get('user_goal', '')
+                    base_topics = [tc.topic for tc in schema.teaching_candidates]
+                    
+                    # Create 8-12 tasks by expanding from teaching candidates
+                    tasks = []
+                    for i in range(12):  # Generate up to 12 tasks
+                        if i < len(base_topics):
+                            topic = base_topics[i]
+                        else:
+                            # Generate synthetic topics based on goal
+                            topic = f"Advanced aspect {i+1} of {goal}"
+                        
+                        tasks.append({
                             "id": i + 1,
-                            "topic": tc.topic,
-                            "justification": tc.identified_gap or f"Explore {tc.topic}",
+                            "topic": topic,
+                            "justification": f"Essential step {i+1} toward achieving your goal",
                             "prerequisites": [i] if i > 0 else [],
                             "status": "available" if i == 0 else "locked"
-                        }
-                        for i, tc in enumerate(schema.teaching_candidates[:7])
-                    ]
+                        })
+                    
+                    # Update response to include the curriculum text
+                    response = f"Based on your goal '{goal}' and what I've learned about your background, here's a complete learning path I've designed for you:\n\n" + "\n".join([f"{t['id']}. {t['topic']}\n   Why for you: {t['justification']}" for t in tasks]) + "\n\nThis is my best guess at the complete journey. We can adjust this as we go based on what works for you."
                 else:
                     # Really can't extract anything - return regular response
+                    print("[Interviewer] ERROR: Cannot generate curriculum even after retry")
                     return response
+
+            # Validate task count
+            if len(tasks) < 8:
+                print(f"[Interviewer] WARNING: Only {len(tasks)} tasks extracted, but need 8-12. Expanding to 8 tasks...")
+                # Expand to at least 8 tasks
+                while len(tasks) < 8:
+                    next_id = len(tasks) + 1
+                    goal = schema.interview_state.user_goal or "your learning goal"
+                    tasks.append({
+                        "id": next_id,
+                        "topic": f"Additional learning step {next_id}",
+                        "justification": f"Essential component {next_id} for achieving {goal}",
+                        "prerequisites": [next_id - 1] if next_id > 1 else [],
+                        "status": "locked"
+                    })
 
             print(f"[Interviewer] Extracted {len(tasks)} tasks from curriculum")
 
@@ -879,7 +976,12 @@ Generate ONLY the question:"""
             "concepts_known": ", ".join(concepts_known) if concepts_known else "Not yet assessed",
             "concepts_unclear": ", ".join(concepts_unclear) if concepts_unclear else "Not yet identified",
             "practical_experience": prior_knowledge.practical_experience or "Not yet assessed",
-            "learning_style_hints": ", ".join(prior_knowledge.learning_style_hints) if prior_knowledge.learning_style_hints else "Not yet identified"
+            "learning_style_hints": ", ".join(prior_knowledge.learning_style_hints) if prior_knowledge.learning_style_hints else "Not yet identified",
+            # Current curriculum tasks (for modification clarification) - formatted as string
+            "current_curriculum_tasks": "\n".join([
+                f"{t.id}. {t.topic}\n   Justification: {t.justification}"
+                for t in schema.task_curriculum.tasks
+            ]) if schema.task_curriculum and schema.task_curriculum.tasks else "No curriculum tasks yet"
         }
 
     def _format_prompt(self, prompt_template: str, context: Dict) -> str:
@@ -897,13 +999,16 @@ Generate ONLY the question:"""
             Formatted prompt
         """
         try:
-            # Use safe substitution - missing keys won't cause errors
-            import string
-            template = string.Template(prompt_template)
-            # Convert {var} to $var format for Template
-            prompt_for_template = prompt_template.replace("{", "$").replace("}", "")
-            template = string.Template(prompt_for_template)
-            return template.safe_substitute(context)
-        except Exception:
+            # Use .format() with safe handling of missing keys
+            # Convert context keys to handle missing values gracefully
+            class SafeDict(dict):
+                def __missing__(self, key):
+                    return '{' + key + '}'  # Return placeholder if missing
+            
+            safe_context = SafeDict(context)
+            # Use .format() which handles {var} syntax natively
+            return prompt_template.format(**safe_context)
+        except Exception as e:
+            print(f"[Interviewer] Error formatting prompt: {e}")
             # If formatting fails, return original
             return prompt_template

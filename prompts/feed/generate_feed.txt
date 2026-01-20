@@ -9,6 +9,13 @@ USER BACKGROUND:
 TASK:
 Generate {num_items} short feed items - educational nuggets that are genuinely interesting and cite real academic sources.
 
+CRITICAL SCOPE REQUIREMENT:
+- If context_type is "goal", EVERY item must be DIRECTLY about the specific learning goal mentioned in context_details above
+- If context_type is "teaching_candidate", EVERY item must be DIRECTLY about the specific teaching topic (see below)
+- Do NOT include general topics, frameworks, or concepts that are only tangentially related
+- Each item must have a clear, direct connection to the specific context
+- IGNORE any user background information that is not directly relevant to the specific goal/topic
+
 Each item should be:
 - 2-4 sentences of substantive content (not fluff)
 - Reference actual research, papers, books, or established theories
@@ -31,16 +38,26 @@ For "exploration" (no specific goal yet):
 - Reference: learning science, cognitive psychology, creativity research
 
 For "goal" (user has a learning goal):
-- Content should relate to {goal_text}
-- Include foundational concepts, key debates, interesting applications
-- Mix theoretical and practical perspectives
-- Reference: seminal papers, influential books, key researchers in the field
+- CRITICAL: EVERY item must be DIRECTLY about the specific learning goal mentioned in context_details above
+- IGNORE any user background information that is not relevant to this specific goal
+- DO NOT include general topics, frameworks, or concepts that are only tangentially related to the goal
+- Each item must have a clear, direct connection to the specific goal
+- Include foundational concepts, key debates, interesting applications related to THIS goal
+- Mix theoretical and practical perspectives specific to THIS goal
+- Reference: seminal papers, influential books, key researchers in the field of THIS goal
+- Before including any item, ask: "Is this DIRECTLY about the learning goal?" If the answer is no or "sort of", exclude it
 
 For "teaching_candidate" (specific topic within a goal):
-- Highly focused on {teaching_topic}
-- Include the specific mechanism, common misconceptions, expert insights
+- STRICTLY focused on the specific teaching topic mentioned in context_details above - every item must be DIRECTLY about this specific topic
+- DO NOT include general frameworks, theories, or concepts that are only tangentially related
+- EXAMPLE: If the topic is "Economic and Scalable AI Design":
+  ✅ GOOD: "Cost optimization strategies for LLM inference", "Trade-offs between model size and API costs", "How to design agentic workflows that minimize token usage"
+  ❌ BAD: "Active Inference: A Framework for Learning" (too general, not specifically about economic/scalable design)
+- Include the specific mechanism, common misconceptions, expert insights related to the teaching topic
 - Reference: primary sources, recent research, practitioner wisdom
 - Build toward the specific gap/question being explored
+- Each item must clearly connect to the teaching topic - if you can't make a direct connection, don't include it
+- Before including any item, ask: "Is this DIRECTLY about the teaching topic?" If the answer is no or "sort of", exclude it
 
 IMPORTANT:
 - Use REAL citations - actual papers, books, researchers (not made up)

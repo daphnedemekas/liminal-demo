@@ -1,0 +1,52 @@
+SITUATION: The user wants to MODIFY the proposed curriculum for: {user_goal}
+A curriculum has been proposed but the user's modification request is unclear or needs clarification.
+
+STRATEGIC FOCUS: {focus_instruction}
+INTENT: {question_intent}
+
+=== YOUR TASK ===
+
+Ask ONE specific clarifying question that directly addresses what was unclear about the user's modification request.
+
+=== CONTEXT ===
+
+Current curriculum tasks:
+{current_curriculum_tasks}
+
+User's message (from conversation history):
+- Look at the most recent user message in the conversation history
+- What did they actually say about the curriculum?
+
+=== CLARIFYING QUESTION GUIDELINES ===
+
+1. **Reference what they said**: Quote or paraphrase their actual message
+2. **Reference specific tasks**: Use task numbers or topics from the current curriculum
+3. **Focus on curriculum structure**: Ask about order, tasks, content - NOT about their topic understanding
+4. **Be specific**: Don't ask generic questions like "What do you want to change?"
+
+=== EXAMPLES ===
+
+If they said something vague like "I'm not sure about this":
+"Which part of the curriculum feels off - the order of tasks, specific tasks you want to change, or something else?"
+
+If they mentioned a task but it's unclear what they want:
+"You mentioned task {task_number} ({task_topic}) - do you want to remove it, move it earlier in the sequence, or change what it covers?"
+
+If they said something about priority but it's unclear:
+"You mentioned prioritizing certain topics - which specific tasks from the current curriculum should come first?"
+
+If they said "I think the order should be different":
+"Which tasks would you like to reorder? Should some come earlier or later in the sequence?"
+
+If they said something about removing tasks but it's unclear which:
+"You mentioned wanting to skip some tasks - which specific tasks would you like to remove?"
+
+=== CRITICAL RULES ===
+
+- ONE question only
+- Reference their actual message from conversation history
+- Reference specific task numbers/topics when relevant
+- Keep it under 2 sentences
+- Focus on curriculum structure, not topic understanding
+- Wait for their response before adjusting the curriculum
+

@@ -97,12 +97,24 @@ export default function GoalChat({
       // If resuming, load the conversation history
       if (response.is_resumed && response.conversation_history?.length > 0) {
         console.log('[GoalChat] Resuming with', response.conversation_history.length, 'messages')
-        // Skip the first user message if it's the onboarding/background info
-        // (the AI's first response already incorporates this context)
-        let historyToRestore = response.conversation_history
-        if (historyToRestore.length > 0 && historyToRestore[0].role === 'user') {
-          historyToRestore = historyToRestore.slice(1)
-        }
+        // Filter out onboarding/background messages (they're used for context but shouldn't be displayed)
+        // Onboarding messages are typically long and contain background info
+        let historyToRestore = response.conversation_history.filter((msg: any) => {
+          // Skip user messages that look like onboarding (long background text)
+          if (msg.role === 'user' && onboardingInfo) {
+            const msgContent = msg.content || ''
+            const onboardingContent = onboardingInfo || ''
+            // If message matches onboarding or is very long background text, skip it
+            if (msgContent === onboardingContent || 
+                (msgContent.length > 100 && 
+                 (msgContent.includes('interested') || msgContent.includes('background') || 
+                  msgContent.toLowerCase().includes('do') && msgContent.toLowerCase().includes('interested')))) {
+              console.log('[GoalChat] Filtering out onboarding message from history')
+              return false
+            }
+          }
+          return true
+        })
         const restoredMessages: Message[] = historyToRestore.map((msg: any, idx: number) => ({
           id: `restored-${idx}`,
           role: msg.role as 'user' | 'assistant',
@@ -139,8 +151,9 @@ export default function GoalChat({
       console.log('[GoalChat] Sending onboarding to trigger opening message', { isResumed, messagesLength: messages.length })
       setOnboardingSent(true)
       // Send the user's background context silently (not shown in UI)
+      // Use special command format so backend knows not to display it
       setTimeout(() => {
-        sendCommand(onboardingInfo)
+        sendCommand(`__ONBOARDING__${onboardingInfo}`)
       }, 100)
     }
   }, [isConnected, initialized, isResumed, onboardingSent, onboardingInfo, messages.length, sendCommand])
@@ -154,10 +167,15 @@ export default function GoalChat({
       const conversationHistory = messages
         .filter(m => m.role === 'user' || m.role === 'assistant')
         .map(m => ({ role: m.role, content: m.content }))
+      const candidate = lastMessage.teachingCandidate
       onTeachingCandidateAccepted({
-        ...lastMessage.teachingCandidate,
+        id: candidate.id,
+        topic: candidate.topic,
+        focus_question: candidate.focus_question || '',
+        identified_gap: candidate.identified_gap || '',
+        readiness_score: candidate.readiness_score ?? 0.5,
         goalConversationHistory: conversationHistory
-      })
+      } as TeachingCandidate)
     }
   }, [messages, onTeachingCandidateAccepted])
 
@@ -291,14 +309,14 @@ export default function GoalChat({
   }, [isListening, isAudioMode, stopListening, transcript, handleSend, resetTranscript])
 
   // Check for teaching candidate proposed (legacy single-candidate flow)
-  const lastTeachingProposedIndex = messages.findLastIndex(m => m.type === 'teaching_proposed')
-  const lastTeachingPanelIndex = messages.findLastIndex(m => m.type === 'create_teaching_panel' || m.type === 'teaching_accepted')
+  const lastTeachingProposedIndex = messages.map((m, i) => m.type === 'teaching_proposed' ? i : -1).filter(i => i >= 0).pop() ?? -1
+  const lastTeachingPanelIndex = messages.map((m, i) => (m.type === 'create_teaching_panel' || m.type === 'teaching_accepted') ? i : -1).filter(i => i >= 0).pop() ?? -1
   const hasPendingTeaching = lastTeachingProposedIndex > lastTeachingPanelIndex && lastTeachingProposedIndex >= 0
   const pendingTeachingProposal = hasPendingTeaching ? messages[lastTeachingProposedIndex] : null
 
   // Check for task curriculum proposed (new batch proposal flow)
-  const lastCurriculumProposedIndex = messages.findLastIndex(m => m.type === 'task_curriculum_proposed')
-  const lastCurriculumAcceptedIndex = messages.findLastIndex(m => m.type === 'task_curriculum_accepted')
+  const lastCurriculumProposedIndex = messages.map((m, i) => m.type === 'task_curriculum_proposed' ? i : -1).filter(i => i >= 0).pop() ?? -1
+  const lastCurriculumAcceptedIndex = messages.map((m, i) => m.type === 'task_curriculum_accepted' ? i : -1).filter(i => i >= 0).pop() ?? -1
   const hasPendingCurriculum = lastCurriculumProposedIndex > lastCurriculumAcceptedIndex && lastCurriculumProposedIndex >= 0
   const pendingCurriculumProposal = hasPendingCurriculum ? messages[lastCurriculumProposedIndex] : null
 

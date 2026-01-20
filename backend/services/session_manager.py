@@ -78,7 +78,11 @@ class SessionManager:
                 session_data.discovery_session.schema.interview_state.user_goal = user_goal
                 session_data.discovery_session.schema.interview_state.goal_provided = True
                 session_data.discovery_session.schema.interview_state.goal_identified = True  # Goal upfront = already identified
-                print(f"[SessionManager] User goal set: {user_goal}")
+                # Clear concept_knowledge for new goal sessions - it's goal-specific
+                session_data.discovery_session.schema.prior_knowledge_assessment.concept_knowledge = []
+                session_data.discovery_session.schema.prior_knowledge_assessment.concepts_known = []
+                session_data.discovery_session.schema.prior_knowledge_assessment.concepts_unclear = []
+                print(f"[SessionManager] User goal set: {user_goal}, cleared concept_knowledge for goal-specific assessment")
 
             self.sessions[session_id] = session_data
             return session_data

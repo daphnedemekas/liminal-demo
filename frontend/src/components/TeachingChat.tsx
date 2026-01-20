@@ -295,8 +295,13 @@ export default function TeachingChat({
 
         default:
           console.log('[TeachingChat] Unknown message type:', data.type)
+          // For any message, ensure loading is false and input is enabled
+          setIsLoading(false)
+          setStatus(null)
       }
     }
+    
+    wsRef.current = ws
 
     wsRef.current = ws
   }, [])
@@ -436,8 +441,8 @@ export default function TeachingChat({
   }
 
   // Check for curriculum proposed (for negotiation phase)
-  const lastCurriculumProposedIndex = messages.findLastIndex(m => m.type === 'curriculum_proposed')
-  const lastCurriculumAcceptedIndex = messages.findLastIndex(m => m.type === 'curriculum_accepted')
+  const lastCurriculumProposedIndex = messages.map((m, i) => m.type === 'curriculum_proposed' ? i : -1).filter(i => i >= 0).pop() ?? -1
+  const lastCurriculumAcceptedIndex = messages.map((m, i) => m.type === 'curriculum_accepted' ? i : -1).filter(i => i >= 0).pop() ?? -1
   const hasPendingCurriculum = lastCurriculumProposedIndex > lastCurriculumAcceptedIndex && lastCurriculumProposedIndex >= 0
 
   // Handle curriculum accept/modify

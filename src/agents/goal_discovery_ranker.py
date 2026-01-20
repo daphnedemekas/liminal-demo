@@ -137,12 +137,146 @@ class GoalDiscoveryRanker(RankerAgentBase):
         
         return True, "All criteria met"
 
-    def _check_goal_readiness(self, schema: DiscoverySchema) -> Dict[str, Any]:
+    def _check_goal_relevance(
+        self, 
+        goal: GoalCandidate, 
+        conversation_history: List[Dict[str, str]],
+        schema: DiscoverySchema = None,
+        recent_turns: int = 4
+    ) -> float:
+        """
+        Check how relevant a goal is to recent conversation context.
+        
+        Returns a relevance score (0.0-1.0) based on:
+        - How well the goal matches recent user messages
+        - How well it aligns with recent conversational themes
+        - Semantic keyword matching for common topics
+        
+        Args:
+            goal: The goal candidate to check
+            conversation_history: Full conversation history
+            schema: Current schema (for accessing themes)
+            recent_turns: Number of recent turns to consider (default 4)
+        
+        Returns:
+            Relevance score between 0.0 and 1.0
+        """
+        if not conversation_history:
+            return 0.5  # Neutral if no history
+        
+        # Get recent user messages (last N turns, focus on user messages)
+        recent_messages = conversation_history[-recent_turns * 2:] if len(conversation_history) > recent_turns * 2 else conversation_history
+        recent_user_text = " ".join([
+            msg.get("content", "") for msg in recent_messages 
+            if msg.get("role") == "user"
+        ]).lower()
+        
+        if not recent_user_text:
+            return 0.5  # Neutral if no recent user messages
+        
+        # Extract key terms from the goal
+        goal_text = goal.goal.lower()
+        goal_terms = set(goal_text.split())
+        
+        # Extract key terms from recent conversation
+        # Remove common stop words
+        stop_words = {"i", "am", "is", "are", "was", "were", "be", "been", "being", 
+                     "have", "has", "had", "do", "does", "did", "will", "would", 
+                     "should", "could", "may", "might", "can", "to", "the", "a", 
+                     "an", "and", "or", "but", "in", "on", "at", "for", "of", "with",
+                     "about", "from", "as", "it", "this", "that", "these", "those",
+                     "what", "which", "who", "where", "when", "why", "how", "want",
+                     "would", "like", "love", "enjoy", "feel", "think", "know"}
+        
+        user_terms = set([
+            word for word in recent_user_text.split() 
+            if len(word) > 2 and word not in stop_words
+        ])
+        
+        # Calculate overlap (Jaccard similarity)
+        if not goal_terms or not user_terms:
+            jaccard_similarity = 0.2  # Low relevance if no meaningful terms
+        else:
+            overlap = len(goal_terms & user_terms)
+            total_unique = len(goal_terms | user_terms)
+            jaccard_similarity = overlap / total_unique if total_unique > 0 else 0
+        
+        # Semantic keyword matching for common topic categories
+        semantic_match = 0.0
+        
+        # Hobby/leisure category
+        hobby_keywords = ["hobby", "hobbies", "interest", "interests", "enjoy", "fun", "leisure", 
+                         "recreation", "play", "playing", "chess", "guitar", "poetry", "music", 
+                         "art", "creative", "creative", "hobby", "pastime"]
+        hobby_goal_keywords = hobby_keywords + ["explore", "discover", "practice", "master", "learn"]
+        
+        # Work/professional category  
+        work_keywords = ["work", "job", "career", "professional", "project", "task", "business",
+                        "workplace", "office", "client", "meeting", "deadline"]
+        work_goal_keywords = work_keywords + ["develop", "build", "create", "improve", "enhance"]
+        
+        # Learning/education category
+        learning_keywords = ["learn", "study", "understand", "master", "skill", "knowledge", 
+                            "education", "course", "lesson", "tutorial"]
+        
+        # Check for hobby context
+        if any(kw in recent_user_text for kw in hobby_keywords):
+            if any(kw in goal_text for kw in hobby_goal_keywords):
+                semantic_match = 0.7  # Strong match
+            elif any(kw in goal_text for kw in ["explore", "discover", "play", "practice", "master"]):
+                semantic_match = 0.5  # Moderate match
+        
+        # Check for work context
+        elif any(kw in recent_user_text for kw in work_keywords):
+            if any(kw in goal_text for kw in work_goal_keywords):
+                semantic_match = 0.7  # Strong match
+            elif any(kw in goal_text for kw in ["develop", "build", "create", "improve"]):
+                semantic_match = 0.5  # Moderate match
+        
+        # Check for learning context (less specific, so lower weight)
+        if any(kw in recent_user_text for kw in learning_keywords):
+            if any(kw in goal_text for kw in learning_keywords):
+                semantic_match = max(semantic_match, 0.4)  # Moderate match
+        
+        # Check conversational themes if available
+        theme_match = 0.0
+        if schema and schema.conversational_themes:
+            # Safely extract theme_seed (defensive against schema changes)
+            recent_themes = []
+            for t in schema.conversational_themes[-3:]:  # Last 3 themes
+                theme_text_val = getattr(t, 'theme_seed', None) or getattr(t, 'theme', None)
+                if theme_text_val:
+                    recent_themes.append(str(theme_text_val).lower())
+            theme_text = " ".join(recent_themes).lower()
+            if theme_text:
+                # Check if goal mentions any recent theme keywords
+                theme_words = set([w for w in theme_text.split() if len(w) > 3 and w not in stop_words])
+                goal_words = set([w for w in goal_text.split() if len(w) > 3 and w not in stop_words])
+                if theme_words and goal_words:
+                    theme_overlap = len(theme_words & goal_words)
+                    theme_match = min(0.5, theme_overlap / max(len(theme_words), len(goal_words)))
+        
+        # Combine all signals: jaccard (40%), semantic (40%), theme (20%)
+        relevance = min(1.0, jaccard_similarity * 0.4 + semantic_match * 0.4 + theme_match * 0.2)
+        
+        print(f"[GOAL_DISCOVERY] Relevance check for '{goal.goal}': {relevance:.2f} (jaccard={jaccard_similarity:.2f}, semantic={semantic_match:.2f}, theme={theme_match:.2f})")
+        return relevance
+
+    def _check_goal_readiness(
+        self, 
+        schema: DiscoverySchema,
+        conversation_history: List[Dict[str, str]] = None
+    ) -> Dict[str, Any]:
         """
         Check if any goal candidate is ready for confirmation.
 
         Uses explicit dimension criteria rather than LLM-determined readiness.
         Skips previously rejected AND accepted goals.
+        Prioritizes goals that are relevant to recent conversation context.
+
+        Args:
+            schema: Current discovery schema
+            conversation_history: Recent conversation history for relevance checking
 
         Returns:
             Dict with 'ready' boolean and 'best_goal' if ready
@@ -163,7 +297,8 @@ class GoalDiscoveryRanker(RankerAgentBase):
         # How many goals have been rejected? Lower threshold after rejections
         num_rejections = len(rejected_ids)
         
-        # Try each goal in order of score
+        # Check relevance for each goal if we have conversation history
+        goals_with_relevance = []
         for goal in sorted_goals:
             # Skip already-rejected goals
             if goal.id in rejected_ids:
@@ -175,21 +310,44 @@ class GoalDiscoveryRanker(RankerAgentBase):
                 print(f"[GOAL_DISCOVERY] Skipping already-accepted goal: '{goal.goal}'")
                 continue
             
+            # Calculate relevance to recent conversation
+            relevance = 0.5  # Default neutral relevance
+            if conversation_history:
+                relevance = self._check_goal_relevance(goal, conversation_history, schema)
+            
+            goals_with_relevance.append((goal, goal_score(goal), relevance))
+        
+        # Sort by combined score: readiness score + relevance boost
+        # Relevance acts as a multiplier - highly relevant goals get prioritized
+        def combined_score(item):
+            goal, base_score, relevance = item
+            # Boost relevant goals: multiply base score by (1 + relevance)
+            # This means a goal with 0.7 base score and 0.8 relevance gets 0.7 * 1.8 = 1.26
+            # While a goal with 0.7 base score and 0.3 relevance gets 0.7 * 1.3 = 0.91
+            return base_score * (1.0 + relevance * 0.5)  # Relevance contributes up to 50% boost
+        
+        goals_with_relevance.sort(key=combined_score, reverse=True)
+        
+        # Try each goal in order of combined score (relevance is used for PRIORITIZATION, not filtering)
+        for goal, base_score, relevance in goals_with_relevance:
             ready, reason = self._is_goal_ready(goal)
-            print(f"[GOAL_DISCOVERY] Goal '{goal.goal}': ready={ready}, reason={reason}")
+            print(f"[GOAL_DISCOVERY] Goal '{goal.goal}': ready={ready}, reason={reason}, relevance={relevance:.2f}")
             print(f"[GOAL_DISCOVERY]   concreteness={goal.concreteness:.2f}, break_apartability={goal.break_apartability:.2f}")
             print(f"[GOAL_DISCOVERY]   scope_appropriateness={goal.scope_appropriateness:.2f}, user_commitment={goal.user_commitment:.2f}")
             
+            # If goal is ready (based on dimensions), propose it
+            # Relevance is only used for sorting/prioritization, not as a filter
+            # The cooldown check (below) handles preventing proposals during normal conversation
             if ready:
-                return {"ready": True, "best_goal": goal}
-            
-            # After 1+ rejections, also accept goals that are "close enough"
-            # This makes the system more aggressive about proposing alternatives
-            if num_rejections >= 1 and goal_score(goal) >= 0.65:
-                print(f"[GOAL_DISCOVERY] Goal '{goal.goal}' close enough after {num_rejections} rejection(s)")
+                print(f"[GOAL_DISCOVERY] Proposing goal '{goal.goal}' (ready={ready}, relevance={relevance:.2f})")
                 return {"ready": True, "best_goal": goal}
         
         # No ready goals found
+        if goals_with_relevance:
+            best_goal, best_score, best_relevance = goals_with_relevance[0]
+            best_ready, best_reason = self._is_goal_ready(best_goal)
+            print(f"[GOAL_DISCOVERY] No ready goals. Best candidate: '{best_goal.goal}' (score={best_score:.2f}, relevance={best_relevance:.2f}, ready={best_ready}, reason={best_reason})")
+        
         return {"ready": False, "best_goal": None}
 
     def _check_teaching_readiness(self, schema: DiscoverySchema) -> Dict[str, Any]:
@@ -268,10 +426,24 @@ class GoalDiscoveryRanker(RankerAgentBase):
                     current_schema.interview_state.turns_elapsed + 1
                 )
 
-            # Wait for Phase 1 to complete
+            # Wait for Phase 1 to complete with individual timing
+            branch_start = time.time()
             branch_condition = future_branch.result()
-            profile_updates = future_profile.result() if future_profile else None
-            theme_updates = future_themes.result() if future_themes else None
+            print(f"[TIMING] Branch classification completed in {time.time() - branch_start:.2f}s")
+            
+            if future_profile:
+                profile_start = time.time()
+                profile_updates = future_profile.result()
+                print(f"[TIMING] Profile update completed in {time.time() - profile_start:.2f}s")
+            else:
+                profile_updates = None
+            
+            if future_themes:
+                themes_start = time.time()
+                theme_updates = future_themes.result()
+                print(f"[TIMING] Themes update completed in {time.time() - themes_start:.2f}s")
+            else:
+                theme_updates = None
 
         print(f"[TIMING] Phase 1 completed: {time.time() - phase1_start:.2f}s")
 
@@ -288,11 +460,13 @@ class GoalDiscoveryRanker(RankerAgentBase):
         print("[TIMING] Phase 2: goal candidates (uses fresh themes)...")
         phase2_start = time.time()
 
+        print(f"[TIMING] Starting goal_candidates LLM call...")
         goal_updates = self._update_goal_candidates(
             temp_schema,  # Now has fresh themes!
             conversation_history,
             current_schema.interview_state.turns_elapsed + 1
         )
+        print(f"[TIMING] goal_candidates LLM call completed in {time.time() - phase2_start:.2f}s")
 
         # Apply goal candidate updates
         if goal_updates:
@@ -315,6 +489,12 @@ class GoalDiscoveryRanker(RankerAgentBase):
         last_accepted_turn = current_schema.interview_state.last_goal_accepted_turn
         turns_since_acceptance = (current_turn - last_accepted_turn) if last_accepted_turn is not None else float('inf')
         
+        # COOLDOWN AFTER REJECTING A GOAL: Require at least 3 turns of exploration before proposing another
+        # This prevents the system from immediately proposing goals during normal conversation
+        goal_rejection_cooldown = 3
+        last_rejected_turn = current_schema.interview_state.last_goal_rejected_turn
+        turns_since_rejection = (current_turn - last_rejected_turn) if last_rejected_turn is not None else float('inf')
+        
         if current_turn < min_turns_for_goal:
             print(f"[GOAL_DISCOVERY] Too early to propose goal (turn {current_turn} < {min_turns_for_goal})")
             goal_readiness = {"ready": False, "best_goal": None}
@@ -322,8 +502,12 @@ class GoalDiscoveryRanker(RankerAgentBase):
             print(f"[GOAL_DISCOVERY] In cooldown after goal acceptance ({turns_since_acceptance} < {goal_acceptance_cooldown} turns)")
             print(f"[GOAL_DISCOVERY] Will explore new threads before proposing another goal")
             goal_readiness = {"ready": False, "best_goal": None}
+        elif turns_since_rejection < goal_rejection_cooldown:
+            print(f"[GOAL_DISCOVERY] In cooldown after goal rejection ({turns_since_rejection} < {goal_rejection_cooldown} turns)")
+            print(f"[GOAL_DISCOVERY] Will continue exploring before proposing another goal")
+            goal_readiness = {"ready": False, "best_goal": None}
         else:
-            goal_readiness = self._check_goal_readiness(temp_schema)
+            goal_readiness = self._check_goal_readiness(temp_schema, conversation_history)
         
         if goal_readiness["ready"]:
             best_goal = goal_readiness["best_goal"]
@@ -361,7 +545,9 @@ class GoalDiscoveryRanker(RankerAgentBase):
         # ===== PHASE 3: Controller (uses all updates) =====
         print("[TIMING] Phase 3: controller generation...")
         phase3_start = time.time()
-        controller_dict = self._generate_controller(temp_schema, branch_condition)
+        print(f"[TIMING] Starting controller LLM call...")
+        controller_dict = self._generate_controller(temp_schema, branch_condition, user_message)
+        print(f"[TIMING] Controller LLM call completed in {time.time() - phase3_start:.2f}s")
         print(f"[TIMING] Phase 3 completed: {time.time() - phase3_start:.2f}s")
 
         # Build final schema

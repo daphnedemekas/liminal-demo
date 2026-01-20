@@ -11,7 +11,14 @@ CURRENT ASSESSMENT STATE:
 - Techniques already used: {techniques_used}
 - Current confidence: {current_confidence}
 
-YOUR TASK: Analyze the user's response and extract GRANULAR concepts with PROFICIENCY LEVELS.
+CRITICAL SCOPE REQUIREMENT:
+- ONLY extract concepts that are DIRECTLY relevant to the user's learning goal: "{user_goal}"
+- IGNORE any concepts, skills, or knowledge that are not related to this specific goal
+- If the user mentions general background (e.g., their job, other interests), DO NOT include those as concept knowledge unless they are directly relevant to the goal
+- Example: If the goal is "Master chess endgames" and the user mentions "I work with RAG systems", DO NOT include "RAG systems" as concept knowledge - it's not relevant to chess
+- Example: If the goal is "Master chess endgames" and the user mentions "I understand basic chess notation", DO include "chess notation" as it's relevant to the goal
+
+YOUR TASK: Analyze the user's response and extract GRANULAR concepts with PROFICIENCY LEVELS, but ONLY concepts relevant to the learning goal.
 
 === PROFICIENCY LEVELS ===
 
@@ -34,17 +41,15 @@ For each concept mentioned, assess their proficiency:
 
 === GRANULARITY GUIDELINES ===
 
-DON'T collect vague concepts like:
-- "RAG" (too broad)
-- "machine learning" (too general)
-- "LLMs" (not specific enough)
+DON'T collect:
+- Vague concepts like "machine learning" (too general)
+- Concepts unrelated to the learning goal (even if mentioned by the user)
+- General background knowledge that doesn't relate to the goal
 
-DO collect specific sub-concepts like:
-- "the purpose of RAG (retrieve docs to reduce hallucinations)"
-- "how embeddings capture semantic similarity"
-- "chunking strategies for document retrieval"
-- "the role of the context window in RAG"
-- "reranking retrieved results before passing to LLM"
+DO collect specific sub-concepts that are DIRECTLY relevant to the learning goal:
+- For chess endgames goal: "king and pawn endgame principles", "opposition in king endgames", "pawn promotion techniques"
+- For RAG goal: "the purpose of RAG (retrieve docs to reduce hallucinations)", "chunking strategies for document retrieval"
+- For any goal: Only concepts that help assess their readiness for THAT specific goal
 
 === ANALYSIS FRAMEWORK ===
 
@@ -93,12 +98,14 @@ concept_updates would be [
 ]
 
 CRITICAL RULES:
-1. Be conservative - don't jump to "can_apply" without evidence of actual use
-2. Track SPECIFIC sub-concepts, not general areas
-3. Each concept should be granular enough to teach in 5-10 minutes
-4. If they mention something vaguely, it's "heard_of" not "understands_basics"
-5. Quote ACTUAL words from their response as evidence
-6. Mark gaps (is_gap: true) for things they explicitly don't know or are confused about
-7. Return ONLY valid JSON - no text before or after
+1. ONLY include concepts directly relevant to the learning goal "{user_goal}" - filter out everything else
+2. Be conservative - don't jump to "can_apply" without evidence of actual use
+3. Track SPECIFIC sub-concepts, not general areas
+4. Each concept should be granular enough to teach in 5-10 minutes
+5. If they mention something vaguely, it's "heard_of" not "understands_basics"
+6. Quote ACTUAL words from their response as evidence
+7. Mark gaps (is_gap: true) for things they explicitly don't know or are confused about (but only if relevant to the goal)
+8. Before including any concept, ask: "Is this DIRECTLY relevant to the learning goal?" If no, exclude it
+9. Return ONLY valid JSON - no text before or after
 
 

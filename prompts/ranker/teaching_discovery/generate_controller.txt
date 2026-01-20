@@ -116,16 +116,24 @@ Track evidence in prior_knowledge_assessment schema:
    - question_intent: "present_learning_path"
    - target_ambiguity: null
    - conversation_mode: "propose_tasks"
-   - focus_instruction: "Based on assessment, propose 3-5 learning tasks with justifications. Include Accept/Modify options."
+   - focus_instruction: "Based on assessment, propose a complete learning path with 8-12 sequential tasks. Include personalized justifications for each task. End with Accept/Modify options."
 
 **PHASE 3: TASK CURRICULUM NEGOTIATION**
 
 3) IF task_curriculum.proposed AND NOT task_curriculum.accepted:
-   - next_action: "negotiate_tasks"
-   - question_intent: "handle_modification"
-   - target_ambiguity: null
-   - conversation_mode: "direct_probe"
-   - focus_instruction: "User wants to modify curriculum. Either adjust and re-propose, or ask clarifying question."
+   - Analyze user's message for modification keywords: "reorder", "move", "earlier", "later", "remove", "skip", "change", "instead", "prefer", "rather", "modify", "adjust"
+   - IF clear modification request (contains keywords above):
+     * next_action: "propose_task_curriculum"  # Same as initial proposal - triggers curriculum extraction
+     * question_intent: "present_learning_path"
+     * target_ambiguity: null
+     * conversation_mode: "propose_tasks"  # Use propose_tasks mode so interviewer extracts the modified curriculum
+     * focus_instruction: "User has given clear modification instructions. Adjust the curriculum immediately: reorder tasks as requested (e.g., move tasks 5 and 6 earlier), remove tasks they want to skip (e.g., remove task 7), modify tasks they want changed (e.g., make task 9 more concrete). Then re-propose the updated curriculum in the SAME numbered list format (1-12 tasks) with justifications. Do NOT ask clarifying questions - act on their clear instructions."
+   - ELSE (unclear or question):
+     * next_action: "negotiate_tasks"
+     * question_intent: "handle_modification"
+     * target_ambiguity: null
+     * conversation_mode: "negotiate_curriculum"  # Use dedicated curriculum negotiation mode
+     * focus_instruction: "User's modification request is unclear. Look at what they actually said: '{user_message}'. Look at the current curriculum tasks. Ask ONE specific clarifying question that directly addresses what was unclear about their modification request. The question should be about the curriculum (order, tasks, content), not about their topic understanding. Reference what they said in your question."
 
 4) IF task_curriculum.accepted:
    - next_action: "confirm_and_start"
@@ -175,7 +183,7 @@ Conversation mode is defined by the decision tree above. Do not override it sepa
     "Alternative question 2"
   ],
   "branch_condition": "topic_mentioned" | "personal_shared" | "deflection" | "preference_signal" | "question_asked" | "task_accepted" | "task_modified" | "unclear",
-  "conversation_mode": "topic_probe" | "explain_back" | "scenario_probe" | "calibration" | "propose_tasks" | "grounded_offer" | "direct_probe" | "hypothesis_correct" | null,
+  "conversation_mode": "topic_probe" | "explain_back" | "scenario_probe" | "calibration" | "propose_tasks" | "negotiate_curriculum" | "grounded_offer" | "direct_probe" | "hypothesis_correct" | null,
   "target_ambiguity": "T2_model" | "T3_gap" | null,
   "assessment_technique": "topic_probe" | "explain_back" | "scenario_probe" | "calibration" | null,
   "assessment_confidence": 0.0-1.0
@@ -185,7 +193,7 @@ Conversation mode is defined by the decision tree above. Do not override it sepa
 - focus_instruction must be STRATEGIC: Tell the Interviewer WHAT information to get, don't just write the question.
 - Explicitly reference schema elements (e.g., "Probe the gap in Candidate #2").
 - Do NOT output "next_question" anymore.
-- **conversation_mode MUST be one of these EXACT values**: "topic_probe", "explain_back", "scenario_probe", "calibration", "propose_tasks", "grounded_offer", "direct_probe", "hypothesis_correct", or null
+- **conversation_mode MUST be one of these EXACT values**: "topic_probe", "explain_back", "scenario_probe", "calibration", "propose_tasks", "negotiate_curriculum", "grounded_offer", "direct_probe", "hypothesis_correct", or null
 - **DO NOT invent new conversation_mode values** - if unsure, use "direct_probe"
 
 IMPORTANT: Return ONLY valid JSON - no explanatory text before or after. Do not wrap in markdown code blocks.

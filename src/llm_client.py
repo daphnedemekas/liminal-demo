@@ -180,10 +180,15 @@ class LLMClient:
                 + "\n\nRespond with valid JSON only. Do not include any text outside the JSON structure."
             )
 
+        llm_start = time.time()  # Track total time across retries
+        provider, model_name = self._resolve_provider_and_model(model)  # Resolve once outside loop
         for attempt in range(max_retries):
             try:
-                provider, model_name = self._resolve_provider_and_model(model)
-                print(f"[DEBUG] LLMClient.chat_with_json: provider={provider}, model_name={model_name}")
+                if attempt == 0:
+                    print(f"[LLM] Starting {provider}:{model_name} call...")
+                else:
+                    print(f"[LLM] Retrying {provider}:{model_name} call (attempt {attempt + 1}/{max_retries})...")
+                attempt_start = time.time()
 
                 # For OpenAI-compatible providers, try structured JSON mode when supported.
                 if provider in ("openai", "cerebras"):
@@ -282,25 +287,35 @@ class LLMClient:
                             if last_brace != -1 and last_brace > first_brace:
                                 json_str = json_str[first_brace:last_brace + 1]
 
+                elapsed = time.time() - attempt_start
+                total_elapsed = time.time() - llm_start
+                print(f"[LLM] {provider}:{model_name} completed in {elapsed:.2f}s (total: {total_elapsed:.2f}s)")
                 return json.loads(json_str)
 
             except json.JSONDecodeError as e:
+                elapsed = time.time() - attempt_start
+                total_elapsed = time.time() - llm_start
+                print(f"[LLM] {provider}:{model_name} JSON decode error after {elapsed:.2f}s (total: {total_elapsed:.2f}s): {e}")
                 # If JSON parsing fails, retry
                 if attempt == max_retries - 1:
                     raise ValueError(f"Failed to parse JSON response: {e}\n\nResponse was:\n{response_text}")
                 time.sleep(2 ** attempt)
 
             except Exception as e:
+                elapsed = time.time() - attempt_start
+                total_elapsed = time.time() - llm_start
                 if attempt == max_retries - 1:
+                    print(f"[LLM] {provider}:{model_name} failed after {elapsed:.2f}s (total: {total_elapsed:.2f}s): {e}")
                     raise
                 # Check for rate limit errors (429) and use longer backoff
                 error_str = str(e).lower()
                 is_rate_limit = '429' in error_str or 'rate' in error_str or 'too many' in error_str
                 if is_rate_limit:
                     delay = 5 * (3 ** attempt)  # 5s, 15s, 45s
-                    print(f"[LLM] Rate limit hit, waiting {delay}s before retry {attempt + 1}/{max_retries}")
+                    print(f"[LLM] Rate limit hit after {elapsed:.2f}s (total: {total_elapsed:.2f}s), waiting {delay}s before retry {attempt + 1}/{max_retries}")
                 else:
                     delay = 2 ** attempt
+                    print(f"[LLM] Error after {elapsed:.2f}s (total: {total_elapsed:.2f}s), retrying in {delay}s...")
                 time.sleep(delay)
 
         raise RuntimeError("Failed to get JSON response after retries")

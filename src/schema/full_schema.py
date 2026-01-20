@@ -440,6 +440,7 @@ class InterviewState(BaseModel):
     rejected_goal_ids: List[int] = Field(default_factory=list)  # Goal candidates user rejected
     accepted_goal_ids: List[int] = Field(default_factory=list)  # Goal candidates user already accepted (don't re-propose)
     last_goal_accepted_turn: Optional[int] = None  # Turn number when last goal was accepted (for cooldown)
+    last_goal_rejected_turn: Optional[int] = None  # Turn number when last goal was rejected (for cooldown)
     
     # Teaching candidate tracking (Phase 2)
     teaching_candidate_identified: bool = False  # Has a teaching candidate been selected?
@@ -470,8 +471,9 @@ class Controller(BaseModel):
         "topic_probe",        # Present a concept, ask what they think it means
         "explain_back",       # Ask user to walk through something
         "scenario_probe",     # Pose a practical situation, see how they reason
-        # Curriculum proposal mode
+        # Curriculum proposal and negotiation modes
         "propose_tasks",      # Present batch of learning tasks with justifications
+        "negotiate_curriculum",  # Handle curriculum modifications and clarifications
     ]] = None
     
     # Ambiguity targeting for intentional progress

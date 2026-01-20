@@ -303,6 +303,17 @@ class DatabaseManager:
                         marker_levels[m["id"]] = m.get("level")
             metrics["teaching_marker_levels"] = marker_levels
 
+            # NEW: Add aggregated metrics from understanding markers
+            if marker_levels:
+                try:
+                    from src.trajectory.metrics import compute_all_aggregates
+                    aggregates = compute_all_aggregates(marker_levels)
+                    metrics["foundational_understanding"] = aggregates["foundational_understanding"]
+                    metrics["applied_mastery"] = aggregates["applied_mastery"]
+                    metrics["metacognitive_awareness"] = aggregates["metacognitive_awareness"]
+                except Exception as e:
+                    print(f"[Metrics] Warning: Failed to compute aggregates: {e}")
+
         return metrics
 
     def _detect_trajectory_events(self, *, prev_metrics: Optional[Dict[str, Any]], metrics: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -951,6 +962,52 @@ class DatabaseManager:
                     "profile_summary": conv_session.profile_summary
                 }
             return None
+        finally:
+            session.close()
+
+    def list_sessions_for_goal(self, goal_id: int) -> List[Dict[str, Any]]:
+        """Get all conversation sessions associated with a specific goal."""
+        session = self._get_session()
+        try:
+            conv_sessions = session.query(ConversationSession).filter_by(goal_id=goal_id).order_by(ConversationSession.started_at.asc()).all()
+            results = []
+            for conv_session in conv_sessions:
+                results.append({
+                    "session_id": conv_session.session_id,
+                    "user_id": conv_session.user_id,
+                    "session_type": conv_session.session_type,
+                    "goal_id": conv_session.goal_id,
+                    "teaching_candidate_id": conv_session.teaching_candidate_id,
+                    "conversation_history": conv_session.conversation_history or [],
+                    "schema_state": conv_session.schema_state,
+                    "turns_elapsed": conv_session.turns_elapsed,
+                    "started_at": conv_session.started_at.isoformat() if conv_session.started_at else None,
+                    "ended_at": conv_session.ended_at.isoformat() if conv_session.ended_at else None,
+                    "status": conv_session.schema_state.get("status") if isinstance(conv_session.schema_state, dict) else None
+                })
+            return results
+        finally:
+            session.close()
+
+    def list_trajectory_checkpoints_for_session(self, session_id: str) -> List[Dict[str, Any]]:
+        """Get all trajectory checkpoints for a specific session."""
+        session = self._get_session()
+        try:
+            checkpoints = session.query(TrajectoryCheckpoint).filter_by(session_id=session_id).order_by(TrajectoryCheckpoint.turn_index.asc()).all()
+            results = []
+            for cp in checkpoints:
+                results.append({
+                    "id": cp.id,
+                    "user_id": cp.user_id,
+                    "session_id": cp.session_id,
+                    "session_type": cp.session_type,
+                    "goal_id": cp.goal_id,
+                    "turn_index": cp.turn_index,
+                    "metrics": cp.metrics,
+                    "events": cp.events,
+                    "created_at": cp.created_at.isoformat() if cp.created_at else None
+                })
+            return results
         finally:
             session.close()
 

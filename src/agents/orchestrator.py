@@ -113,12 +113,13 @@ class DiscoveryOrchestrator:
         # No opening message - we wait for user background and then generate contextual response
         return ""
 
-    def process_user_message(self, user_message: str) -> str:
+    def process_user_message(self, user_message: str, skip_history: bool = False) -> str:
         """
         Process user message through Ranker → Interviewer pipeline.
 
         Args:
             user_message: User's message
+            skip_history: If True, don't add this message to conversation history (for onboarding)
 
         Returns:
             Next question from interviewer
@@ -134,11 +135,14 @@ class DiscoveryOrchestrator:
                 "content": opening_prompt
             })
         
-        # Add user message to history
-        self.conversation_history.append({
-            "role": "user",
-            "content": user_message
-        })
+        # Add user message to history (unless it's onboarding that should be hidden)
+        if not skip_history:
+            self.conversation_history.append({
+                "role": "user",
+                "content": user_message
+            })
+        else:
+            print("[Orchestrator] Skipping adding onboarding message to visible conversation history")
 
         # For first message: Generate response FIRST, then run ranker (faster UX)
         # The opening question doesn't need ranker output - it only uses user_background
@@ -737,6 +741,10 @@ class DiscoveryOrchestrator:
         if goal_id is not None:
             self.schema.interview_state.rejected_goal_ids.append(goal_id)
         
+        # Track rejection turn for cooldown (prevent immediate re-proposal)
+        current_turn = self.schema.interview_state.turns_elapsed
+        self.schema.interview_state.last_goal_rejected_turn = current_turn
+        
         # Clear the proposal
         self.schema.interview_state.proposed_goal = None
         self.schema.interview_state.proposed_goal_id = None
@@ -744,6 +752,7 @@ class DiscoveryOrchestrator:
         print(f"\n[Orchestrator] ===== GOAL REJECTED =====")
         print(f"[Orchestrator] Goal: '{goal}'")
         print(f"[Orchestrator] Continuing in Phase 1 (Goal Discovery)")
+        print(f"[Orchestrator] Rejection cooldown active (turn {current_turn})")
         
         # Add rejection to conversation history
         self.conversation_history.append({

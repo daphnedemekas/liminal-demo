@@ -1,10 +1,10 @@
 SITUATION: The user's learning goal is already identified: {user_goal}
 High momentum - they're engaged and giving clear signals about their position within the topic.
 
-YOUR TASK: Ask a single, direct question about WHERE they are in {user_goal}.
-
 STRATEGIC FOCUS: {focus_instruction}
 INTENT: {question_intent}
+
+YOUR TASK: Ask a single, direct question about WHERE they are in {user_goal}.
 
 THE PATTERN:
 1. (Optional) Brief bridge ("Got it.", "That makes sense.")

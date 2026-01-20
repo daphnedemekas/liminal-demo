@@ -447,11 +447,16 @@ Respond with ONLY the category name, nothing else."""
 
             prompt_template = self.prompt_loader.load_ranker_prompt("update_goal_candidates", variant=self.get_prompt_variant())
 
+            # Limit conversation history to last 12 messages (6 turns) for faster processing
+            # Goal candidates don't need full history - recent context is sufficient
+            limited_history = history[-12:] if len(history) > 12 else history
+            print(f"[TIMING] Using {len(limited_history)}/{len(history)} messages for goal_candidates (optimized)")
+
             # Format with current schema context
             formatted_prompt = prompt_template.format(
                 goal_candidates=[g.model_dump() for g in schema.goal_candidates],
                 conversational_themes=[t.model_dump() for t in schema.conversational_themes],
-                conversation=self._format_conversation(history),
+                conversation=self._format_conversation(limited_history),
                 accepted_goals=accepted_goals if accepted_goals else "None yet"
             )
 
@@ -460,12 +465,15 @@ Respond with ONLY the category name, nothing else."""
             # Use model_override if provided, otherwise use config/default
             model_name = self.model_override if self.model_override else get_model_name("ranker", "goal_candidates", default="openai:gpt-4o")
 
+            print(f"[TIMING] Calling LLM for goal_candidates with model: {model_name}")
+            llm_start = time.time()
             parsed = self.llm.chat_with_json(
                 messages=messages,
                 model=model_name,
                 temperature=0.2,
                 json_top_level="any"
             )
+            print(f"[TIMING] goal_candidates LLM response received in {time.time() - llm_start:.2f}s")
 
             # Handle both array and object with array
             if isinstance(parsed, list):
@@ -633,7 +641,8 @@ Respond with ONLY the category name, nothing else."""
     def _generate_controller(
         self,
         schema: DiscoverySchema,
-        branch_condition: str
+        branch_condition: str,
+        user_message: str = ""
     ) -> Dict[str, Any]:
         """
         Generate next question and controller state.
@@ -671,7 +680,8 @@ Respond with ONLY the category name, nothing else."""
                 recent_question_intents=recent_intents,
                 recent_question_summaries=recent_summaries,
                 user_goal=user_goal or "None",
-                goal_provided=goal_provided
+                goal_provided=goal_provided,
+                user_message=user_message or ""
             )
 
             messages = [{"role": "user", "content": formatted_prompt}]

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { getApiBaseUrl } from '../config'
 
 export interface Message {
   id: string
@@ -68,8 +69,8 @@ export function useWebSocket(sessionId: string, phase: 'discovery' | 'learning')
       if (!isMounted) return
       
       // Use API URL for WebSocket, converting http to ws
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-    const wsBase = apiUrl.replace('http://', 'ws://').replace('https://', 'wss://')
+      const apiUrl = getApiBaseUrl()
+      const wsBase = apiUrl.replace('http://', 'ws://').replace('https://', 'wss://')
       const wsUrl = `${wsBase}/ws/${phase}/${sessionId}`
       
       console.log(`[WebSocket] Connecting to ${phase}... (attempt ${retryCountRef.current + 1})`)

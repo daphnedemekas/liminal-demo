@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
+import { getApiBaseUrl } from '../config'
 
 interface UseAudioReturn {
   isAudioMode: boolean
@@ -105,9 +106,9 @@ export function useAudio(): UseAudioReturn {
       }
 
       // Build full URL if relative
-      const fullUrl = audioUrl.startsWith('http') 
-        ? audioUrl 
-        : `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}${audioUrl}`
+      const fullUrl = audioUrl.startsWith('http')
+        ? audioUrl
+        : `${getApiBaseUrl()}${audioUrl}`
       
       console.log('[Audio] Full URL:', fullUrl)
 

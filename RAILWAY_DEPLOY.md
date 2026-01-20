@@ -23,6 +23,12 @@ Set these in Railway dashboard:
 SQLite database will be created automatically at `data/liminal.db`. 
 Railway provides persistent storage, so data will persist across deployments.
 
+**Important for Data Persistence:**
+- Railway's filesystem is persistent by default - your `data/` directory will survive redeployments
+- The database path is configurable via `DATABASE_PATH` environment variable (default: `data/liminal.db`)
+- All user profiles, sessions, and learning data are stored in this SQLite database
+- **No additional configuration needed** - Railway automatically persists the filesystem
+
 ## Deployment Steps
 
 1. **Connect Repository**: Link your GitHub repo to Railway

@@ -58,7 +58,7 @@ def read_root():
 # ============================================
 
 from src.database.manager import DatabaseManager
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List, Union
 
 # Initialize database - use env var for deployment, fallback to default
@@ -172,8 +172,15 @@ async def update_onboarding(user_id: str, onboarding_info: str):
 
 
 class ProfileSummaryRequest(BaseModel):
-    schema: dict
+    profile_schema: dict = Field(..., alias="schema")  # API uses "schema", internal name avoids shadowing
     session_id: Optional[str] = None
+    
+    model_config = {"populate_by_name": True}  # Allow both field name and alias
+    
+    @property
+    def schema(self) -> dict:
+        """Backward compatibility: access schema via .schema property"""
+        return self.profile_schema
 
 
 # ============================================

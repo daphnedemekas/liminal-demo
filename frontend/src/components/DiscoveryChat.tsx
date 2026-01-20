@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useWebSocket, Message } from '../hooks/useWebSocket'
+import { useWebSocket } from '../hooks/useWebSocket'
 import { useAudio } from '../hooks/useAudio'
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition'
 import { api } from '../services/api'

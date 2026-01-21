@@ -295,6 +295,10 @@ What's your current sense of this? Even a rough mental model or analogy helps me
             "content": user_message
         })
         
+        # Save user message to database IMMEDIATELY so it persists even if user refreshes
+        print("[DB] Saving user message to conversation history immediately...")
+        self.db.save_conversation_history(self.session_id, self.conversation_history)
+        
         self.schema.turns_elapsed += 1
         current_phase = self.schema.teaching_phase
         print(f"[TeachingOrchestrator] Processing message in phase: {current_phase}")

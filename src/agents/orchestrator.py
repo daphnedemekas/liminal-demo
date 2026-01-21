@@ -141,6 +141,9 @@ class DiscoveryOrchestrator:
                 "role": "user",
                 "content": user_message
             })
+            # Save user message to database IMMEDIATELY so it persists even if user refreshes
+            print("[DB] Saving user message to conversation history immediately...")
+            self.db.save_conversation_history(self.session_id, self.conversation_history)
         else:
             print("[Orchestrator] Skipping adding onboarding message to visible conversation history")
 

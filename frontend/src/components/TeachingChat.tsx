@@ -191,6 +191,7 @@ export default function TeachingChat({
     ws.onopen = () => {
       console.log('[TeachingChat] WebSocket connected')
       setIsConnected(true)
+      setStatus(null)  // Clear any loading status
     }
 
     ws.onclose = () => {
@@ -210,6 +211,10 @@ export default function TeachingChat({
       switch (data.type) {
         case 'status':
           setStatus(data.status)
+          // If status is empty/null, connection is ready - enable input
+          if (!data.status || data.status === '') {
+            setIsConnected(true)
+          }
           break
 
         case 'assessment_question':

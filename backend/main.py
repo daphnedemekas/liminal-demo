@@ -707,13 +707,35 @@ async def get_or_generate_feed(request: FeedRequest):
             num_items=7
         )
         
-        # Generate with LLM
+        # Generate with LLM - wrap in timeout to prevent hanging
         llm = LLMClient()
-        response = llm.chat_with_json(
-            messages=[{"role": "user", "content": prompt}],
-            model="openai:gpt-4o-mini",
-            json_top_level="array"  # Expecting a list of items
-        )
+        response = None
+        try:
+            import asyncio
+            loop = asyncio.get_event_loop()
+            response = await asyncio.wait_for(
+                loop.run_in_executor(
+                    None,
+                    lambda: llm.chat_with_json(
+                        messages=[{"role": "user", "content": prompt}],
+                        model="openai:gpt-4o-mini",
+                        json_top_level="array"  # Expecting a list of items
+                    )
+                ),
+                timeout=30.0  # 30 second timeout for feed generation
+            )
+        except asyncio.TimeoutError:
+            print(f"[Feed] LLM call timed out after 30s - returning empty feed")
+            return FeedResponse(items=[], generated=False)
+        except Exception as e:
+            print(f"[Feed] Error generating feed: {e}")
+            import traceback
+            traceback.print_exc()
+            return FeedResponse(items=[], generated=False)
+        
+        if response is None:
+            print(f"[Feed] No response from LLM - returning empty feed")
+            return FeedResponse(items=[], generated=False)
         
         # Parse response - it should be a list
         if isinstance(response, list):

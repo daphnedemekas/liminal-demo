@@ -684,6 +684,45 @@ Respond with ONLY the category name, nothing else."""
                 user_message=user_message or ""
             )
 
+            # PRE-LLM: Pattern matching for common ambiguity signals
+            ambiguity_patterns = [
+                "both", "either", "all of", "all of them", "everything",
+                "i don't know", "idk", "not sure", "you choose", "you decide",
+                "whatever", "doesn't matter", "any", "whichever"
+            ]
+
+            user_message_lower = user_message.lower() if user_message else ""
+            detected_ambiguity = any(pattern in user_message_lower for pattern in ambiguity_patterns)
+
+            # If ambiguity detected, force grounded_offer or propose_tasks mode
+            if detected_ambiguity:
+                print(f"[CONTROLLER] Ambiguity detected in user message: '{user_message[:50] if user_message else ''}...'")
+                # Check assessment confidence to decide next move
+                assessment_confidence = getattr(schema.prior_knowledge_assessment, 'confidence', 0.0) if hasattr(schema, 'prior_knowledge_assessment') else 0.0
+                turns_elapsed = schema.interview_state.turns_elapsed if schema.interview_state else 0
+
+                if assessment_confidence >= 0.5 or turns_elapsed >= 8:
+                    # We have enough info - propose concrete curriculum
+                    force_next_action = "propose_task_curriculum"
+                    force_conversation_mode = "propose_tasks"
+                    force_focus_instruction = "User gave ambiguous answer ('both'/'you choose'). We have enough assessment data. Propose a concrete learning path with 8-12 tasks based on what we've learned about their level."
+                else:
+                    # Still assessing - offer concrete starting point
+                    force_next_action = "provide_scaffolding"
+                    force_conversation_mode = "grounded_offer"
+                    force_focus_instruction = "User gave ambiguous answer ('both'/'you choose'). Offer a concrete starting point with a specific recommendation. Do not ask them to choose again - make a recommendation and explain why."
+
+                # Skip LLM call and return deterministic controller
+                return {
+                    "next_action": force_next_action,
+                    "question_intent": "present_learning_path" if force_next_action == "propose_task_curriculum" else "reduce_cost",
+                    "conversation_mode": force_conversation_mode,
+                    "target_ambiguity": None,
+                    "focus_instruction": force_focus_instruction,
+                    "branch_condition": "deflection",
+                    "fallback_questions": []
+                }
+
             messages = [{"role": "user", "content": formatted_prompt}]
 
             # Use model_override if provided from UI, otherwise use config/default
@@ -698,24 +737,63 @@ Respond with ONLY the category name, nothing else."""
                 json_top_level="object",
             )
 
-            # POST-PROCESSING: Enforce intent variety
+            # POST-PROCESSING: Enforce forward progress
+
             proposed_intent = response.get("question_intent", "")
+            proposed_action = response.get("next_action", "")
+
+            # 1. Intent variety check with ESCALATION
             if proposed_intent and recent_intents:
                 # Count how many times this intent was used recently
                 intent_count = recent_intents.count(proposed_intent)
                 if intent_count >= 2:
-                    print(f"[CONTROLLER] WARNING: Intent '{proposed_intent}' used {intent_count}+ times, forcing variety")
-                    # Map to alternative intents
-                    alternatives = {
-                        "validate_starting_point": "surface_alternative",
-                        "extract_gap": "locate_current_understanding",
-                        "locate_current_understanding": "extract_gap",
-                        "surface_direction": "clarify_preference",
-                    }
-                    new_intent = alternatives.get(proposed_intent, "explore_dimension")
-                    response["question_intent"] = new_intent
-                    response["focus_instruction"] = f"[Varied from {proposed_intent}] " + response.get("focus_instruction", "Try a different approach.")
-                    print(f"[CONTROLLER] Changed intent to: {new_intent}")
+                    print(f"[CONTROLLER] WARNING: Intent '{proposed_intent}' used {intent_count}+ times, forcing escalation")
+
+                    # Instead of just varying intent, ESCALATE to concrete offer
+                    assessment_confidence = getattr(schema.prior_knowledge_assessment, 'confidence', 0.0) if hasattr(schema, 'prior_knowledge_assessment') else 0.0
+                    turns_elapsed = schema.interview_state.turns_elapsed if schema.interview_state else 0
+
+                    if assessment_confidence >= 0.4 or turns_elapsed >= 6:
+                        # Enough probing - time to propose concrete path
+                        response["next_action"] = "propose_task_curriculum"
+                        response["question_intent"] = "present_learning_path"
+                        response["conversation_mode"] = "propose_tasks"
+                        response["focus_instruction"] = f"[Escalated from repeated {proposed_intent}] We've probed {intent_count} times. Time to move forward. Propose a concrete learning path with 8-12 tasks based on current understanding."
+                        print(f"[CONTROLLER] ESCALATED to propose_task_curriculum")
+                    else:
+                        # Still early - force grounded_offer with concrete recommendation
+                        response["next_action"] = "provide_scaffolding"
+                        response["question_intent"] = "reduce_cost"
+                        response["conversation_mode"] = "grounded_offer"
+                        response["focus_instruction"] = f"[Escalated from repeated {proposed_intent}] We've asked {intent_count} similar questions. Offer a concrete starting point with a specific recommendation instead of asking them to choose."
+                        print(f"[CONTROLLER] ESCALATED to grounded_offer with recommendation")
+
+            # 2. Check if we're stuck on same topic (semantic similarity in recent questions)
+            if len(recent_summaries) >= 3:
+                # Simple heuristic: if last 3 questions share common keywords, we're stuck
+                last_three = recent_summaries[-3:]
+                # Extract key terms (simple approach - can be enhanced)
+                all_words = ' '.join(last_three).lower()
+
+                # Common stuck patterns
+                stuck_keywords = [
+                    ("theory", "practice", "application"),  # Theory/practice dimension
+                    ("historical", "practical", "context"),  # Context dimension
+                    ("concepts", "examples", "applications")  # Concrete/abstract dimension
+                ]
+
+                for keyword_group in stuck_keywords:
+                    matches = sum(1 for word in keyword_group if word in all_words)
+                    if matches >= 2:
+                        print(f"[CONTROLLER] Stuck pattern detected: {keyword_group} appears in last 3 questions")
+
+                        # Force recommendation instead of another question
+                        response["next_action"] = "provide_scaffolding"
+                        response["question_intent"] = "reduce_cost"
+                        response["conversation_mode"] = "grounded_offer"
+                        response["focus_instruction"] = f"[Escalated - stuck pattern] We've circled this topic 3+ times. Make a concrete recommendation for where to start. Don't ask them to choose - tell them what we'll do and why it's a good fit."
+                        print(f"[CONTROLLER] ESCALATED due to stuck pattern")
+                        break
 
             return response
 

@@ -1,58 +1,60 @@
 # Main
 
-Uncommitted changes addressing repetitive questioning and feed generation reliability.
+Branch addressing repetitive questioning and feed generation reliability.
 
-## Review
+## Summary
 
-**Verdict:** Needs work
+This branch fixes issues with the ranker agent that could cause repetitive questioning loops, and improves feed generation timeout handling.
 
-### Issues
+## Changes
 
-1. **Ambiguity detection is overly broad** (`ranker_base.py:688-695`)
+### Escalation Logic Refactor (`ranker_base.py`)
 
-   The pattern list catches legitimate responses:
-   ```python
-   ambiguity_patterns = [
-       "both", "either", "all of", ...
-   ]
-   ```
-   "Both" in "I understand both concepts" or "either" in "I'd prefer either approach works" are not deflections. The substring matching (`pattern in user_message_lower`) has no word boundary check - "I like to bother with details" triggers on "both".
+Extracted escalation decision-making into a single helper function `_build_escalation_response()` that uses unified thresholds:
 
-2. **Duplicate escalation logic** (`ranker_base.py:698-724` and `750-769`)
+- **Confidence threshold**: 0.5 (was 0.5 pre-LLM, 0.4 post-LLM)
+- **Turns threshold**: 7 (was 8 pre-LLM, 6 post-LLM)
 
-   The pre-LLM ambiguity handler and the post-LLM intent-repetition handler both escalate to `propose_task_curriculum` or `grounded_offer` using nearly identical code. If ambiguity is detected pre-LLM, the function returns early - but if it's not detected, the post-LLM handler can still trigger the same escalation. The conditions overlap (`assessment_confidence >= 0.5` vs `>= 0.4`, `turns >= 8` vs `>= 6`).
+This ensures consistent behavior whether ambiguity is detected pre-LLM or post-LLM.
 
-3. **Stuck pattern detection is fragile** (`ranker_base.py:779-783`)
+### Ambiguity Detection (`ranker_base.py:734-744`)
 
-   The hardcoded keyword groups:
-   ```python
-   stuck_keywords = [
-       ("theory", "practice", "application"),
-       ("historical", "practical", "context"),
-       ("concepts", "examples", "applications")
-   ]
-   ```
-   These assume specific phrasing. "hands-on vs abstract" or "practical experience" won't match. The 2-of-3 match threshold can trigger on unrelated uses of common words.
+Fixed overly broad pattern matching by using word boundary regex:
 
-4. **Import inside try block** (`backend/main.py:714`)
+```python
+# Before: substring match caught "bother" matching "both"
+detected_ambiguity = any(pattern in user_message_lower for pattern in ambiguity_patterns)
 
-   `import asyncio` is inside the try block but asyncio is already available at module level (used elsewhere in the file). Minor, but unnecessary.
+# After: word boundary regex prevents false positives
+ambiguity_patterns = [r"\bboth\b", r"\beither\b", ...]
+detected_ambiguity = any(re.search(pattern, user_message_lower) for pattern in ambiguity_patterns)
+```
 
-5. **Unused variable** (`ranker_base.py:743`)
+Also removed "any" from patterns since it's too common in legitimate sentences.
 
-   `proposed_action = response.get("next_action", "")` is assigned but never read.
+### Stuck Pattern Detection (`ranker_base.py:790-814`)
 
-### What works
+Improved robustness by:
 
-- The timeout wrapper for feed generation (`backend/main.py:716-726`) is a reasonable safeguard against hanging LLM calls.
-- The grounded_offer prompt additions give clear guidance for making recommendations instead of asking preference questions.
-- The forward progress principles in the controller prompt articulate the escalation ladder well.
+1. Using word stems instead of exact matches ("theor" catches "theory/theoretical")
+2. Including more variations ("hands-on", "abstract", "concrete", "real-world")
+3. Requiring 3+ matches instead of 2 to reduce false positives
 
-## Design notes
+### Code Cleanup
 
-The changes address a real problem: the conversation can loop on the same dimension (theory vs practice, etc.) when users give non-committal answers. The solution has two parts:
+- Removed unused `proposed_action` variable
+- Added `asyncio` import at module level in `backend/main.py`
+- Removed redundant local `import asyncio` in feed generation
 
-1. **Pre-LLM short-circuit**: Pattern-match ambiguous responses and skip the LLM call entirely
-2. **Post-LLM override**: If LLM suggests a repeated intent, escalate instead
+### Feed Generation Timeout (`backend/main.py`)
 
-The intent is sound but implementation conflates detection (identifying ambiguity) with action (choosing escalation). A cleaner approach would separate these: detect ambiguity/repetition in one place, then have a single escalation decision tree that considers both signals together.
+Increased timeout from 30s to 300s (5 minutes) to allow for LLM client retry logic. Added `max_retries=3` parameter to let the LLM client handle transient failures.
+
+## Testing
+
+Run the backend and verify:
+
+1. Saying "both" or "either" in context (e.g., "I understand both concepts") does not trigger escalation
+2. Saying "both" as a deflection ("Both, I guess") does trigger escalation
+3. Repeated questioning on the same dimension (theory vs practice) escalates after 3 occurrences
+4. Feed generation completes successfully with retries on slow API responses

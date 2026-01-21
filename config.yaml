@@ -10,9 +10,9 @@
 providers:
   cerebras:
     base_url: "https://api.cerebras.ai/v1"
-    timeout_s: 20
+    timeout_s: 90  # Increased for slow API responses
   openai:
-    timeout_s: 20
+    timeout_s: 90  # Increased for slow API responses (feed generation can be slow)
 
 models:
   # TEMPORARY: Using OpenAI for all tasks until rate limits reset

@@ -16,6 +16,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+import asyncio
 import json
 import uuid
 import os
@@ -707,25 +708,26 @@ async def get_or_generate_feed(request: FeedRequest):
             num_items=7
         )
         
-        # Generate with LLM - wrap in timeout to prevent hanging
+        # Generate with LLM - run in executor to avoid blocking, but allow LLM client's retry logic to handle timeouts
         llm = LLMClient()
         response = None
         try:
-            import asyncio
             loop = asyncio.get_event_loop()
+            # Use a longer timeout (180s) to allow for retries, but let LLM client handle its own retries
             response = await asyncio.wait_for(
                 loop.run_in_executor(
                     None,
                     lambda: llm.chat_with_json(
                         messages=[{"role": "user", "content": prompt}],
                         model="openai:gpt-4o-mini",
-                        json_top_level="array"  # Expecting a list of items
+                        json_top_level="array",  # Expecting a list of items
+                        max_retries=3  # LLM client will retry on failures
                     )
                 ),
-                timeout=30.0  # 30 second timeout for feed generation
+                timeout=300.0  # 5 minutes total - allows for 3 retries (90s each) plus buffer
             )
         except asyncio.TimeoutError:
-            print(f"[Feed] LLM call timed out after 30s - returning empty feed")
+            print(f"[Feed] LLM call timed out after 180s - this is unusual, check API status")
             return FeedResponse(items=[], generated=False)
         except Exception as e:
             print(f"[Feed] Error generating feed: {e}")

@@ -2,6 +2,7 @@
 from typing import Dict, List, Any, Optional
 from abc import ABC, abstractmethod
 import json
+import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from src.llm_client import LLMClient
@@ -15,6 +16,52 @@ from src.schema.full_schema import (
     TeachingRecommendation
 )
 from src.prompt_loader import PromptLoader
+
+
+def _build_escalation_response(
+    assessment_confidence: float,
+    turns_elapsed: int,
+    reason: str
+) -> Dict[str, Any]:
+    """
+    Build an escalation controller response based on conversation state.
+
+    Uses unified thresholds:
+    - High confidence (>=0.5) OR many turns (>=7): propose full curriculum
+    - Otherwise: offer grounded recommendation
+
+    Args:
+        assessment_confidence: Current confidence in user's knowledge assessment
+        turns_elapsed: Number of turns so far
+        reason: Human-readable reason for escalation (for logging/focus_instruction)
+
+    Returns:
+        Controller dictionary with appropriate escalation action
+    """
+    # Unified thresholds for escalation decisions
+    CONFIDENCE_THRESHOLD = 0.5
+    TURNS_THRESHOLD = 7
+
+    if assessment_confidence >= CONFIDENCE_THRESHOLD or turns_elapsed >= TURNS_THRESHOLD:
+        return {
+            "next_action": "propose_task_curriculum",
+            "question_intent": "present_learning_path",
+            "conversation_mode": "propose_tasks",
+            "target_ambiguity": None,
+            "focus_instruction": f"[Escalated: {reason}] We have enough assessment data. Propose a concrete learning path with 8-12 tasks based on what we've learned.",
+            "branch_condition": "deflection",
+            "fallback_questions": []
+        }
+    else:
+        return {
+            "next_action": "provide_scaffolding",
+            "question_intent": "reduce_cost",
+            "conversation_mode": "grounded_offer",
+            "target_ambiguity": None,
+            "focus_instruction": f"[Escalated: {reason}] Offer a concrete starting point with a specific recommendation. Don't ask them to choose - make a recommendation and explain why.",
+            "branch_condition": "deflection",
+            "fallback_questions": []
+        }
 
 
 class RankerAgentBase(ABC):
@@ -685,43 +732,27 @@ Respond with ONLY the category name, nothing else."""
             )
 
             # PRE-LLM: Pattern matching for common ambiguity signals
+            # Use word boundary regex to avoid false positives like "bother" matching "both"
             ambiguity_patterns = [
-                "both", "either", "all of", "all of them", "everything",
-                "i don't know", "idk", "not sure", "you choose", "you decide",
-                "whatever", "doesn't matter", "any", "whichever"
+                r"\bboth\b", r"\beither\b", r"\ball of\b", r"\ball of them\b", r"\beverything\b",
+                r"\bi don't know\b", r"\bidk\b", r"\bnot sure\b", r"\byou choose\b", r"\byou decide\b",
+                r"\bwhatever\b", r"\bdoesn't matter\b", r"\bwhichever\b"
             ]
+            # Exclude "any" - too common in legitimate sentences like "any questions?"
 
             user_message_lower = user_message.lower() if user_message else ""
-            detected_ambiguity = any(pattern in user_message_lower for pattern in ambiguity_patterns)
+            detected_ambiguity = any(re.search(pattern, user_message_lower) for pattern in ambiguity_patterns)
 
-            # If ambiguity detected, force grounded_offer or propose_tasks mode
+            # If ambiguity detected, escalate instead of calling LLM
             if detected_ambiguity:
                 print(f"[CONTROLLER] Ambiguity detected in user message: '{user_message[:50] if user_message else ''}...'")
-                # Check assessment confidence to decide next move
                 assessment_confidence = getattr(schema.prior_knowledge_assessment, 'confidence', 0.0) if hasattr(schema, 'prior_knowledge_assessment') else 0.0
                 turns_elapsed = schema.interview_state.turns_elapsed if schema.interview_state else 0
-
-                if assessment_confidence >= 0.5 or turns_elapsed >= 8:
-                    # We have enough info - propose concrete curriculum
-                    force_next_action = "propose_task_curriculum"
-                    force_conversation_mode = "propose_tasks"
-                    force_focus_instruction = "User gave ambiguous answer ('both'/'you choose'). We have enough assessment data. Propose a concrete learning path with 8-12 tasks based on what we've learned about their level."
-                else:
-                    # Still assessing - offer concrete starting point
-                    force_next_action = "provide_scaffolding"
-                    force_conversation_mode = "grounded_offer"
-                    force_focus_instruction = "User gave ambiguous answer ('both'/'you choose'). Offer a concrete starting point with a specific recommendation. Do not ask them to choose again - make a recommendation and explain why."
-
-                # Skip LLM call and return deterministic controller
-                return {
-                    "next_action": force_next_action,
-                    "question_intent": "present_learning_path" if force_next_action == "propose_task_curriculum" else "reduce_cost",
-                    "conversation_mode": force_conversation_mode,
-                    "target_ambiguity": None,
-                    "focus_instruction": force_focus_instruction,
-                    "branch_condition": "deflection",
-                    "fallback_questions": []
-                }
+                return _build_escalation_response(
+                    assessment_confidence,
+                    turns_elapsed,
+                    reason="ambiguous answer ('both'/'you choose')"
+                )
 
             messages = [{"role": "user", "content": formatted_prompt}]
 
@@ -738,61 +769,48 @@ Respond with ONLY the category name, nothing else."""
             )
 
             # POST-PROCESSING: Enforce forward progress
-
             proposed_intent = response.get("question_intent", "")
-            proposed_action = response.get("next_action", "")
 
-            # 1. Intent variety check with ESCALATION
+            # Get state once for all escalation checks
+            assessment_confidence = getattr(schema.prior_knowledge_assessment, 'confidence', 0.0) if hasattr(schema, 'prior_knowledge_assessment') else 0.0
+            turns_elapsed = schema.interview_state.turns_elapsed if schema.interview_state else 0
+
+            # 1. Intent variety check - escalate if same intent used 2+ times
             if proposed_intent and recent_intents:
-                # Count how many times this intent was used recently
                 intent_count = recent_intents.count(proposed_intent)
                 if intent_count >= 2:
                     print(f"[CONTROLLER] WARNING: Intent '{proposed_intent}' used {intent_count}+ times, forcing escalation")
+                    escalation = _build_escalation_response(
+                        assessment_confidence,
+                        turns_elapsed,
+                        reason=f"repeated intent '{proposed_intent}' ({intent_count}+ times)"
+                    )
+                    response.update(escalation)
 
-                    # Instead of just varying intent, ESCALATE to concrete offer
-                    assessment_confidence = getattr(schema.prior_knowledge_assessment, 'confidence', 0.0) if hasattr(schema, 'prior_knowledge_assessment') else 0.0
-                    turns_elapsed = schema.interview_state.turns_elapsed if schema.interview_state else 0
-
-                    if assessment_confidence >= 0.4 or turns_elapsed >= 6:
-                        # Enough probing - time to propose concrete path
-                        response["next_action"] = "propose_task_curriculum"
-                        response["question_intent"] = "present_learning_path"
-                        response["conversation_mode"] = "propose_tasks"
-                        response["focus_instruction"] = f"[Escalated from repeated {proposed_intent}] We've probed {intent_count} times. Time to move forward. Propose a concrete learning path with 8-12 tasks based on current understanding."
-                        print(f"[CONTROLLER] ESCALATED to propose_task_curriculum")
-                    else:
-                        # Still early - force grounded_offer with concrete recommendation
-                        response["next_action"] = "provide_scaffolding"
-                        response["question_intent"] = "reduce_cost"
-                        response["conversation_mode"] = "grounded_offer"
-                        response["focus_instruction"] = f"[Escalated from repeated {proposed_intent}] We've asked {intent_count} similar questions. Offer a concrete starting point with a specific recommendation instead of asking them to choose."
-                        print(f"[CONTROLLER] ESCALATED to grounded_offer with recommendation")
-
-            # 2. Check if we're stuck on same topic (semantic similarity in recent questions)
+            # 2. Check if we're stuck on same dimension (using word stems, not exact matches)
             if len(recent_summaries) >= 3:
-                # Simple heuristic: if last 3 questions share common keywords, we're stuck
                 last_three = recent_summaries[-3:]
-                # Extract key terms (simple approach - can be enhanced)
                 all_words = ' '.join(last_three).lower()
 
-                # Common stuck patterns
-                stuck_keywords = [
-                    ("theory", "practice", "application"),  # Theory/practice dimension
-                    ("historical", "practical", "context"),  # Context dimension
-                    ("concepts", "examples", "applications")  # Concrete/abstract dimension
+                # Dimension patterns - use word stems and variations for more robust matching
+                # Each tuple: (dimension_name, list of related words to look for)
+                stuck_dimensions = [
+                    ("theory/practice", ["theor", "practic", "applic", "hands-on", "abstract", "concrete"]),
+                    ("historical/practical", ["histor", "context", "background", "real-world", "example"]),
                 ]
 
-                for keyword_group in stuck_keywords:
-                    matches = sum(1 for word in keyword_group if word in all_words)
-                    if matches >= 2:
-                        print(f"[CONTROLLER] Stuck pattern detected: {keyword_group} appears in last 3 questions")
-
-                        # Force recommendation instead of another question
-                        response["next_action"] = "provide_scaffolding"
-                        response["question_intent"] = "reduce_cost"
-                        response["conversation_mode"] = "grounded_offer"
-                        response["focus_instruction"] = f"[Escalated - stuck pattern] We've circled this topic 3+ times. Make a concrete recommendation for where to start. Don't ask them to choose - tell them what we'll do and why it's a good fit."
-                        print(f"[CONTROLLER] ESCALATED due to stuck pattern")
+                for dimension_name, keywords in stuck_dimensions:
+                    # Count how many keyword stems appear in the combined text
+                    matches = sum(1 for kw in keywords if kw in all_words)
+                    # Require at least 3 matches to reduce false positives
+                    if matches >= 3:
+                        print(f"[CONTROLLER] Stuck pattern detected: '{dimension_name}' dimension appears in last 3 questions")
+                        escalation = _build_escalation_response(
+                            assessment_confidence,
+                            turns_elapsed,
+                            reason=f"stuck on '{dimension_name}' dimension"
+                        )
+                        response.update(escalation)
                         break
 
             return response

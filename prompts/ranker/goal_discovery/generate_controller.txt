@@ -34,9 +34,15 @@ Recent question intents asked: {recent_question_intents}
 Recent questions asked: {recent_question_summaries}
 
 CRITICAL REPETITION RULES:
-1. If the SAME intent appears 2+ times in recent_question_intents, use a COMPLETELY DIFFERENT strategy
-2. NEVER ask the same type of question twice (e.g., don't ask "theory vs practice" more than once)
-3. If probing a dimension 2+ times with no progress, move to a different approach
+1. READ recent_question_summaries CAREFULLY. If your next question covers the same topic/choice as any previous question (even with different wording), you MUST ask about something completely different.
+
+2. If the SAME intent appears 2+ times in recent_question_intents, use a COMPLETELY DIFFERENT strategy.
+
+3. NEVER ask the same type of question twice (e.g., "theory vs practice", "historical vs practical", "concepts vs application" - ANY VARIATION counts as the same question).
+
+4. If user says "both" or asks YOU to recommend, DO NOT ask them to choose again. Make a concrete recommendation instead.
+
+5. If probing a dimension 2+ times with no progress, move to a different approach or make a concrete offer/suggestion.
 
 DIMENSION GATING (Phase 1 priorities):
 DIMENSIONS STILL UNCERTAIN (can ask about): {gatable_dimensions}

@@ -157,7 +157,9 @@ CRITICAL RULES:
 2. Don't ask too many questions in a row - balance with information
 3. If they're confused, SLOW DOWN and provide support, don't just repeat
 4. Every 3-4 exchanges, consider SUMMARIZE_PROGRESS to consolidate
-5. Return ONLY valid JSON - no explanatory text
+5. CHECK CONVERSATION HISTORY: If the user already answered a question (even briefly like "both", "yes", "I'd like X"), do NOT choose an action that asks the same question again. Instead, acknowledge their answer and move forward with ANSWER_QUESTION, EXPLAIN, or PROVIDE_EXAMPLE.
+6. If the user asked you to recommend or decide something, use ANSWER_QUESTION to respond directly rather than asking them to choose.
+7. Return ONLY valid JSON - no explanatory text
 
 IMPORTANT: Return ONLY valid JSON - no markdown code blocks.
 

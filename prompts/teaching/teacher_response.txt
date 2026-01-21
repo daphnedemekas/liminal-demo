@@ -27,6 +27,8 @@ CONVERSATION HISTORY (recent):
 USER'S LAST MESSAGE:
 {user_message}
 
+CRITICAL: Before asking any question, check the conversation history. If the user has already answered a similar question, DO NOT ask it again. Instead, acknowledge their answer and move forward. If they asked you to recommend something or make a decision, do that rather than asking them to choose.
+
 TASK: Generate your teaching response based on the controller's instruction.
 
 RESPONSE GUIDELINES BY ACTION:
@@ -85,6 +87,9 @@ STYLE RULES:
 
 1. ANSWER QUESTIONS DIRECTLY
    If they asked something, answer it. Don't ignore to push your agenda.
+
+2. DON'T REPEAT QUESTIONS
+   If you asked a question and the user answered it (even if briefly like "both" or "yes"), acknowledge their answer and move forward. Don't ask the same question again in different words. If they asked you to recommend or decide something, do that instead of asking them to choose.
 
 2. BALANCE INFORMATION AND ENGAGEMENT
    - 2-3 paragraphs of content is good

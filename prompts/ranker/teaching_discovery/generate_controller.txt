@@ -40,12 +40,20 @@ Recent question intents asked: {recent_question_intents}
 Recent questions asked: {recent_question_summaries}
 
 CRITICAL REPETITION RULES (MANDATORY):
-1. Count occurrences of each intent in recent_question_intents. 
+1. READ the recent_question_summaries CAREFULLY. If your next question is semantically similar to ANY previous question (asking about the same choice/topic in different words), you MUST ask about something completely different.
+
+2. Count occurrences of each intent in recent_question_intents.
    If ANY intent appears 2+ times: YOU MUST USE A DIFFERENT INTENT.
-2. "validate_starting_point" can ONLY be used ONCE per conversation.
+
+3. "validate_starting_point" can ONLY be used ONCE per conversation.
    If it's already in recent_question_intents, use "surface_alternative" or "calibrate_approach" instead.
-3. NEVER ask "theory vs practice" or "principles vs application" more than once.
-4. If stuck on eliciting their current model, try offering a hypothesis to correct.
+
+4. NEVER ask "theory vs practice", "principles vs application", "historical vs practical", "context vs concepts" or ANY VARIATION more than once.
+   If user already answered this type of question, MOVE ON to a different dimension or make a recommendation.
+
+5. If user says "both" or asks YOU to recommend, DO NOT ask them to choose again. Make a concrete recommendation instead.
+
+6. If stuck on the same topic for 2+ turns, switch to offering a concrete starting point rather than asking more questions.
 
 INTENT VARIETY RULES:
 - After "validate_starting_point": switch to "surface_alternative" (explore adjacent topics)

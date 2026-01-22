@@ -17,7 +17,17 @@ See <lf:schema> for conversational_themes array.
 CONVERSATION:
 See <lf:conversation> for the conversation history.
 
+MOST RECENT USER MESSAGE:
+See <lf:goal_context> for recent_user_message - this is the user's most recent input and should be given HIGHEST PRIORITY when assessing goal relevance.
+
 TASK: Identify NEW goal candidates or update existing ones.
+
+CRITICAL: PRIORITIZE RECENT CONVERSATION
+- The most recent 2-3 user messages are ESPECIALLY IMPORTANT
+- If the user just mentioned a specific topic, interest, or question, prioritize goal candidates that DIRECTLY relate to that recent mention
+- Goals matching the most recent user messages should receive HIGHER readiness scores
+- When calculating user_commitment and readiness_score, give extra weight to goals that align with what the user just said
+- If the user explicitly rejected a goal and then mentioned something new, the new mention takes precedence
 
 CRITICAL: If the user has already accepted goals, new goal candidates should be DIVERSE - 
 covering DIFFERENT areas of interest, not variations or extensions of accepted goals.
@@ -130,7 +140,10 @@ For each potential goal candidate, evaluate:
 4. USER COMMITMENT (0.0-1.0)
    - Has the user expressed genuine interest/need?
    - Is there stakes/motivation mentioned?
+   - CRITICAL: Does this goal match what the user JUST SAID in their most recent message?
+   - If the goal directly relates to the most recent user message, boost this score significantly
    - Example: vague mention (0.3) vs "I'm building X and need to understand Y" (0.9)
+   - Example: goal matches recent user message about "knowledge graphs for AI mentor" → high commitment (0.8+)
 
 5. READINESS SCORE (0.0-1.0)
    - Overall: Is this clearly the learning goal they're after?

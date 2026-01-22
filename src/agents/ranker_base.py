@@ -509,9 +509,17 @@ Respond with ONLY the category name, nothing else."""
             limited_history = history[-12:] if len(history) > 12 else history
             print(f"[TIMING] Using {len(limited_history)}/{len(history)} messages for goal_candidates (optimized)")
 
-            # Build goal_context with accepted goals
+            # Extract most recent user message for explicit highlighting
+            recent_user_message = None
+            for msg in reversed(limited_history):
+                if msg.get("role") == "user":
+                    recent_user_message = msg.get("content", "")
+                    break
+            
+            # Build goal_context with accepted goals and recent user message
             goal_context = {
-                "accepted_goals": accepted_goals if accepted_goals else "None yet"
+                "accepted_goals": accepted_goals if accepted_goals else "None yet",
+                "recent_user_message": recent_user_message if recent_user_message else "No recent user message"
             }
 
             # Use assemble_prompt to build prompt with context
@@ -851,6 +859,10 @@ Respond with ONLY the category name, nothing else."""
                         )
                         response.update(escalation)
                         break
+
+            # Ensure branch_condition is always included in response (LLM might omit it)
+            if not response.get("branch_condition") or response.get("branch_condition") is None:
+                response["branch_condition"] = branch_condition or "unclear"
 
             return response
 

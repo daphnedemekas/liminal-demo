@@ -6,7 +6,12 @@ See <lf:schema> for the full schema state.
 BRANCH CONDITION (from user's last response):
 See <lf:goal_context> for branch_condition.
 
-TASK: Determine next_action, determine strategic focus, and set appropriate branch_condition for next turn.
+This is the classification of what the user just said - use it as context. However, you need to SET the branch_condition for the NEXT turn based on the conversation state:
+- If user accepted a task/curriculum → use "task_accepted"
+- If user requested modifications → use "task_modified"  
+- Otherwise, use the classified value from context as the branch condition for next turn
+
+TASK: Determine next_action, determine strategic focus, and set the appropriate branch_condition for the next turn.
 
 === USER'S LEARNING GOAL (GIVEN) ===
 Goal: See <lf:goal_context> for user_goal.

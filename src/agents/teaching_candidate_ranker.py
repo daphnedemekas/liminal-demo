@@ -690,6 +690,10 @@ Write the transition:"""
 
             controller_dict = future_controller.result()
             teaching_rec_dict = future_teaching_rec.result()
+            
+            # Ensure branch_condition is always set (LLM might not return it or return None)
+            if not controller_dict.get("branch_condition") or controller_dict.get("branch_condition") is None:
+                controller_dict["branch_condition"] = branch_condition or "unclear"
 
         print(f"[TIMING] Phase 3 completed: {time.time() - phase3_start:.2f}s")
 

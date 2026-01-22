@@ -176,6 +176,9 @@ export default function TeachingChat({
       if (wsRef.current) {
         wsRef.current.close()
       }
+      // Reset initRef so restoration can happen again when component remounts
+      console.log('[TeachingChat] Component unmounting, resetting initRef')
+      initRef.current = false
     }
   }, [candidate, goalId, goalText, userId, onboardingInfo])
 

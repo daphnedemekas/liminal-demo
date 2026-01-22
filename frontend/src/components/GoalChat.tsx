@@ -135,6 +135,12 @@ export default function GoalChat({
     }).catch(err => {
       console.error('[GoalChat] Failed to start goal session:', err)
     })
+    
+    // Reset initRef on unmount so restoration can happen again when component remounts
+    return () => {
+      console.log('[GoalChat] Component unmounting, resetting initRef')
+      initRef.current = false
+    }
   }, [goalId, goal, userId, modelConfig, addMessage, setMessages])
 
   // Send onboarding info once connected

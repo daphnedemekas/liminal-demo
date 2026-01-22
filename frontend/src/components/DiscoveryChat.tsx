@@ -163,6 +163,12 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
       setSessionError('Failed to connect to the server. Please try again.')
       initRef.current = false  // Allow retry
     })
+    
+    // Reset initRef on unmount so restoration can happen again when component remounts
+    return () => {
+      console.log('[DiscoveryChat] Component unmounting, resetting initRef')
+      initRef.current = false
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, retryCount]) // Reinitialize if userId changes or retry requested
 

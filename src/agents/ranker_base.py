@@ -1,9 +1,11 @@
 """Base class for ranker agents with shared functionality."""
 from typing import Dict, List, Any, Optional
 from abc import ABC, abstractmethod
+from pathlib import Path
 import json
 import re
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from src.llm_client import LLMClient
 from src.config import get_model_name, get_conversation_max_turns
@@ -16,6 +18,9 @@ from src.schema.full_schema import (
     TeachingRecommendation
 )
 from src.prompt_loader import PromptLoader
+from src.prompt.assembly import assemble_prompt
+from src.prompt.gather import gather_conversation, gather_schema
+from src.scheduler.scheduler import get_scheduler
 
 
 def _build_escalation_response(
@@ -95,6 +100,10 @@ class RankerAgentBase(ABC):
         self.llm = llm_client
         self.prompt_loader = PromptLoader()
         self.model_override = model_config  # Store for use in all model calls
+        self.scheduler = get_scheduler()  # Global scheduler for concurrency control
+        # Get repo root for prompt assembly
+        project_root = Path(__file__).parent.parent.parent
+        self.repo_root = project_root
 
     def get_prompt_variant(self) -> str:
         """
@@ -287,12 +296,15 @@ Respond with ONLY the category name, nothing else."""
             Updated profile dictionary
         """
         try:
-            prompt_template = self.prompt_loader.load_ranker_prompt("update_user_profile")
-
-            # Format with current schema context
-            formatted_prompt = prompt_template.format(
-                current_profile=schema.user_profile.model_dump(),
-                conversation=self._format_conversation(history)
+            # Use assemble_prompt to build prompt with context
+            formatted_prompt, dropped = assemble_prompt(
+                step_name="update_user_profile",
+                prompt_loader=self.prompt_loader,
+                repo_root=self.repo_root,
+                conversation_history=history,
+                schema_state=schema,
+                task="ranker",
+                variant="shared",
             )
 
             messages = [{"role": "user", "content": formatted_prompt}]
@@ -341,30 +353,30 @@ Respond with ONLY the category name, nothing else."""
 
             # Determine phase and load phase-specific prompt
             phase = "teaching_discovery" if schema.interview_state.goal_identified else "goal_discovery"
-            prompt_template = self.prompt_loader.load_ranker_prompt(
-                "update_conversational_themes_delta",
-                variant=phase
-            )
-
-            # Format with current schema context
+            
             # Only pass recent history (last 4 turns) to enforce incremental updates and reduce noise
             recent_history = history[-8:] if len(history) > 8 else history # 4 turns = 8 messages (user+assistant)
 
-            # Phase-specific formatting
+            # Build goal_context with phase-specific data
+            goal_context = {}
             if phase == "teaching_discovery":
                 # Phase 2: Include user_goal and teaching_candidates for context
-                formatted_prompt = prompt_template.format(
-                    user_goal=schema.interview_state.user_goal or "",
-                    conversational_themes=[t.model_dump() for t in schema.conversational_themes],
-                    teaching_candidates=[t.model_dump() for t in schema.teaching_candidates],
-                    conversation=self._format_conversation(recent_history)
-                )
-            else:
-                # Phase 1: Just themes and conversation
-                formatted_prompt = prompt_template.format(
-                    conversational_themes=[t.model_dump() for t in schema.conversational_themes],
-                    conversation=self._format_conversation(recent_history)
-                )
+                goal_context = {
+                    "user_goal": schema.interview_state.user_goal or "",
+                    "teaching_candidates": [t.model_dump() for t in schema.teaching_candidates],
+                }
+
+            # Use assemble_prompt to build prompt with context
+            formatted_prompt, dropped = assemble_prompt(
+                step_name="update_conversational_themes_delta",
+                prompt_loader=self.prompt_loader,
+                repo_root=self.repo_root,
+                conversation_history=recent_history,
+                schema_state=schema,
+                goal_context=goal_context if goal_context else None,
+                task="ranker",
+                variant=phase,
+            )
 
             # Debug: show snippet of conversation being analyzed
             conv_snippet = self._format_conversation(history[-2:] if len(history) > 2 else history)
@@ -492,19 +504,26 @@ Respond with ONLY the category name, nothing else."""
             if accepted_goals:
                 print(f"[GOAL DISCOVERY] Already accepted goals: {accepted_goals}")
 
-            prompt_template = self.prompt_loader.load_ranker_prompt("update_goal_candidates", variant=self.get_prompt_variant())
-
             # Limit conversation history to last 12 messages (6 turns) for faster processing
             # Goal candidates don't need full history - recent context is sufficient
             limited_history = history[-12:] if len(history) > 12 else history
             print(f"[TIMING] Using {len(limited_history)}/{len(history)} messages for goal_candidates (optimized)")
 
-            # Format with current schema context
-            formatted_prompt = prompt_template.format(
-                goal_candidates=[g.model_dump() for g in schema.goal_candidates],
-                conversational_themes=[t.model_dump() for t in schema.conversational_themes],
-                conversation=self._format_conversation(limited_history),
-                accepted_goals=accepted_goals if accepted_goals else "None yet"
+            # Build goal_context with accepted goals
+            goal_context = {
+                "accepted_goals": accepted_goals if accepted_goals else "None yet"
+            }
+
+            # Use assemble_prompt to build prompt with context
+            formatted_prompt, dropped = assemble_prompt(
+                step_name="update_goal_candidates",
+                prompt_loader=self.prompt_loader,
+                repo_root=self.repo_root,
+                conversation_history=limited_history,
+                schema_state=schema,
+                goal_context=goal_context,
+                task="ranker",
+                variant=self.get_prompt_variant(),
             )
 
             messages = [{"role": "user", "content": formatted_prompt}]
@@ -567,8 +586,6 @@ Respond with ONLY the category name, nothing else."""
             for cand in schema.teaching_candidates:
                 print(f"  - ID {cand.id}: {cand.topic}")
 
-            prompt_template = self.prompt_loader.load_ranker_prompt("update_teaching_candidates", variant=self.get_prompt_variant())
-
             # Format with current schema context
             # Include task_curriculum if it exists (for modification detection)
             task_curriculum_str = "None (not yet proposed)"
@@ -576,12 +593,22 @@ Respond with ONLY the category name, nothing else."""
                 import json
                 task_curriculum_str = json.dumps(schema.task_curriculum.model_dump(), indent=2)
             
-            formatted_prompt = prompt_template.format(
-                teaching_candidates=[t.model_dump() for t in schema.teaching_candidates],
-                conversational_themes=[t.model_dump() for t in schema.conversational_themes],
-                task_curriculum=task_curriculum_str,
-                conversation=self._format_conversation(history),
-                user_goal=schema.interview_state.user_goal or "Not yet identified"
+            # Build goal_context with task_curriculum and user_goal
+            goal_context = {
+                "task_curriculum": task_curriculum_str,
+                "user_goal": schema.interview_state.user_goal or "Not yet identified"
+            }
+
+            # Use assemble_prompt to build prompt with context
+            formatted_prompt, dropped = assemble_prompt(
+                step_name="update_teaching_candidates",
+                prompt_loader=self.prompt_loader,
+                repo_root=self.repo_root,
+                conversation_history=history,
+                schema_state=schema,
+                goal_context=goal_context,
+                task="ranker",
+                variant=self.get_prompt_variant(),
             )
 
             messages = [{"role": "user", "content": formatted_prompt}]
@@ -718,17 +745,29 @@ Respond with ONLY the category name, nothing else."""
             user_goal = schema.interview_state.user_goal if schema.interview_state and schema.interview_state.goal_provided else None
             goal_provided = schema.interview_state.goal_provided if schema.interview_state else False
 
-            formatted_prompt = prompt_template.format(
-                schema=self._schema_dump_for_llm(schema),
-                branch_condition=branch_condition,
-                gatable_dimensions=dimension_gating["gatable"],
-                exhausted_dimensions=dimension_gating["exhausted"],
-                dimension_urgencies=dimension_gating["urgency_multipliers"],
-                recent_question_intents=recent_intents,
-                recent_question_summaries=recent_summaries,
-                user_goal=user_goal or "None",
-                goal_provided=goal_provided,
-                user_message=user_message or ""
+            # Build goal_context with controller-specific data
+            goal_context = {
+                "branch_condition": branch_condition,
+                "gatable_dimensions": dimension_gating["gatable"],
+                "exhausted_dimensions": dimension_gating["exhausted"],
+                "dimension_urgencies": dimension_gating["urgency_multipliers"],
+                "recent_question_intents": recent_intents,
+                "recent_question_summaries": recent_summaries,
+                "user_goal": user_goal or "None",
+                "goal_provided": goal_provided,
+                "user_message": user_message or ""
+            }
+
+            # Use assemble_prompt to build prompt with context
+            # Note: schema is already included via schema_state parameter
+            formatted_prompt, dropped = assemble_prompt(
+                step_name="generate_controller",
+                prompt_loader=self.prompt_loader,
+                repo_root=self.repo_root,
+                schema_state=schema,
+                goal_context=goal_context,
+                task="ranker",
+                variant=self.get_prompt_variant(),
             )
 
             # PRE-LLM: Pattern matching for common ambiguity signals
@@ -848,23 +887,9 @@ Respond with ONLY the category name, nothing else."""
         Returns:
             Formatted conversation string
         """
-        # Default trim to keep prompts fast and bounded as the conversation grows.
-        # Callers that need a smaller window can still slice history before passing it in.
-        max_messages = 12
-        max_chars = 8000
-
-        window = history[-max_messages:] if len(history) > max_messages else history
-
-        lines: List[str] = []
-        for msg in window:
-            role = msg['role'].capitalize()
-            lines.append(f"{role}: {msg['content']}")
-
-        # Enforce a rough character limit by dropping oldest lines first.
-        while lines and sum(len(l) + 1 for l in lines) > max_chars:
-            lines.pop(0)
-
-        return "\n".join(lines)
+        # Use gather_conversation from prompt system (maintains backward compatibility)
+        result = gather_conversation(history, max_messages=12, max_chars=8000)
+        return result if result else ""
 
     def _schema_dump_for_llm(self, schema: DiscoverySchema) -> Dict[str, Any]:
         """

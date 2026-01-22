@@ -1,10 +1,10 @@
 You are analyzing a conversation to update the user's profile dimensions.
 
 CURRENT PROFILE:
-{current_profile}
+See <lf:schema> for the current user profile (user_profile field).
 
 CONVERSATION:
-{conversation}
+See <lf:conversation> for the conversation history.
 
 TASK: Update profile dimensions based on evidence in the conversation.
 

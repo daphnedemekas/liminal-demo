@@ -1,6 +1,7 @@
 """Teaching candidate ranker for Phase 2: finding a teachable topic."""
 from typing import Dict, Any, List, Tuple
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from src.agents.ranker_base import RankerAgentBase
 from src.schema.full_schema import (
@@ -435,8 +436,13 @@ Write the transition:"""
         print("[TIMING] Phase 1: branch + profile + themes (parallel)...")
         phase1_start = time.time()
 
+        # Use scheduler to control concurrency
         with ThreadPoolExecutor(max_workers=3) as executor:
             # Always run branch classification
+            branch_run_id = f"branch_{uuid.uuid4().hex[:8]}"
+            acquired_branch, reason = self.scheduler.acquire(branch_run_id)
+            if not acquired_branch:
+                print(f"[Scheduler] Could not acquire slot for branch classification: {reason}, executing anyway")
             future_branch = executor.submit(
                 self._classify_branch_condition,
                 user_message,
@@ -446,8 +452,16 @@ Write the transition:"""
             # Conditionally run profile and themes
             future_profile = None
             future_themes = None
+            acquired_profile = False
+            acquired_themes = False
+            profile_run_id = None
+            themes_run_id = None
 
             if not skip_profile:
+                profile_run_id = f"profile_{uuid.uuid4().hex[:8]}"
+                acquired_profile, reason = self.scheduler.acquire(profile_run_id)
+                if not acquired_profile:
+                    print(f"[Scheduler] Could not acquire slot for profile update: {reason}, executing anyway")
                 future_profile = executor.submit(
                     self._update_user_profile,
                     current_schema,
@@ -455,6 +469,10 @@ Write the transition:"""
                 )
 
             if not skip_themes:
+                themes_run_id = f"themes_{uuid.uuid4().hex[:8]}"
+                acquired_themes, reason = self.scheduler.acquire(themes_run_id)
+                if not acquired_themes:
+                    print(f"[Scheduler] Could not acquire slot for themes update: {reason}, executing anyway")
                 future_themes = executor.submit(
                     self._update_conversational_themes,
                     current_schema,
@@ -463,9 +481,29 @@ Write the transition:"""
                 )
 
             # Wait for Phase 1 to complete
-            branch_condition = future_branch.result()
-            profile_updates = future_profile.result() if future_profile else None
-            theme_updates = future_themes.result() if future_themes else None
+            try:
+                branch_condition = future_branch.result()
+            finally:
+                if acquired_branch:
+                    self.scheduler.release(branch_run_id)
+            
+            if future_profile:
+                try:
+                    profile_updates = future_profile.result()
+                finally:
+                    if acquired_profile and profile_run_id:
+                        self.scheduler.release(profile_run_id)
+            else:
+                profile_updates = None
+            
+            if future_themes:
+                try:
+                    theme_updates = future_themes.result()
+                finally:
+                    if acquired_themes and themes_run_id:
+                        self.scheduler.release(themes_run_id)
+            else:
+                theme_updates = None
 
         print(f"[TIMING] Phase 1 completed: {time.time() - phase1_start:.2f}s")
 
@@ -473,6 +511,28 @@ Write the transition:"""
         temp_schema = current_schema.model_copy(deep=True)
         
         if profile_updates:
+            # Preserve communication_style if not in updates (LLM might not return it)
+            if "communication_style" not in profile_updates:
+                profile_updates["communication_style"] = current_schema.user_profile.communication_style.model_dump()
+            # Ensure communication_style has all required fields
+            elif profile_updates.get("communication_style") is None:
+                profile_updates["communication_style"] = current_schema.user_profile.communication_style.model_dump()
+            else:
+                # Merge with existing to ensure all fields are present
+                existing_comm = current_schema.user_profile.communication_style.model_dump()
+                new_comm = profile_updates.get("communication_style", {})
+                # Handle case where new_comm might be None or not a dict
+                if not isinstance(new_comm, dict):
+                    new_comm = {}
+                # Merge, but use existing values for any None values in new_comm, with fallback to defaults
+                merged_comm = {
+                    "verbosity": (new_comm.get("verbosity") if new_comm.get("verbosity") is not None else existing_comm.get("verbosity")) or "medium",
+                    "complexity": (new_comm.get("complexity") if new_comm.get("complexity") is not None else existing_comm.get("complexity")) or "medium",
+                    "emotional_expression": (new_comm.get("emotional_expression") if new_comm.get("emotional_expression") is not None else existing_comm.get("emotional_expression")) or "neutral",
+                    "question_asking_frequency": (new_comm.get("question_asking_frequency") if new_comm.get("question_asking_frequency") is not None else existing_comm.get("question_asking_frequency")) or "medium"
+                }
+                profile_updates["communication_style"] = merged_comm
+            
             temp_schema.user_profile = UserProfile(**profile_updates)
         
         if theme_updates:

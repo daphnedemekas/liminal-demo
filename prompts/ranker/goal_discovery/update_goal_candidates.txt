@@ -6,16 +6,16 @@ CRITICAL DISTINCTION:
 - Teaching candidates (which come later) are specific 5-15 minute gaps
 
 ALREADY ACCEPTED GOALS (DO NOT propose similar goals):
-{accepted_goals}
+See <lf:goal_context> for accepted_goals.
 
 CURRENT GOAL CANDIDATES:
-{goal_candidates}
+See <lf:schema> for goal_candidates array.
 
 CURRENT CONVERSATIONAL THEMES (for context):
-{conversational_themes}
+See <lf:schema> for conversational_themes array.
 
 CONVERSATION:
-{conversation}
+See <lf:conversation> for the conversation history.
 
 TASK: Identify NEW goal candidates or update existing ones.
 

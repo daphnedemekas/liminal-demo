@@ -1,6 +1,7 @@
 """Goal discovery ranker for Phase 1: finding a learning goal."""
 from typing import Dict, Any, List, Tuple
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from src.agents.ranker_base import RankerAgentBase
 from src.schema.full_schema import (
@@ -204,6 +205,31 @@ class GoalDiscoveryRanker(RankerAgentBase):
         # Semantic keyword matching for common topic categories
         semantic_match = 0.0
         
+        # Technical/AI category - check for technical terms that should match
+        # These are checked FIRST to prioritize technical matches
+        tech_keyword_groups = [
+            # Knowledge graphs / graph structures (handle variations)
+            (["knowledge graph", "knowledge graphs", "graph structures", "graph structure", "kg", "knowledge-graph"],
+             ["graph", "graphs", "structure", "structures", "knowledge", "kg"]),
+            # AI mentor / AI tutor
+            (["ai mentor", "ai tutor", "mentor", "tutor", "tutoring", "mentoring", "ai tutoring", "ai mentoring"],
+             ["mentor", "tutor", "tutoring", "mentoring", "ai"]),
+            # Interpretability / explainability
+            (["interpretability", "interpretable", "explainability", "explainable", "xai", "explainable ai"],
+             ["interpretability", "interpretable", "explainability", "explainable", "xai"]),
+            # Reinforcement learning
+            (["reinforcement learning", "rl", "q-learning", "policy gradient", "sequential decision"],
+             ["reinforcement", "rl", "q-learning", "policy", "sequential", "decision"]),
+        ]
+        
+        # Check for technical term matches
+        for user_keywords, goal_keywords in tech_keyword_groups:
+            user_has_term = any(kw in recent_user_text for kw in user_keywords)
+            goal_has_term = any(kw in goal_text for kw in goal_keywords)
+            if user_has_term and goal_has_term:
+                semantic_match = max(semantic_match, 0.8)  # Strong match for technical terms
+                break
+        
         # Hobby/leisure category
         hobby_keywords = ["hobby", "hobbies", "interest", "interests", "enjoy", "fun", "leisure", 
                          "recreation", "play", "playing", "chess", "guitar", "poetry", "music", 
@@ -219,15 +245,15 @@ class GoalDiscoveryRanker(RankerAgentBase):
         learning_keywords = ["learn", "study", "understand", "master", "skill", "knowledge", 
                             "education", "course", "lesson", "tutorial"]
         
-        # Check for hobby context
-        if any(kw in recent_user_text for kw in hobby_keywords):
+        # Check for hobby context (only if no tech match yet)
+        if semantic_match < 0.5 and any(kw in recent_user_text for kw in hobby_keywords):
             if any(kw in goal_text for kw in hobby_goal_keywords):
                 semantic_match = 0.7  # Strong match
             elif any(kw in goal_text for kw in ["explore", "discover", "play", "practice", "master"]):
                 semantic_match = 0.5  # Moderate match
         
-        # Check for work context
-        elif any(kw in recent_user_text for kw in work_keywords):
+        # Check for work context (only if no tech match yet)
+        elif semantic_match < 0.5 and any(kw in recent_user_text for kw in work_keywords):
             if any(kw in goal_text for kw in work_goal_keywords):
                 semantic_match = 0.7  # Strong match
             elif any(kw in goal_text for kw in ["develop", "build", "create", "improve"]):
@@ -255,6 +281,20 @@ class GoalDiscoveryRanker(RankerAgentBase):
                 if theme_words and goal_words:
                     theme_overlap = len(theme_words & goal_words)
                     theme_match = min(0.5, theme_overlap / max(len(theme_words), len(goal_words)))
+                
+                # Also check for semantic similarity with technical terms
+                # If theme mentions "knowledge graphs" and goal mentions "graph structures", boost match
+                tech_synonyms = [
+                    (["knowledge graph", "knowledge graphs"], ["graph structure", "graph structures", "graphs"]),
+                    (["ai mentor", "ai tutor"], ["mentor", "tutor", "tutoring", "mentoring"]),
+                    (["interpretability", "explainability"], ["interpretable", "explainable", "xai"]),
+                ]
+                for theme_synonyms, goal_synonyms in tech_synonyms:
+                    theme_has = any(syn in theme_text for syn in theme_synonyms)
+                    goal_has = any(syn in goal_text for syn in goal_synonyms)
+                    if theme_has and goal_has:
+                        theme_match = max(theme_match, 0.6)  # Boost for semantic similarity
+                        break
         
         # Combine all signals: jaccard (40%), semantic (40%), theme (20%)
         relevance = min(1.0, jaccard_similarity * 0.4 + semantic_match * 0.4 + theme_match * 0.2)
@@ -399,8 +439,13 @@ class GoalDiscoveryRanker(RankerAgentBase):
         print("[TIMING] Phase 1: branch + profile + themes (parallel)...")
         phase1_start = time.time()
 
+        # Use scheduler to control concurrency
         with ThreadPoolExecutor(max_workers=3) as executor:
             # Always run branch classification
+            branch_run_id = f"branch_{uuid.uuid4().hex[:8]}"
+            acquired_branch, reason = self.scheduler.acquire(branch_run_id)
+            if not acquired_branch:
+                print(f"[Scheduler] Could not acquire slot for branch classification: {reason}, executing anyway")
             future_branch = executor.submit(
                 self._classify_branch_condition,
                 user_message,
@@ -410,8 +455,16 @@ class GoalDiscoveryRanker(RankerAgentBase):
             # Conditionally run profile and themes
             future_profile = None
             future_themes = None
+            acquired_profile = False
+            acquired_themes = False
+            profile_run_id = None
+            themes_run_id = None
 
             if not skip_profile:
+                profile_run_id = f"profile_{uuid.uuid4().hex[:8]}"
+                acquired_profile, reason = self.scheduler.acquire(profile_run_id)
+                if not acquired_profile:
+                    print(f"[Scheduler] Could not acquire slot for profile update: {reason}, executing anyway")
                 future_profile = executor.submit(
                     self._update_user_profile,
                     current_schema,
@@ -419,6 +472,10 @@ class GoalDiscoveryRanker(RankerAgentBase):
                 )
 
             if not skip_themes:
+                themes_run_id = f"themes_{uuid.uuid4().hex[:8]}"
+                acquired_themes, reason = self.scheduler.acquire(themes_run_id)
+                if not acquired_themes:
+                    print(f"[Scheduler] Could not acquire slot for themes update: {reason}, executing anyway")
                 future_themes = executor.submit(
                     self._update_conversational_themes,
                     current_schema,
@@ -428,20 +485,32 @@ class GoalDiscoveryRanker(RankerAgentBase):
 
             # Wait for Phase 1 to complete with individual timing
             branch_start = time.time()
-            branch_condition = future_branch.result()
-            print(f"[TIMING] Branch classification completed in {time.time() - branch_start:.2f}s")
+            try:
+                branch_condition = future_branch.result()
+                print(f"[TIMING] Branch classification completed in {time.time() - branch_start:.2f}s")
+            finally:
+                if acquired_branch:
+                    self.scheduler.release(branch_run_id)
             
             if future_profile:
                 profile_start = time.time()
-                profile_updates = future_profile.result()
-                print(f"[TIMING] Profile update completed in {time.time() - profile_start:.2f}s")
+                try:
+                    profile_updates = future_profile.result()
+                    print(f"[TIMING] Profile update completed in {time.time() - profile_start:.2f}s")
+                finally:
+                    if acquired_profile and profile_run_id:
+                        self.scheduler.release(profile_run_id)
             else:
                 profile_updates = None
             
             if future_themes:
                 themes_start = time.time()
-                theme_updates = future_themes.result()
-                print(f"[TIMING] Themes update completed in {time.time() - themes_start:.2f}s")
+                try:
+                    theme_updates = future_themes.result()
+                    print(f"[TIMING] Themes update completed in {time.time() - themes_start:.2f}s")
+                finally:
+                    if acquired_themes and themes_run_id:
+                        self.scheduler.release(themes_run_id)
             else:
                 theme_updates = None
 
@@ -451,6 +520,28 @@ class GoalDiscoveryRanker(RankerAgentBase):
         temp_schema = current_schema.model_copy(deep=True)
         
         if profile_updates:
+            # Preserve communication_style if not in updates (LLM might not return it)
+            if "communication_style" not in profile_updates:
+                profile_updates["communication_style"] = current_schema.user_profile.communication_style.model_dump()
+            # Ensure communication_style has all required fields
+            elif profile_updates.get("communication_style") is None:
+                profile_updates["communication_style"] = current_schema.user_profile.communication_style.model_dump()
+            else:
+                # Merge with existing to ensure all fields are present
+                existing_comm = current_schema.user_profile.communication_style.model_dump()
+                new_comm = profile_updates.get("communication_style", {})
+                # Handle case where new_comm might be None or not a dict
+                if not isinstance(new_comm, dict):
+                    new_comm = {}
+                # Merge, but use existing values for any None values in new_comm, with fallback to defaults
+                merged_comm = {
+                    "verbosity": (new_comm.get("verbosity") if new_comm.get("verbosity") is not None else existing_comm.get("verbosity")) or "medium",
+                    "complexity": (new_comm.get("complexity") if new_comm.get("complexity") is not None else existing_comm.get("complexity")) or "medium",
+                    "emotional_expression": (new_comm.get("emotional_expression") if new_comm.get("emotional_expression") is not None else existing_comm.get("emotional_expression")) or "neutral",
+                    "question_asking_frequency": (new_comm.get("question_asking_frequency") if new_comm.get("question_asking_frequency") is not None else existing_comm.get("question_asking_frequency")) or "medium"
+                }
+                profile_updates["communication_style"] = merged_comm
+            
             temp_schema.user_profile = UserProfile(**profile_updates)
         
         if theme_updates:

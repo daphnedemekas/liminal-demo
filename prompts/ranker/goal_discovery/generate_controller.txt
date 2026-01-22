@@ -1,10 +1,10 @@
 You are generating the controller state for the next conversational move in GOAL DISCOVERY phase.
 
 CURRENT SCHEMA:
-{schema}
+See <lf:schema> for the full schema state.
 
 BRANCH CONDITION (from user's last response):
-{branch_condition}
+See <lf:goal_context> for branch_condition.
 
 TASK: Determine next_action, determine strategic focus, and set appropriate branch_condition for next turn.
 
@@ -30,8 +30,7 @@ A goal is ready when these are HIGH (>= 0.7):
 - user_commitment: Is the user motivated and interested?
 
 QUESTION HISTORY (DO NOT REPEAT):
-Recent question intents asked: {recent_question_intents}
-Recent questions asked: {recent_question_summaries}
+See <lf:goal_context> for recent_question_intents and recent_question_summaries.
 
 CRITICAL REPETITION RULES:
 1. READ recent_question_summaries CAREFULLY. If your next question covers the same topic/choice as any previous question (even with different wording), you MUST ask about something completely different.
@@ -45,9 +44,7 @@ CRITICAL REPETITION RULES:
 5. If probing a dimension 2+ times with no progress, move to a different approach or make a concrete offer/suggestion.
 
 DIMENSION GATING (Phase 1 priorities):
-DIMENSIONS STILL UNCERTAIN (can ask about): {gatable_dimensions}
-DIMENSIONS ALREADY KNOWN (DO NOT re-ask): {exhausted_dimensions}
-DIMENSION URGENCY MULTIPLIERS: {dimension_urgencies}
+See <lf:goal_context> for gatable_dimensions, exhausted_dimensions, and dimension_urgencies.
 
 PHASE 1 DIMENSION PRIORITIES:
 - HIGH: curiosity_type (what kind of learning excites them), entry_mode (how they frame interests), motivation_profile (why learning matters)

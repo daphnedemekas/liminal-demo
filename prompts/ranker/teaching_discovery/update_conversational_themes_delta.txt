@@ -66,13 +66,13 @@ NOTE: In Teaching Discovery, "gap_identified" signals a potential TEACHING CANDI
 === CURRENT STATE ===
 
 CURRENT CONVERSATIONAL THEMES:
-{conversational_themes}
+See <lf:schema> for conversational_themes array.
 
 CURRENT TEACHING CANDIDATES (avoid duplicate tracking):
-{teaching_candidates}
+See <lf:schema> for teaching_candidates array.
 
 CONVERSATION:
-{conversation}
+See <lf:conversation> for the conversation history.
 
 === TASK ===
 

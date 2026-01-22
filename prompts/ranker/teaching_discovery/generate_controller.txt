@@ -1,15 +1,15 @@
 You are generating the controller state for the next conversational move in TEACHING DISCOVERY phase.
 
 CURRENT SCHEMA:
-{schema}
+See <lf:schema> for the full schema state.
 
 BRANCH CONDITION (from user's last response):
-{branch_condition}
+See <lf:goal_context> for branch_condition.
 
 TASK: Determine next_action, determine strategic focus, and set appropriate branch_condition for next turn.
 
 === USER'S LEARNING GOAL (GIVEN) ===
-Goal: {user_goal}
+Goal: See <lf:goal_context> for user_goal.
 
 This goal has already been identified. Your job is to find the RIGHT FIRST STEP toward this goal.
 

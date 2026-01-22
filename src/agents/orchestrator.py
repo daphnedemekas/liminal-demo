@@ -90,6 +90,20 @@ class DiscoveryOrchestrator:
         # Initialize or restore schema
         if schema_state:
             print(f"[Orchestrator] Restoring schema state from database...")
+            # Fix communication_style if it has None values
+            if "user_profile" in schema_state and schema_state["user_profile"]:
+                user_profile_data = schema_state["user_profile"]
+                if "communication_style" in user_profile_data:
+                    comm_style = user_profile_data["communication_style"]
+                    if comm_style is None or any(v is None for v in (comm_style.values() if isinstance(comm_style, dict) else [])):
+                        # Ensure all fields have defaults
+                        user_profile_data["communication_style"] = {
+                            "verbosity": (comm_style.get("verbosity") if isinstance(comm_style, dict) else None) or "medium",
+                            "complexity": (comm_style.get("complexity") if isinstance(comm_style, dict) else None) or "medium",
+                            "emotional_expression": (comm_style.get("emotional_expression") if isinstance(comm_style, dict) else None) or "neutral",
+                            "question_asking_frequency": (comm_style.get("question_asking_frequency") if isinstance(comm_style, dict) else None) or "medium"
+                        }
+            
             self.schema = DiscoverySchema(**schema_state)
             # Update goal from restored state if available
             if self.schema.interview_state.user_goal:
@@ -629,6 +643,17 @@ class DiscoveryOrchestrator:
             Initialized DiscoverySchema
         """
         # Build user profile from database
+        # Ensure communication_style has all required fields with defaults
+        comm_style_dict = db_user.communication_style or {}
+        if not comm_style_dict or any(v is None for v in comm_style_dict.values()):
+            # Use defaults for any missing or None values
+            comm_style_dict = {
+                "verbosity": comm_style_dict.get("verbosity") or "medium",
+                "complexity": comm_style_dict.get("complexity") or "medium",
+                "emotional_expression": comm_style_dict.get("emotional_expression") or "neutral",
+                "question_asking_frequency": comm_style_dict.get("question_asking_frequency") or "medium"
+            }
+        
         user_profile = UserProfile(
             curiosity_type=db_user.curiosity_type or {"value": None, "confidence": 0.0, "evidence": []},
             entry_mode=db_user.entry_mode or {"people": 0.0, "problems": 0.0, "ideas": 0.0},
@@ -642,12 +667,7 @@ class DiscoveryOrchestrator:
             },
             pacing_preference=db_user.pacing_preference or {"value": None, "confidence": 0.0},
             riasec_hint=db_user.riasec_hint or {"I": 0.0, "A": 0.0, "S": 0.0, "R": 0.0, "E": 0.0, "C": 0.0},
-            communication_style=db_user.communication_style or {
-                "verbosity": "medium",
-                "complexity": "medium",
-                "emotional_expression": "neutral",
-                "question_asking_frequency": "medium"
-            }
+            communication_style=comm_style_dict
         )
 
         # Initialize interview state with goal if provided

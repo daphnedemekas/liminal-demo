@@ -1,5 +1,6 @@
 """Interviewer agent for conducting natural conversation."""
-from typing import List, Dict, Generator, Union
+from typing import List, Dict, Generator, Union, Optional
+from pathlib import Path
 import random
 import time
 import re
@@ -7,6 +8,8 @@ from src.llm_client import LLMClient
 from src.schema.full_schema import DiscoverySchema
 from src.prompt_loader import PromptLoader
 from src.config import get_model_name
+from src.prompt.assembly import assemble_prompt
+from src.prompt.gather import gather_conversation
 
 
 class InterviewerAgent:
@@ -29,6 +32,9 @@ class InterviewerAgent:
         """
         self.llm = llm_client
         self.prompt_loader = PromptLoader()
+        # Get repo root for prompt assembly
+        project_root = Path(__file__).parent.parent.parent
+        self.repo_root = project_root
 
     def get_opening_question(self, user_background: str = None) -> str:
         """
@@ -264,13 +270,17 @@ Generate ONLY the question:"""
 
         # Load appropriate prompt module with phase
         print(f"[Interviewer] Loading prompt: mode='{prompt_module}', phase='{phase}'")
-        system_prompt = self.prompt_loader.load_interviewer_prompt(prompt_module, phase=phase)
-
-        # Build context from schema for prompt formatting
-        context = self._build_context(schema)
-
-        # Format system prompt with context
-        formatted_prompt = self._format_prompt(system_prompt, context)
+        
+        # Use assemble_prompt to build system prompt with context
+        formatted_prompt, dropped = assemble_prompt(
+            step_name=prompt_module,
+            prompt_loader=self.prompt_loader,
+            repo_root=self.repo_root,
+            schema_state=schema,
+            conversation_history=conversation_history,
+            task="interviewer",
+            phase=phase,
+        )
 
         # Build messages
         messages = [{"role": "system", "content": formatted_prompt}]

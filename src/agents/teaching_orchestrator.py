@@ -20,6 +20,9 @@ from src.schema.teaching_schema import (
 )
 from src.llm_client import LLMClient
 from src.config import get_model_name
+from src.prompt.assembly import assemble_prompt
+from src.prompt.gather import gather_conversation, gather_teaching_context
+from src.prompt_loader import PromptLoader
 
 
 class TeachingOrchestrator:
@@ -66,6 +69,11 @@ class TeachingOrchestrator:
         self.llm = LLMClient()
         self.model_config = model_config or {}
         self.db = DatabaseManager(db_path=db_path)
+        self.prompt_loader = PromptLoader()
+        
+        # Get repo root for prompt assembly
+        project_root = Path(__file__).parent.parent.parent
+        self.repo_root = project_root
         
         self.user_id = user_id
         self.goal_id = goal_id
@@ -198,34 +206,39 @@ Return just the message text, no JSON."""
         if not prompt_path.exists():
             raise FileNotFoundError(f"Curriculum prompt not found at: {prompt_path}")
         
-        prompt_template = prompt_path.read_text()
-        
         # Build goal conversation summary
         goal_conv_summary = ""
         if self.goal_conversation_history:
             relevant_messages = self.goal_conversation_history[-10:]  # Last 10 messages
-            goal_conv_summary = "\n".join([
-                f"{m['role'].upper()}: {m['content'][:200]}..." 
-                if len(m['content']) > 200 else f"{m['role'].upper()}: {m['content']}"
-                for m in relevant_messages
-            ])
+            result = gather_conversation(relevant_messages, max_messages=10, max_chars=2000)
+            goal_conv_summary = result if result else "(No prior conversation available)"
         else:
             goal_conv_summary = "(No prior conversation available)"
         
-        prompt = prompt_template.format(
-            goal_text=self.goal_text,
-            topic=self.schema.teaching_candidate.topic,
-            focus_question=self.schema.teaching_candidate.focus_question,
-            identified_gap=self.schema.teaching_candidate.identified_gap,
-            current_model_summary=self.schema.teaching_candidate.current_model_summary or "Unknown",
-            stakes_summary=self.schema.teaching_candidate.stakes_summary or "Not specified",
+        # Build teaching context
+        teaching_context = {
+            "goal_text": self.goal_text,
+            "focus_question": self.schema.teaching_candidate.focus_question,
+            "identified_gap": self.schema.teaching_candidate.identified_gap,
+            "current_model_summary": self.schema.teaching_candidate.current_model_summary or "Unknown",
+            "stakes_summary": self.schema.teaching_candidate.stakes_summary or "Not specified",
+            "goal_conversation_summary": goal_conv_summary,
+            "assessment_concepts_known": ", ".join(self.schema.assessment_concepts_known) if self.schema.assessment_concepts_known else "Still assessing",
+            "assessment_concepts_unclear": ", ".join(self.schema.assessment_concepts_unclear) if self.schema.assessment_concepts_unclear else "Still assessing",
+            "assessment_confidence": f"{self.schema.assessment_confidence:.2f}",
+            "source_material": self.schema.teaching_candidate.source_material or "(No reference material provided)",
+            "turns_elapsed": 0
+        }
+        
+        # Use assemble_prompt to build prompt with context
+        prompt, dropped = assemble_prompt(
+            step_name="plan_curriculum",
+            prompt_loader=self.prompt_loader,
+            repo_root=self.repo_root,
+            schema_state=self.schema,
             user_background=self.user_background,
-            assessment_concepts_known=", ".join(self.schema.assessment_concepts_known) if self.schema.assessment_concepts_known else "Still assessing",
-            assessment_concepts_unclear=", ".join(self.schema.assessment_concepts_unclear) if self.schema.assessment_concepts_unclear else "Still assessing",
-            assessment_confidence=f"{self.schema.assessment_confidence:.2f}",
-            source_material=self.schema.teaching_candidate.source_material or "(No reference material provided)",
-            goal_conversation_summary=goal_conv_summary,
-            turns_elapsed=0
+            teaching_context=teaching_context,
+            task="teaching",
         )
         
         # Use model override if provided, otherwise fall back to config
@@ -640,13 +653,6 @@ Return ONLY valid JSON."""
 
     def _update_controller(self, user_message: str):
         """Update controller state based on conversation. Raises errors on failure."""
-        prompt_path = Path(__file__).parent.parent.parent / "prompts" / "teaching" / "generate_teaching_controller.txt"
-        
-        if not prompt_path.exists():
-            raise FileNotFoundError(f"Teaching controller prompt not found at: {prompt_path}")
-        
-        prompt_template = prompt_path.read_text()
-        
         # Build teaching state summary
         current_step = self._get_current_step()
         teaching_state = {
@@ -659,12 +665,22 @@ Return ONLY valid JSON."""
         
         # Format conversation
         recent_conv = self.conversation_history[-6:] if len(self.conversation_history) > 6 else self.conversation_history
-        conv_text = "\n".join([f"{m['role'].upper()}: {m['content']}" for m in recent_conv])
         
-        prompt = prompt_template.format(
-            teaching_state=json.dumps(teaching_state, indent=2),
-            conversation=conv_text,
-            user_message=user_message
+        # Build teaching context
+        teaching_context = {
+            "teaching_state": teaching_state,
+            "user_message": user_message
+        }
+        
+        # Use assemble_prompt to build prompt with context
+        prompt, dropped = assemble_prompt(
+            step_name="generate_teaching_controller",
+            prompt_loader=self.prompt_loader,
+            repo_root=self.repo_root,
+            conversation_history=recent_conv,
+            schema_state=self.schema,
+            teaching_context=teaching_context,
+            task="teaching",
         )
         
         # Use model override if provided, otherwise fall back to config
@@ -700,8 +716,6 @@ Return ONLY valid JSON."""
         if not prompt_path.exists():
             return  # Skip if prompt not available
         
-        prompt_template = prompt_path.read_text()
-        
         current_step = self._get_current_step()
         markers_summary = [
             {"id": m.id, "name": m.name, "level": m.level, "evidence": m.evidence[-2:]}
@@ -709,15 +723,24 @@ Return ONLY valid JSON."""
         ]
         
         recent_conv = self.conversation_history[-6:] if len(self.conversation_history) > 6 else self.conversation_history
-        conv_text = "\n".join([f"{m['role'].upper()}: {m['content']}" for m in recent_conv])
         
-        prompt = prompt_template.format(
-            understanding_markers=json.dumps(markers_summary, indent=2),
-            topic=self.schema.teaching_candidate.topic,
-            current_step=current_step.id if current_step else 0,
-            current_step_objective=current_step.objective if current_step else "N/A",
-            conversation=conv_text,
-            user_message=user_message
+        # Build teaching context
+        teaching_context = {
+            "understanding_markers": markers_summary,
+            "current_step": current_step.id if current_step else 0,
+            "current_step_objective": current_step.objective if current_step else "N/A",
+            "user_message": user_message
+        }
+        
+        # Use assemble_prompt to build prompt with context
+        prompt, dropped = assemble_prompt(
+            step_name="assess_understanding_markers_delta",
+            prompt_loader=self.prompt_loader,
+            repo_root=self.repo_root,
+            conversation_history=recent_conv,
+            schema_state=self.schema,
+            teaching_context=teaching_context,
+            task="teaching",
         )
         
         # Use model override if provided, otherwise fall back to config
@@ -767,10 +790,7 @@ Return ONLY valid JSON."""
         if not self.schema.controller.confusion_detected and self.schema.turns_elapsed % 4 != 0:
             return
         
-        prompt_template = prompt_path.read_text()
-        
         recent_conv = self.conversation_history[-4:] if len(self.conversation_history) > 4 else self.conversation_history
-        conv_text = "\n".join([f"{m['role'].upper()}: {m['content']}" for m in recent_conv])
         
         markers_summary = [
             {"id": m.id, "level": m.level}
@@ -778,11 +798,22 @@ Return ONLY valid JSON."""
             if m.last_assessed_turn > 0
         ]
         
-        prompt = prompt_template.format(
-            curriculum_plan=self.schema.curriculum_plan.model_dump_json(indent=2),
-            understanding_markers=json.dumps(markers_summary, indent=2),
-            conversation=conv_text,
-            controller_state=self.schema.controller.model_dump_json(indent=2)
+        # Build teaching context
+        teaching_context = {
+            "curriculum_plan": self.schema.curriculum_plan.model_dump(),
+            "understanding_markers": markers_summary,
+            "controller_state": self.schema.controller.model_dump()
+        }
+        
+        # Use assemble_prompt to build prompt with context
+        prompt, dropped = assemble_prompt(
+            step_name="update_curriculum_plan_delta",
+            prompt_loader=self.prompt_loader,
+            repo_root=self.repo_root,
+            conversation_history=recent_conv,
+            schema_state=self.schema,
+            teaching_context=teaching_context,
+            task="teaching",
         )
         
         # Use model override if provided, otherwise fall back to config
@@ -847,28 +878,35 @@ Return ONLY valid JSON."""
         if not prompt_path.exists():
             raise FileNotFoundError(f"Teacher response prompt not found at: {prompt_path}")
         
-        prompt_template = prompt_path.read_text()
-        
         current_step = self._get_current_step()
         ctrl = self.schema.controller
         
         recent_conv = self.conversation_history[-6:] if len(self.conversation_history) > 6 else self.conversation_history
-        conv_text = "\n".join([f"{m['role'].upper()}: {m['content']}" for m in recent_conv])
         
-        prompt = prompt_template.format(
-            topic=self.schema.teaching_candidate.topic,
-            goal_text=self.goal_text,
-            current_step_objective=current_step.objective if current_step else "Building understanding",
-            focus_question=self.schema.teaching_candidate.focus_question,
-            identified_gap=self.schema.teaching_candidate.identified_gap,
-            next_action=ctrl.next_action,
-            focus_content=ctrl.focus_content,
-            target_markers=", ".join(ctrl.target_markers) if ctrl.target_markers else "general understanding",
-            action_rationale=ctrl.action_rationale,
+        # Build teaching context
+        teaching_context = {
+            "goal_text": self.goal_text,
+            "current_step_objective": current_step.objective if current_step else "Building understanding",
+            "focus_question": self.schema.teaching_candidate.focus_question,
+            "identified_gap": self.schema.teaching_candidate.identified_gap,
+            "next_action": str(ctrl.next_action),
+            "focus_content": ctrl.focus_content,
+            "target_markers": ", ".join(ctrl.target_markers) if ctrl.target_markers else "general understanding",
+            "action_rationale": ctrl.action_rationale,
+            "source_material": self.schema.teaching_candidate.source_material or "(No reference material provided)",
+            "user_message": user_message
+        }
+        
+        # Use assemble_prompt to build prompt with context
+        prompt, dropped = assemble_prompt(
+            step_name="teacher_response",
+            prompt_loader=self.prompt_loader,
+            repo_root=self.repo_root,
+            conversation_history=recent_conv,
+            schema_state=self.schema,
             user_background=self.user_background,
-            source_material=self.schema.teaching_candidate.source_material or "(No reference material provided)",
-            conversation=conv_text,
-            user_message=user_message
+            teaching_context=teaching_context,
+            task="teaching",
         )
         
         # Use model override if provided, otherwise fall back to config

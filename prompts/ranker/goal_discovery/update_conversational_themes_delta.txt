@@ -42,10 +42,10 @@ NOTE: In Goal Discovery, "gap_identified" often signals a potential LEARNING GOA
 === CURRENT STATE ===
 
 CURRENT CONVERSATIONAL THEMES:
-{conversational_themes}
+See <lf:schema> for conversational_themes array.
 
 CONVERSATION:
-{conversation}
+See <lf:conversation> for the conversation history.
 
 === TASK ===
 

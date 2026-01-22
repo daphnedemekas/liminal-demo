@@ -1093,6 +1093,52 @@ async def teaching_websocket(websocket: WebSocket, session_id: str):
                 
                 # Check if teaching phase is complete
                 if orchestrator.is_complete():
+                    # Mark this teaching candidate as completed and unlock the next one
+                    try:
+                        session_info = db.get_session_by_id(session_id)
+                        if session_info and session_info.get("goal_id"):
+                            goal_id = session_info["goal_id"]
+                            teaching_candidate_id = schema.get("teaching_candidate_id")
+                            
+                            # Get current teaching candidates from goal
+                            goal = db.get_goal_by_id(goal_id)
+                            if goal and goal.get("teaching_candidate"):
+                                teaching_candidates = goal["teaching_candidate"]
+                                
+                                # Ensure it's a list
+                                if not isinstance(teaching_candidates, list):
+                                    teaching_candidates = [teaching_candidates] if teaching_candidates else []
+                                
+                                # Find and mark current candidate as completed
+                                found_current = False
+                                next_available_idx = None
+                                
+                                for idx, tc in enumerate(teaching_candidates):
+                                    # Compare IDs (handle both int and string types)
+                                    tc_id = tc.get("id") if isinstance(tc, dict) else None
+                                    if tc_id is not None and int(tc_id) == int(teaching_candidate_id):
+                                        tc["status"] = "completed"
+                                        found_current = True
+                                        # Next candidate should be unlocked
+                                        if idx + 1 < len(teaching_candidates):
+                                            next_available_idx = idx + 1
+                                        break
+                                
+                                # Unlock the next candidate
+                                if next_available_idx is not None:
+                                    next_tc = teaching_candidates[next_available_idx]
+                                    if isinstance(next_tc, dict):
+                                        next_tc["status"] = "available"
+                                        print(f"[Teaching] Unlocked next teaching candidate: {next_tc.get('topic', 'unknown')}")
+                                
+                                # Save updated teaching candidates back to goal
+                                db.set_goal_teaching_candidates(goal_id, teaching_candidates)
+                                print(f"[Teaching] Marked teaching candidate {teaching_candidate_id} as completed for goal {goal_id}")
+                    except Exception as e:
+                        print(f"[Teaching] Failed to update teaching candidate status: {e}")
+                        import traceback
+                        traceback.print_exc()
+                    
                     await websocket.send_json({
                         "type": "teaching_complete",
                         "content": message_content,

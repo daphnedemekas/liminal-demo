@@ -44,16 +44,16 @@ CRITICAL DISTINCTION:
 - Teaching candidates track ONLY concrete conceptual topics that can actually be taught from a book/article
 
 CURRENT TEACHING CANDIDATES:
-{teaching_candidates}
+See <lf:schema> for teaching_candidates array.
 
 CURRENT CONVERSATIONAL THEMES (for context):
-{conversational_themes}
+See <lf:schema> for conversational_themes array.
 
 CURRENT TASK CURRICULUM (if proposed):
-{task_curriculum}
+See <lf:goal_context> for task_curriculum.
 
 CONVERSATION:
-{conversation}
+See <lf:conversation> for the conversation history.
 
 TASK: Identify NEW teaching candidates or update existing ones, PRIORITIZING goal-relevant topics.
 

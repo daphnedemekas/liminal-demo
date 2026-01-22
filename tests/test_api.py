@@ -19,15 +19,18 @@ class TestAuthEndpoints:
     def test_login_creates_new_user(self):
         """Login with new username should create user."""
         with patch('backend.main.db') as mock_db:
-            mock_db.get_or_create_user.return_value = {
-                'user_id': 'test-user-id',
-                'username': 'testuser',
-                'is_new': True,
-                'onboarding_info': None,
-            }
-            
+            # User doesn't exist
+            mock_db.get_user_by_username.return_value = None
+
+            # Create returns a user object
+            mock_user = MagicMock()
+            mock_user.user_id = 'test-user-id'
+            mock_user.username = 'testuser'
+            mock_user.onboarding_info = None
+            mock_db.create_user_with_username.return_value = mock_user
+
             response = client.post('/api/auth/login', json={'username': 'testuser'})
-            
+
             assert response.status_code == 200
             data = response.json()
             assert data['user_id'] == 'test-user-id'
@@ -36,15 +39,15 @@ class TestAuthEndpoints:
     def test_login_returns_existing_user(self):
         """Login with existing username should return user."""
         with patch('backend.main.db') as mock_db:
-            mock_db.get_or_create_user.return_value = {
-                'user_id': 'existing-user-id',
-                'username': 'existinguser',
-                'is_new': False,
-                'onboarding_info': 'User background info',
-            }
-            
+            # User exists
+            mock_user = MagicMock()
+            mock_user.user_id = 'existing-user-id'
+            mock_user.username = 'existinguser'
+            mock_user.onboarding_info = 'User background info'
+            mock_db.get_user_by_username.return_value = mock_user
+
             response = client.post('/api/auth/login', json={'username': 'existinguser'})
-            
+
             assert response.status_code == 200
             data = response.json()
             assert data['user_id'] == 'existing-user-id'
@@ -119,13 +122,17 @@ class TestGoalEndpoints:
     def test_create_goal_for_user(self):
         """Creating a goal should store it in database."""
         with patch('backend.main.db') as mock_db:
-            mock_db.create_goal.return_value = 5  # Goal ID
-            
+            # create_goal returns a UserGoal object, not an int
+            mock_goal = MagicMock()
+            mock_goal.id = 5
+            mock_goal.goal_text = 'Learn backpropagation'
+            mock_db.create_goal.return_value = mock_goal
+
             response = client.post('/api/user/goals', json={
                 'user_id': 'test-user-id',
                 'goal_text': 'Learn backpropagation',
             })
-            
+
             assert response.status_code == 200
             data = response.json()
             assert data['id'] == 5
@@ -134,19 +141,24 @@ class TestGoalEndpoints:
     def test_get_user_data_includes_goals(self):
         """Getting user data should include goals."""
         with patch('backend.main.db') as mock_db:
-            mock_db.get_user_data.return_value = {
-                'user_id': 'test-user-id',
-                'username': 'testuser',
-                'onboarding_info': 'Background',
-                'goals': [
-                    {'id': 1, 'goal_text': 'Goal 1', 'status': 'active'},
-                    {'id': 2, 'goal_text': 'Goal 2', 'status': 'active'},
-                ],
-                'exploration_session': None,
-            }
-            
+            # Mock user object
+            mock_user = MagicMock()
+            mock_user.user_id = 'test-user-id'
+            mock_user.username = 'testuser'
+            mock_user.onboarding_info = 'Background'
+            mock_db.get_or_create_user.return_value = mock_user
+
+            # Mock goals list (returns dicts that get unpacked into GoalResponse)
+            mock_db.get_user_goals.return_value = [
+                {'id': 1, 'goal_text': 'Goal 1', 'status': 'active', 'created_at': '2026-01-01', 'has_teaching_candidate': False},
+                {'id': 2, 'goal_text': 'Goal 2', 'status': 'active', 'created_at': '2026-01-01', 'has_teaching_candidate': False},
+            ]
+
+            # Mock exploration session
+            mock_db.get_user_exploration_session.return_value = None
+
             response = client.get('/api/user/test-user-id/data')
-            
+
             assert response.status_code == 200
             data = response.json()
             assert len(data['goals']) == 2

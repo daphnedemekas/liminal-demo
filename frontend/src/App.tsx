@@ -205,7 +205,7 @@ function App() {
       console.log('[App] Goal created:', savedGoal)
 
       // Create a session for this goal
-      const sessionResponse = await api.startDiscoverySession(
+      await api.startDiscoverySession(
         modelConfig,
         goalText.trim(),
         user.id,

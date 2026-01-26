@@ -200,34 +200,23 @@ class DiscoveryOrchestrator:
 
             return opening_question
 
-        # BEFORE running ranker: Check if curriculum is already proposed and user is accepting
-        # This prevents the ranker from resetting proposed=False when user says "yes"
-        curriculum_acceptance_phrases = [
-            "yes", "yeah", "yep", "sounds good", "looks good", "that works",
-            "perfect", "great", "let's do it", "let's start", "i'm ready",
-            "that sounds great", "sounds great", "looks great", "yes that sounds great",
-            "yes!", "let's go", "i'm in"
-        ]
+        # Delegate to phase-specific handler
+        if self.schema.interview_state.goal_identified:
+            return self._process_phase2_message(user_message)
+        else:
+            return self._process_phase1_message(user_message)
 
-        curriculum_already_proposed = (
-            self.schema.task_curriculum.proposed and
-            not self.schema.task_curriculum.accepted and
-            len(self.schema.task_curriculum.tasks) > 0
-        )
+    def _process_phase1_message(self, user_message: str) -> str:
+        """
+        Process user message in Phase 1 (Goal Discovery).
 
-        if curriculum_already_proposed:
-            user_lower = user_message.lower().strip()
-            is_acceptance = (
-                user_lower in curriculum_acceptance_phrases or
-                any(phrase in user_lower for phrase in ["yes!", "sounds great", "looks good", "let's start", "i'm ready"])
-            )
+        Args:
+            user_message: User's message
 
-            if is_acceptance:
-                print(f"[Orchestrator] Detected curriculum acceptance: '{user_message}'")
-                # Return special marker to trigger acceptance flow
-                return "__ACCEPT_CURRICULUM_DETECTED__"
-
-        # For subsequent messages: Run ranker first (needed for controller guidance)
+        Returns:
+            Next question from interviewer
+        """
+        # Run ranker first (needed for controller guidance)
         ranker = self._get_ranker()
         print(f"[Ranker] Analyzing conversation using {ranker.__class__.__name__}...")
         self.schema = ranker.update_schema(
@@ -237,48 +226,50 @@ class DiscoveryOrchestrator:
         )
 
         # Debug output for controller state
-        if self.schema.controller:
-            ctrl = self.schema.controller
-            print(f"[CONTROLLER] Mode: {ctrl.conversation_mode}, Target: {ctrl.target_ambiguity}")
-            print(f"[CONTROLLER] Intent: {ctrl.question_intent}")
-            suggested = ctrl.focus_instruction or "(none)"
-            print(f"[CONTROLLER] Focus: {suggested[:100]}..." if len(suggested) > 100 else f"[CONTROLLER] Focus: {suggested}")
-            print(f"[CONTROLLER] Recent intents: {self.schema.interview_state.recent_question_intents}")
-            if ctrl.target_teaching_candidate_id:
-                cand = next(
-                    (c for c in self.schema.teaching_candidates 
-                     if c.id == ctrl.target_teaching_candidate_id),
-                    None
-                )
-                if cand:
-                    print(f"[CONTROLLER] Candidate: {cand.topic}, Stakes: {cand.stakes_clarified}")
+        self._log_controller_state()
 
-        # Step 2: Save schema state to database
-        print("[DB] Saving session state...")
-        self.db.save_session_state(self.session_id, self.schema.model_dump())
+        # Save schema state and update user profile
+        self._save_schema_and_profile()
 
-        # Step 3: Update user profile in database
-        print("[DB] Updating user profile in database...")
-        profile_updates = {
-            "curiosity_type": self.schema.user_profile.curiosity_type.model_dump(),
-            "entry_mode": self.schema.user_profile.entry_mode.model_dump(),
-            "uncertainty_tolerance": self.schema.user_profile.uncertainty_tolerance.model_dump(),
-            "interest_phase_default": self.schema.user_profile.interest_phase_default.model_dump(),
-            "motivation_profile": self.schema.user_profile.motivation_profile.model_dump(),
-            "pacing_preference": self.schema.user_profile.pacing_preference.model_dump(),
-            "riasec_hint": self.schema.user_profile.riasec_hint.model_dump(),
-            "communication_style": self.schema.user_profile.communication_style.model_dump()
-        }
-        self.db.update_user_profile(self.user_id, profile_updates)
-        print(f"[DB] Profile updated for user {self.user_id[:8]}...")
-
-        # Step 4a: Check if a goal has been proposed (needs user confirmation)
+        # Check if a goal has been proposed (needs user confirmation)
         if self.schema.interview_state.proposed_goal and not self.schema.interview_state.goal_identified:
             print(f"[Orchestrator] Goal proposed: '{self.schema.interview_state.proposed_goal}'")
             # Return special marker that tells the caller to show goal confirmation UI
             return f"__GOAL_PROPOSED__:{self.schema.interview_state.proposed_goal}"
 
-        # Step 4c: Check if ready for teaching
+        # Generate and return interviewer response
+        return self._generate_and_save_response(user_message)
+
+    def _process_phase2_message(self, user_message: str) -> str:
+        """
+        Process user message in Phase 2 (Teaching Discovery).
+
+        Args:
+            user_message: User's message
+
+        Returns:
+            Next question from interviewer
+        """
+        # Note: Curriculum acceptance is handled via button clicks in the frontend,
+        # which sends the __ACCEPT_CURRICULUM__ command directly to the backend.
+        # We don't detect text-based acceptance here to avoid false positives.
+
+        # Run ranker first (needed for controller guidance)
+        ranker = self._get_ranker()
+        print(f"[Ranker] Analyzing conversation using {ranker.__class__.__name__}...")
+        self.schema = ranker.update_schema(
+            self.schema,
+            self.conversation_history,
+            user_message
+        )
+
+        # Debug output for controller state
+        self._log_controller_state()
+
+        # Save schema state and update user profile
+        self._save_schema_and_profile()
+
+        # Check if ready for teaching
         # BUT: If controller wants to propose curriculum, skip transition and let interviewer propose first
         controller_wants_curriculum = (
             self.schema.controller and 
@@ -296,7 +287,7 @@ class DiscoveryOrchestrator:
                 self.schema.interview_state.transition_message_sent = True
                 return transition_msg
 
-        # Step 5: Interviewer generates next question (or curriculum proposal)
+        # Generate interviewer response
         print("[Interviewer] Generating response...")
         interviewer_response = self.interviewer.generate_response(
             user_message,
@@ -304,118 +295,31 @@ class DiscoveryOrchestrator:
             self.conversation_history
         )
 
-        # PHASE 2: Check if interviewer returned structured curriculum proposal
+        # Check if interviewer returned structured curriculum proposal
         if isinstance(interviewer_response, dict) and interviewer_response.get("type") == "curriculum_proposal":
-            print("[Orchestrator] Interviewer proposed curriculum")
+            return self._handle_curriculum_proposal(interviewer_response)
 
-            # Programmatically set curriculum state (no LLM dependency!)
-            from src.schema.full_schema import ProposedTask, TaskCurriculum
-
-            # ALWAYS use tasks extracted from interviewer's response (the interviewer generates the full 8-12 task curriculum)
-            # The ranker's task_curriculum.tasks are just candidates, not the full curriculum
-            tasks_data = interviewer_response.get("tasks", [])
-            
-            if len(tasks_data) == 0:
-                print("[Orchestrator] WARNING: Curriculum proposed but no tasks extracted!")
-                # Fallback: Try to extract from teaching_candidates
-                if len(self.schema.teaching_candidates) > 0:
-                    print(f"[Orchestrator] Using {len(self.schema.teaching_candidates)} teaching candidates as fallback")
-                    tasks_data = [
-                        {
-                            "id": i + 1,
-                            "topic": tc.topic,
-                            "justification": tc.identified_gap or "Explore this topic",
-                            "prerequisites": [i] if i > 0 else [],
-                            "status": "available" if i == 0 else "locked"
-                        }
-                        for i, tc in enumerate(self.schema.teaching_candidates[:7])
-                    ]
-                else:
-                    print("[Orchestrator] ERROR: No tasks and no candidates, cannot create curriculum")
-                    # Return regular response instead
-                    next_question = interviewer_response["text"]
-                    # Add to history
-                    self.conversation_history.append({
-                        "role": "assistant",
-                        "content": next_question
-                    })
-                    self.db.save_session_state(self.session_id, self.schema.model_dump())
-                    self.db.save_conversation_history(self.session_id, self.conversation_history)
-                    return next_question
-
-            # Create ProposedTask objects from extracted tasks
-            tasks = [
-                ProposedTask(
-                    id=t["id"],
-                    topic=t["topic"],
-                    justification=t["justification"],
-                    prerequisites=t["prerequisites"],
-                    status=t["status"]
-                )
-                for t in tasks_data
-            ]
-
-            # Set curriculum state programmatically - this is the key fix!
-            self.schema.task_curriculum = TaskCurriculum(
-                proposed=True,  # Set programmatically, not by ranker LLM!
-                accepted=False,
-                tasks=tasks,
-                modification_history=[]
-            )
-
-            print(f"[Orchestrator] Set task_curriculum.proposed=True with {len(tasks)} tasks")
-
-            # Save updated schema
-            self.db.save_session_state(self.session_id, self.schema.model_dump())
-
-            # Add the text to conversation history
-            next_question = interviewer_response["text"]
-            self.conversation_history.append({
-                "role": "assistant",
-                "content": next_question
-            })
-            self.db.save_conversation_history(self.session_id, self.conversation_history)
-
-            # Return curriculum proposal marker
-            import json
-            curriculum_info = {
-                "tasks": [t.model_dump() for t in tasks],
-                "overall_justification": f"Based on your goal '{self.schema.interview_state.user_goal}' and what I've learned about your background, here's my best guess at a complete learning path. This is just a starting point - we can adjust as we go based on what works for you:"
-            }
-            return f"__TASK_CURRICULUM_PROPOSED__:{json.dumps(curriculum_info)}"
-
-        # Step 4b: Check if a task curriculum has been proposed (needs user confirmation)
-        # This check happens AFTER the interviewer has had a chance to generate the curriculum
-        # Only return if curriculum was already proposed in a previous turn AND controller doesn't want to propose again
-        # (If controller wants to propose, we already handled it above)
+        # Check controller state
         controller_wants_curriculum = (
             self.schema.controller and 
             self.schema.controller.conversation_mode == "propose_tasks"
         )
         
-        # Only return existing curriculum if controller is NOT trying to propose a new one
+        # If controller wants curriculum, interviewer MUST return structured response
+        # If it didn't, that's a bug - log error but don't add fallback
+        if controller_wants_curriculum and not isinstance(interviewer_response, dict):
+            print("[Orchestrator] ERROR: Controller wants curriculum but interviewer returned string instead of structured response")
+            print("[Orchestrator] This should never happen - interviewer should always return dict in propose_tasks mode")
+            # Continue with regular response - this is a bug that needs fixing
+        
+        # Check if a task curriculum has been proposed (needs user confirmation)
+        # This check happens AFTER the interviewer has had a chance to generate the curriculum
+        # Only return if curriculum was already proposed in a previous turn AND controller doesn't want to propose again
         if (not controller_wants_curriculum and 
             self.schema.task_curriculum.proposed and 
             not self.schema.task_curriculum.accepted and 
             len(self.schema.task_curriculum.tasks) > 0):
-            print(f"[Orchestrator] Task curriculum already proposed from previous turn: {len(self.schema.task_curriculum.tasks)} tasks")
-            
-            # Return special marker with curriculum info
-            import json
-            curriculum_info = {
-                "tasks": [
-                    {
-                        "id": task.id,
-                        "topic": task.topic,
-                        "justification": task.justification,
-                        "prerequisites": task.prerequisites,
-                        "status": task.status
-                    }
-                    for task in self.schema.task_curriculum.tasks
-                ],
-                "overall_justification": f"Based on your goal '{self.schema.interview_state.user_goal}' and what I've learned about your background, here's my best guess at a complete learning path. This is just a starting point - we can adjust as we go based on what works for you:"
-            }
-            return f"__TASK_CURRICULUM_PROPOSED__:{json.dumps(curriculum_info)}"
+            return self._get_existing_curriculum_marker()
 
         # Extract text from structured response if needed
         if isinstance(interviewer_response, dict):
@@ -423,6 +327,167 @@ class DiscoveryOrchestrator:
         else:
             next_question = interviewer_response
 
+        return self._finalize_response(next_question)
+
+    def _log_controller_state(self):
+        """Log controller state for debugging."""
+        if self.schema.controller:
+            ctrl = self.schema.controller
+            print(f"[CONTROLLER] Mode: {ctrl.conversation_mode}, Target: {ctrl.target_ambiguity}")
+            print(f"[CONTROLLER] Intent: {ctrl.question_intent}")
+            suggested = ctrl.focus_instruction or "(none)"
+            print(f"[CONTROLLER] Focus: {suggested[:100]}..." if len(suggested) > 100 else f"[CONTROLLER] Focus: {suggested}")
+            print(f"[CONTROLLER] Recent intents: {self.schema.interview_state.recent_question_intents}")
+            if ctrl.target_teaching_candidate_id:
+                cand = next(
+                    (c for c in self.schema.teaching_candidates 
+                     if c.id == ctrl.target_teaching_candidate_id),
+                    None
+                )
+                if cand:
+                    print(f"[CONTROLLER] Candidate: {cand.topic}, Stakes: {cand.stakes_clarified}")
+
+    def _save_schema_and_profile(self):
+        """Save schema state and update user profile in database."""
+        # Save schema state to database
+        print("[DB] Saving session state...")
+        self.db.save_session_state(self.session_id, self.schema.model_dump())
+
+        # Update user profile in database
+        print("[DB] Updating user profile in database...")
+        profile_updates = {
+            "curiosity_type": self.schema.user_profile.curiosity_type.model_dump(),
+            "entry_mode": self.schema.user_profile.entry_mode.model_dump(),
+            "uncertainty_tolerance": self.schema.user_profile.uncertainty_tolerance.model_dump(),
+            "interest_phase_default": self.schema.user_profile.interest_phase_default.model_dump(),
+            "motivation_profile": self.schema.user_profile.motivation_profile.model_dump(),
+            "pacing_preference": self.schema.user_profile.pacing_preference.model_dump(),
+            "riasec_hint": self.schema.user_profile.riasec_hint.model_dump(),
+            "communication_style": self.schema.user_profile.communication_style.model_dump()
+        }
+        self.db.update_user_profile(self.user_id, profile_updates)
+        print(f"[DB] Profile updated for user {self.user_id[:8]}...")
+
+    def _generate_and_save_response(self, user_message: str) -> str:
+        """Generate interviewer response and save to history."""
+        print("[Interviewer] Generating response...")
+        interviewer_response = self.interviewer.generate_response(
+            user_message,
+            self.schema,
+            self.conversation_history
+        )
+
+        # Extract text from structured response if needed
+        if isinstance(interviewer_response, dict):
+            next_question = interviewer_response["text"]
+        else:
+            next_question = interviewer_response
+
+        return self._finalize_response(next_question)
+
+    def _handle_curriculum_proposal(self, interviewer_response: dict) -> str:
+        """Handle curriculum proposal from interviewer."""
+        print("[Orchestrator] Interviewer proposed curriculum")
+
+        # Programmatically set curriculum state (no LLM dependency!)
+        from src.schema.full_schema import ProposedTask, TaskCurriculum
+
+        # ALWAYS use tasks extracted from interviewer's response (the interviewer generates the full 8-12 task curriculum)
+        # The ranker's task_curriculum.tasks are just candidates, not the full curriculum
+        tasks_data = interviewer_response.get("tasks", [])
+        
+        if len(tasks_data) == 0:
+            print("[Orchestrator] WARNING: Curriculum proposed but no tasks extracted!")
+            # Fallback: Try to extract from teaching_candidates
+            if len(self.schema.teaching_candidates) > 0:
+                print(f"[Orchestrator] Using {len(self.schema.teaching_candidates)} teaching candidates as fallback")
+                tasks_data = [
+                    {
+                        "id": i + 1,
+                        "topic": tc.topic,
+                        "justification": tc.identified_gap or "Explore this topic",
+                        "prerequisites": [i] if i > 0 else [],
+                        "status": "available" if i == 0 else "locked"
+                    }
+                    for i, tc in enumerate(self.schema.teaching_candidates[:7])
+                ]
+            else:
+                print("[Orchestrator] ERROR: No tasks and no candidates, cannot create curriculum")
+                # Return regular response instead
+                next_question = interviewer_response["text"]
+                # Add to history
+                self.conversation_history.append({
+                    "role": "assistant",
+                    "content": next_question
+                })
+                self.db.save_session_state(self.session_id, self.schema.model_dump())
+                self.db.save_conversation_history(self.session_id, self.conversation_history)
+                return next_question
+
+        # Create ProposedTask objects from extracted tasks
+        tasks = [
+            ProposedTask(
+                id=t["id"],
+                topic=t["topic"],
+                justification=t["justification"],
+                prerequisites=t["prerequisites"],
+                status=t["status"]
+            )
+            for t in tasks_data
+        ]
+
+        # Set curriculum state programmatically - this is the key fix!
+        self.schema.task_curriculum = TaskCurriculum(
+            proposed=True,  # Set programmatically, not by ranker LLM!
+            accepted=False,
+            tasks=tasks,
+            modification_history=[]
+        )
+
+        print(f"[Orchestrator] Set task_curriculum.proposed=True with {len(tasks)} tasks")
+
+        # Save updated schema
+        self.db.save_session_state(self.session_id, self.schema.model_dump())
+
+        # Add the text to conversation history
+        next_question = interviewer_response["text"]
+        self.conversation_history.append({
+            "role": "assistant",
+            "content": next_question
+        })
+        self.db.save_conversation_history(self.session_id, self.conversation_history)
+
+        # Return curriculum proposal marker
+        import json
+        curriculum_info = {
+            "tasks": [t.model_dump() for t in tasks],
+            "overall_justification": f"Based on your goal '{self.schema.interview_state.user_goal}' and what I've learned about your background, here's my best guess at a complete learning path. This is just a starting point - we can adjust as we go based on what works for you:"
+        }
+        return f"__TASK_CURRICULUM_PROPOSED__:{json.dumps(curriculum_info)}"
+
+    def _get_existing_curriculum_marker(self) -> str:
+        """Get marker for existing curriculum proposal."""
+        print(f"[Orchestrator] Task curriculum already proposed from previous turn: {len(self.schema.task_curriculum.tasks)} tasks")
+        
+        # Return special marker with curriculum info
+        import json
+        curriculum_info = {
+            "tasks": [
+                {
+                    "id": task.id,
+                    "topic": task.topic,
+                    "justification": task.justification,
+                    "prerequisites": task.prerequisites,
+                    "status": task.status
+                }
+                for task in self.schema.task_curriculum.tasks
+            ],
+            "overall_justification": f"Based on your goal '{self.schema.interview_state.user_goal}' and what I've learned about your background, here's my best guess at a complete learning path. This is just a starting point - we can adjust as we go based on what works for you:"
+        }
+        return f"__TASK_CURRICULUM_PROPOSED__:{json.dumps(curriculum_info)}"
+
+    def _finalize_response(self, next_question: str) -> str:
+        """Finalize response by tracking metadata and saving to database."""
         # Check if a cognitive framework was used
         if self.interviewer.contains_framework(next_question):
             self.schema.interview_state.frameworks_offered += 1

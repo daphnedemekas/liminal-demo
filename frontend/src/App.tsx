@@ -186,6 +186,53 @@ function App() {
     setActiveMainView('trajectory')
   }
 
+  // Handle creating a new learning path directly (without exploration)
+  const handleCreatePath = useCallback(async () => {
+    if (!user) {
+      console.error('[App] Cannot create path: user not logged in')
+      return
+    }
+
+    // Prompt user for goal text
+    const goalText = prompt('What learning path would you like to create?')
+    if (!goalText || !goalText.trim()) {
+      return // User cancelled or entered empty text
+    }
+
+    try {
+      // Create goal in database
+      const savedGoal = await api.createGoal(user.id, goalText.trim())
+      console.log('[App] Goal created:', savedGoal)
+
+      // Create a session for this goal
+      const sessionResponse = await api.startDiscoverySession(
+        modelConfig,
+        goalText.trim(),
+        user.id,
+        savedGoal.id
+      )
+
+      // Create goal session object
+      const newSession: GoalSession = {
+        id: savedGoal.id.toString(),
+        goalId: savedGoal.id,
+        goal: goalText.trim(),
+        createdAt: new Date(),
+        isActive: true,
+        teachingCandidates: [],  // Empty initially
+      }
+
+      // Add to goal sessions and select it
+      setGoalSessions(prev => [...prev, newSession])
+      setActiveGoalSessionId(newSession.id)
+      setActiveTeachingId(null)
+      setActiveMainView('goal')
+    } catch (error) {
+      console.error('[App] Failed to create path:', error)
+      alert('Failed to create learning path. Please try again.')
+    }
+  }, [user, modelConfig])
+
   // Handle when teaching candidate is accepted - ADD to goal's teaching list (with deduplication)
   const handleTeachingCandidateAccepted = useCallback((candidate: any, goalSessionId: string) => {
     console.log('[App] Teaching candidate accepted for goal:', goalSessionId, candidate)
@@ -295,6 +342,7 @@ function App() {
             onSelectTeaching={handleSelectTeaching}
             onNewExploration={handleNewExploration}
             isExplorationActive={isViewingExploration}
+            onCreatePath={user ? handleCreatePath : undefined}
             username={user?.username}
             onLogout={handleLogout}
             currentModel={currentModel}

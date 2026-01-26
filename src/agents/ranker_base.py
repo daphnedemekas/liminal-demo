@@ -834,32 +834,6 @@ Respond with ONLY the category name, nothing else."""
                     )
                     response.update(escalation)
 
-            # 2. Check if we're stuck on same dimension (using word stems, not exact matches)
-            if len(recent_summaries) >= 3:
-                last_three = recent_summaries[-3:]
-                all_words = ' '.join(last_three).lower()
-
-                # Dimension patterns - use word stems and variations for more robust matching
-                # Each tuple: (dimension_name, list of related words to look for)
-                stuck_dimensions = [
-                    ("theory/practice", ["theor", "practic", "applic", "hands-on", "abstract", "concrete"]),
-                    ("historical/practical", ["histor", "context", "background", "real-world", "example"]),
-                ]
-
-                for dimension_name, keywords in stuck_dimensions:
-                    # Count how many keyword stems appear in the combined text
-                    matches = sum(1 for kw in keywords if kw in all_words)
-                    # Require at least 3 matches to reduce false positives
-                    if matches >= 3:
-                        print(f"[CONTROLLER] Stuck pattern detected: '{dimension_name}' dimension appears in last 3 questions")
-                        escalation = _build_escalation_response(
-                            assessment_confidence,
-                            turns_elapsed,
-                            reason=f"stuck on '{dimension_name}' dimension"
-                        )
-                        response.update(escalation)
-                        break
-
             # Ensure branch_condition is always included in response (LLM might omit it)
             if not response.get("branch_condition") or response.get("branch_condition") is None:
                 response["branch_condition"] = branch_condition or "unclear"

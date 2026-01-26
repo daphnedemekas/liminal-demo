@@ -1692,51 +1692,6 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
                     process_with_flag
                 )
 
-                # Check if orchestrator detected curriculum acceptance
-                if response == "__ACCEPT_CURRICULUM_DETECTED__":
-                    print(f"[Curriculum] Orchestrator detected natural language acceptance")
-                    # Clear status
-                    await websocket.send_json({
-                        "type": "status",
-                        "status": ""
-                    })
-                    result = session_data.discovery_session.accept_proposed_curriculum()
-
-                    if not result.get("success"):
-                        await websocket.send_json({
-                            "type": "error",
-                            "message": result.get("message", "Failed to accept curriculum")
-                        })
-                        continue
-
-                    # Save all tasks to the goal in database as an array
-                    try:
-                        session_info = db.get_session_by_id(session_id)
-                        if session_info and session_info.get("goal_id"):
-                            tasks = result.get("tasks", [])
-                            # Save entire task list as teaching candidates array
-                            db.set_goal_teaching_candidates(
-                                session_info["goal_id"],
-                                tasks
-                            )
-                            print(f"[Curriculum] Saved {len(tasks)} tasks to goal {session_info['goal_id']}")
-                    except Exception as e:
-                        print(f"[Curriculum] Failed to save tasks to DB: {e}")
-
-                    # Send data for frontend - first task is available, others locked
-                    tasks = result.get("tasks", [])
-                    first_task = tasks[0] if tasks else None
-
-                    await websocket.send_json({
-                        "type": "task_curriculum_accepted",
-                        "tasks": tasks,
-                        "first_task": first_task,
-                        "content": f"Great! Let's start with: **{first_task['topic']}**" if first_task else "Curriculum accepted!",
-                        "message": result.get("message", "Curriculum accepted")
-                    })
-                    _maybe_checkpoint()
-                    continue
-
                 # Check if a goal was proposed (needs user confirmation)
                 if response.startswith("__GOAL_PROPOSED__:"):
                     proposed_goal = response.split(":", 1)[1]

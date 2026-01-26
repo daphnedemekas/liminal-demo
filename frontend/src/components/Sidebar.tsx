@@ -32,6 +32,7 @@ interface SidebarProps {
   onSelectTeaching: (goalSessionId: string, teachingId: number) => void  // Select a teaching candidate
   onNewExploration: () => void
   isExplorationActive: boolean
+  onCreatePath?: () => void  // Create a new learning path directly
   username?: string
   onLogout?: () => void
   // Model selection
@@ -49,6 +50,7 @@ export default function Sidebar({
   onSelectTeaching,
   onNewExploration,
   isExplorationActive,
+  onCreatePath,
   username,
   onLogout,
   currentModel = 'openai:gpt-4o',
@@ -114,7 +116,18 @@ export default function Sidebar({
 
           {/* Goals Section */}
           <div className="sidebar-section">
-            <div className="sidebar-section-label">Paths</div>
+            <div className="sidebar-section-label">
+              <span>Paths</span>
+              {onCreatePath && (
+                <button
+                  className="sidebar-add-btn"
+                  onClick={onCreatePath}
+                  title="Create new learning path"
+                >
+                  +
+                </button>
+              )}
+            </div>
             <div className="sidebar-sessions">
               {goalSessions.length === 0 ? (
                 <div className="sidebar-empty">

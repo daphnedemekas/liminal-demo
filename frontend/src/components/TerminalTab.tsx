@@ -28,7 +28,6 @@ export default function TerminalTab({ goalId, userId }: TerminalTabProps) {
   const outputRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const currentCommandRef = useRef<{ command: string; startOutput: string; isClaudeCode: boolean; lastActivityTime: number; inInteractiveMode: boolean } | null>(null)
-  const lastPromptRef = useRef<string>('')
   const claudeCodeTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const startTerminal = async () => {

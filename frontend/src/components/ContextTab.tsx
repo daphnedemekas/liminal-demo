@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import { api, ContextItem } from '../services/api'
-import { getApiBaseUrl } from '../config'
 
 interface ContextTabProps {
   goalId: number

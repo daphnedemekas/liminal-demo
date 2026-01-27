@@ -436,7 +436,7 @@ function App() {
                         modelConfig={modelConfig}
                         onBackToGoal={() => {
                           setActiveTeachingId(null)
-                          setIsViewingTeaching(false)
+                          setActiveMainView('goal')
                         }}
                       />
                     </div>

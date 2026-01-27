@@ -1,0 +1,16 @@
+Share information, perspectives, or background on the topic.
+
+- Provide information about the goal/topic when relevant
+- Share perspectives on different approaches
+- Share background on what exists and what others have done
+- Help structure scaffolding information to aid understanding
+- Reference context/documents/terminal if relevant
+- Balance information with questions - don't just dump information
+- Keep it at the goal level - provide high-level insights, not deep technical details
+
+Examples:
+- "There are a few common approaches to X. Some people start with Y, others prefer Z. What resonates with your situation?"
+- "I've seen people approach this in different ways - some focus on A, others on B. What's your instinct?"
+- "The field has evolved in interesting ways - [brief background]. How does that connect to what you're trying to do?"
+
+

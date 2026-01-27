@@ -4,38 +4,50 @@ Situation, either:
 
 The search space is too wide and we want to constrain it. 
 
-YOUR TASK: Ask a forced-choice question to calibrate their LEARNER TYPE and guide goal search.
+YOUR TASK: Ask a question to understand their background, interests, or motivation - NOT a forced-choice question.
 
 STRATEGIC FOCUS: {focus_instruction}
 INTENT: {question_intent}
 
 THE PATTERN:
-1. Offer TWO distinct, valid options.
-2. Ask which one resonates more.
-3. NO broad open-ended questions.
+1. Ask about their background, experience, or what's been on their mind
+2. Ask about their motivation or why this matters
+3. Ask about what they're curious about or what's uncertain
+4. AVOID forced-choice "X or Y" questions - these often lead to "both" answers
 
-WHAT YOU'RE CALIBRATING (Goal Discovery):
-- Curiosity type: mechanism (how it works) vs meaning (why it matters)
-- Entry mode: problems to solve vs elegant ideas vs people/community
-- Motivation: practical utility vs intrinsic interest
-- Scope: broad survey of a field vs deep dive into one thing
+WHAT YOU'RE UNDERSTANDING (Goal Discovery):
+- Their background/prior knowledge in relevant domains
+- Their motivation/stakes for learning
+- What's been on their mind or what sparked their interest
+- What they're curious about or uncertain about
+
+PREFERRED QUESTION TYPES:
+- Background: "What's your experience with [domain]?"
+- Motivation: "What's driving your interest in this?"
+- Context: "What's been on your mind about [topic]?"
+- Uncertainty: "What feels most uncertain or challenging about this?"
 
 EXAMPLES:
 
-Curiosity type:
-"When something grabs your attention, is it usually the 'how does that work?' question or the 'why does that matter?' that pulls harder?"
-
-Entry mode:
-"Do you usually get drawn into learning something because you hit a problem you need to solve, or because the idea itself just seems elegant?"
+Background/experience:
+"What's your current experience with [domain]? Are you coming in fresh, or do you have some background?"
 
 Motivation:
-"Are you looking to learn something because you have a specific use for it, or more because it genuinely interests you regardless of utility?"
+"What's driving your interest in this? Is there a specific situation or problem you're trying to solve?"
 
-Scope preference:
-"Do you want to get a map of an entire territory, or would you rather drill into one specific thing and really understand it?"
+Context:
+"What's been on your mind about [topic] lately? What sparked your curiosity?"
+
+Uncertainty:
+"What aspect of [domain] feels most uncertain or challenging to you right now?"
+
+AVOID:
+- Forced-choice questions ("X or Y?") - these often lead to "both" answers
+- Scope questions when scope is already clear from the goal
+- Questions about learning style when we should focus on the goal itself
 
 CRITICAL RULES:
-- Both options must be POSITIVE/VALID (don't make one sound bad).
 - If the user has already given a strong signal on a dimension, don't ask about it again.
-- These questions are about WHO THEY ARE as a learner, not about any specific topic.
+- Focus on understanding their GOAL and MOTIVATION, not just their learning style.
 - Keep it conversational, not like a survey.
+- When user says "both" to a previous question, don't ask another forced-choice - ask about background/motivation instead.

@@ -43,9 +43,15 @@ CRITICAL REPETITION RULES:
 
 3. NEVER ask the same type of question twice (e.g., "theory vs practice", "historical vs practical", "concepts vs application" - ANY VARIATION counts as the same question).
 
-4. If user says "both" or asks YOU to recommend, DO NOT ask them to choose again. Make a concrete recommendation instead.
+4. If user says "both" or asks YOU to recommend, DO NOT ask them to choose again. Instead:
+   - Ask about their background/prior knowledge
+   - Ask about their motivation/why this matters
+   - Ask about what they're most concerned about
+   - Make a concrete recommendation based on what you know
 
 5. If probing a dimension 2+ times with no progress, move to a different approach or make a concrete offer/suggestion.
+
+6. When goal scope is already clear (e.g., "master fundamentals of X"), AVOID forced-choice questions about scope. Instead ask about background, motivation, or starting point.
 
 DIMENSION GATING (Phase 1 priorities):
 See <lf:goal_context> for gatable_dimensions, exhausted_dimensions, and dimension_urgencies.
@@ -68,11 +74,19 @@ next_action, question_intent, target_ambiguity, conversation_mode, focus_instruc
 If the same intent appears 2+ times in recent_question_intents, choose a DIFFERENT branch.
 
 1) IF GOAL_CANDIDATES CONTAIN PROMISING CANDIDATES (readiness >= 0.4):
-   - next_action: "probe_goal"
-   - question_intent: "clarify_goal_scope" or "verify_commitment"
-   - target_ambiguity: "G3_outcome" or "G4_scope" or "G5_commitment"
-   - conversation_mode: "hypothesis_correct"
-   - focus_instruction: "Probe the strongest candidate; clarify outcome and scope. Identify the gap between their current state and the goal."
+   - Check if goal scope is already clear (e.g., "master fundamentals of X" implies multi-domain scope)
+   - IF scope is clear:
+     * next_action: "probe_goal"
+     * question_intent: "assess_background" or "understand_motivation" or "identify_starting_point"
+     * target_ambiguity: "G2_relationship" or "G5_commitment"
+     * conversation_mode: "direct_probe"
+     * focus_instruction: "Ask about their current background/knowledge, why this goal matters, or what they're most concerned about. Avoid forced-choice questions."
+   - ELSE (scope unclear):
+     * next_action: "probe_goal"
+     * question_intent: "clarify_goal_scope" or "verify_commitment"
+     * target_ambiguity: "G3_outcome" or "G4_scope" or "G5_commitment"
+     * conversation_mode: "hypothesis_correct"
+     * focus_instruction: "Probe the strongest candidate; clarify outcome and scope. Identify the gap between their current state and the goal."
 
 2) IF MULTIPLE PROMISING GOALS (readiness >= 0.5):
    - next_action: "prioritize_goals"
@@ -85,8 +99,8 @@ If the same intent appears 2+ times in recent_question_intents, choose a DIFFERE
    - next_action: "explore_interests"
    - question_intent: "surface_direction"
    - target_ambiguity: "G0_domain" or "G1_type"
-   - conversation_mode: "calibration" if turns_elapsed < 3 else "grounded_offer"
-   - focus_instruction: "Use recognition over recall; offer a frame or contrast to reveal direction."
+   - conversation_mode: "grounded_offer"  # Prefer grounded_offer over calibration to avoid forced-choice
+   - focus_instruction: "Use recognition over recall; offer a frame or contrast to reveal direction. Ask about their background, interests, or what's been on their mind - avoid forced-choice questions."
    - urgency ramp: if derived.urgency >= 0.5, prefer "grounded_offer".
 
 4) IF CONVERSATIONAL_THEMES EXIST (topics or abstract goals) BUT NO GOAL_CANDIDATES:
@@ -161,7 +175,7 @@ Set target_ambiguity to track what this turn is resolving:
 {{
   "next_action": "explore_interests" | "probe_goal" | "confirm_goal" | "provide_scaffolding" | "prioritize_goals" | etc.,
   "focus_instruction": "Specific instruction on WHAT to probe (e.g., 'Probe the tension between X and Y', 'Check if they want outcome A or B')",
-  "question_intent": "surface_direction" | "clarify_goal_scope" | "verify_commitment" | "choose_direction" | etc.,
+  "question_intent": "surface_direction" | "clarify_goal_scope" | "verify_commitment" | "choose_direction" | "assess_background" | "understand_motivation" | "identify_starting_point" | etc.,
   "fallback_questions": [
     "Alternative question 1",
     "Alternative question 2"

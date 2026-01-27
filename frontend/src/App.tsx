@@ -205,7 +205,7 @@ function App() {
       console.log('[App] Goal created:', savedGoal)
 
       // Create a session for this goal
-      const sessionResponse = await api.startDiscoverySession(
+      await api.startDiscoverySession(
         modelConfig,
         goalText.trim(),
         user.id,
@@ -282,6 +282,9 @@ function App() {
       goalConversationHistory: t.goalConversationHistory
     }))
 
+    // Automatically select the first available task BEFORE updating state
+    const firstAvailable = sidebarTasks.find(t => t.status === 'available')
+    
     // Add all tasks to the active goal session
     setGoalSessions(prev => prev.map(session =>
       session.id === activeGoalSessionId
@@ -292,11 +295,13 @@ function App() {
         : session
     ))
 
-    // Automatically select the first available task
-    const firstAvailable = sidebarTasks.find(t => t.status === 'available')
+    // Set active teaching AFTER state update (use setTimeout to ensure state is updated)
     if (firstAvailable) {
-      setActiveTeachingId(firstAvailable.id)
-      setActiveMainView('teaching')
+      // Use setTimeout to ensure setGoalSessions completes first
+      setTimeout(() => {
+        setActiveTeachingId(firstAvailable.id)
+        setActiveMainView('teaching')
+      }, 0)
     }
   }, [activeGoalSessionId])
 
@@ -388,51 +393,57 @@ function App() {
             )}
 
             {/* Goal Panels - render ALL goals, show/hide based on selection */}
-            {!isLoadingUserData && user && goalSessions.map(session => (
-              <div 
-                key={`goal-${session.id}`}
-                style={{
-                  display: (activeMainView === 'goal' && activeGoalSessionId === session.id) ? 'flex' : 'none',
-                  width: '100%',
-                  height: '100%'
-                }}
-              >
-                <GoalChat
-                  goalId={session.goalId}
-                  goal={session.goal}
-                  userId={user.id}
-                  modelConfig={modelConfig}
-                  onboardingInfo={onboardingInfo}
-                  onTeachingCandidateAccepted={(candidate) =>
-                    handleTeachingCandidateAccepted(candidate, session.id)
-                  }
-                  onCurriculumAccepted={handleCurriculumAccepted}
-                />
-              </div>
-            ))}
-
-            {/* Teaching Panels - render ALL teaching candidates, show/hide based on selection */}
-            {!isLoadingUserData && user && goalSessions.flatMap(session => 
-              session.teachingCandidates.map(candidate => (
+            {!isLoadingUserData && user && goalSessions.map(session => {
+              const isActiveGoal = (activeMainView === 'goal' || activeMainView === 'teaching') && activeGoalSessionId === session.id
+              const activeTeachingForGoal = isActiveGoal && isViewingTeaching && activeTeachingId
+                ? session.teachingCandidates.find(tc => tc.id === activeTeachingId)
+                : null
+              
+              return (
                 <div 
-                  key={`teaching-${candidate.id}`}
+                  key={`goal-${session.id}`}
                   style={{
-                    display: (isViewingTeaching && activeTeachingId === candidate.id) ? 'flex' : 'none',
+                    display: isActiveGoal ? 'flex' : 'none',
                     width: '100%',
-                    height: '100%'
+                    height: '100%',
+                    flexDirection: 'column'
                   }}
                 >
-                  <TeachingChat
-                    candidate={candidate}
-                    goalId={session.goalId}
-                    goalText={session.goal}
-                    userId={user.id}
-                    onboardingInfo={onboardingInfo}
-                    modelConfig={modelConfig}
-                  />
+                  {/* Show goal chat if no teaching sub-panel is active, or show both in split view */}
+                  {!activeTeachingForGoal && (
+                    <GoalChat
+                      goalId={session.goalId}
+                      goal={session.goal}
+                      userId={user.id}
+                      modelConfig={modelConfig}
+                      onboardingInfo={onboardingInfo}
+                      onTeachingCandidateAccepted={(candidate) =>
+                        handleTeachingCandidateAccepted(candidate, session.id)
+                      }
+                      onCurriculumAccepted={handleCurriculumAccepted}
+                    />
+                  )}
+                  
+                  {/* Teaching sub-panel - nested within goal view */}
+                  {activeTeachingForGoal && (
+                    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
+                      <TeachingChat
+                        candidate={activeTeachingForGoal}
+                        goalId={session.goalId}
+                        goalText={session.goal}
+                        userId={user.id}
+                        onboardingInfo={onboardingInfo}
+                        modelConfig={modelConfig}
+                        onBackToGoal={() => {
+                          setActiveTeachingId(null)
+                          setIsViewingTeaching(false)
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
-              ))
-            )}
+              )
+            })}
           </div>
         </div>
       )}

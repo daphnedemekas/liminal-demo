@@ -28,17 +28,22 @@ def assemble_prompt(
     phase: Optional[str] = None,
     task: Optional[str] = None,  # "ranker", "interviewer", "teaching"
     inject_resources: bool = True,
+    # Panel context parameters
+    goal_context_items: Optional[List[Dict[str, Any]]] = None,
+    active_document: Optional[Dict[str, Any]] = None,
+    terminal_observation: Optional[Dict[str, Any]] = None,
+    channel_suggestion_context: Optional[Dict[str, Any]] = None,
 ) -> Tuple[str, List[DroppedComponent]]:
     """
     Assemble a prompt using the full LoopFlow workflow.
-    
+
     This function:
     1. Loads prompt template from PromptLoader
     2. Gathers context into PromptComponents
     3. Formats with XML tags
     4. Trims to token budget
     5. Returns formatted prompt and dropped components
-    
+
     Args:
         step_name: Name of the step/prompt to load
         prompt_loader: PromptLoader instance
@@ -54,7 +59,11 @@ def assemble_prompt(
         phase: Optional phase for interviewer prompts (e.g., "goal_discovery", "teaching_discovery")
         task: Task type - "ranker", "interviewer", or "teaching" (default: "ranker")
         inject_resources: Whether to inject background resources (default: True)
-        
+        goal_context_items: Optional list of context items from Context tab
+        active_document: Optional active document from Draft tab
+        terminal_observation: Optional terminal observation from Terminal tab
+        channel_suggestion_context: Optional channel-specific suggestion context
+
     Returns:
         Tuple of (formatted_prompt_string, list_of_dropped_components)
     """
@@ -102,6 +111,11 @@ def assemble_prompt(
         user_background=user_background,
         goal_context=merged_goal_context if merged_goal_context else None,
         system_instructions=system_instructions,
+        # Panel context
+        goal_context_items=goal_context_items,
+        active_document=active_document,
+        terminal_observation=terminal_observation,
+        channel_suggestion_context=channel_suggestion_context,
     )
     
     # Step 3: Format with XML tags
@@ -119,4 +133,7 @@ def assemble_prompt(
         print(f"[PromptAssembly] Dropped components for {step_name}: {dropped_summary}")
     
     return final_prompt, dropped
+
+
+
 

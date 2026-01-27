@@ -286,6 +286,128 @@ export const api = {
 
     return response.json()
   },
+
+  // Panel Context APIs (Context Tab)
+  async addContext(goalId: number, userId: string, textContent: string, contentType: string = 'text'): Promise<ContextItem> {
+    const response = await fetch(`${getApiUrl()}/api/goal/${goalId}/context`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ goal_id: goalId, user_id: userId, text_content: textContent, content_type: contentType }),
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to add context')
+    }
+
+    return response.json()
+  },
+
+  async getContexts(goalId: number): Promise<ContextItem[]> {
+    const response = await fetch(`${getApiUrl()}/api/goal/${goalId}/contexts`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to get contexts')
+    }
+
+    return response.json()
+  },
+
+  async deleteContext(goalId: number, contextId: number): Promise<void> {
+    const response = await fetch(`${getApiUrl()}/api/goal/${goalId}/context/${contextId}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to delete context')
+    }
+  },
+
+  // Panel Document APIs (Draft Tab)
+  async createDocument(goalId: number, userId: string, title: string = 'Untitled', documentType: string = 'notes', plainText?: string): Promise<DocumentItem> {
+    const response = await fetch(`${getApiUrl()}/api/goal/${goalId}/document`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ goal_id: goalId, user_id: userId, title, document_type: documentType, plain_text: plainText }),
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to create document')
+    }
+
+    return response.json()
+  },
+
+  async getDocuments(goalId: number): Promise<DocumentItem[]> {
+    const response = await fetch(`${getApiUrl()}/api/goal/${goalId}/documents`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to get documents')
+    }
+
+    return response.json()
+  },
+
+  async getDocument(documentId: number): Promise<DocumentItem> {
+    const response = await fetch(`${getApiUrl()}/api/document/${documentId}`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to get document')
+    }
+
+    return response.json()
+  },
+
+  async updateDocument(documentId: number, updates: { title?: string; plain_text?: string; content?: any }): Promise<DocumentItem> {
+    const response = await fetch(`${getApiUrl()}/api/document/${documentId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to update document')
+    }
+
+    return response.json()
+  },
+
+  // Panel Terminal APIs (Terminal Tab)
+  async startTerminal(goalId: number, userId: string, workingDirectory: string = '~'): Promise<TerminalSession> {
+    const response = await fetch(`${getApiUrl()}/api/terminal/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ goal_id: goalId, user_id: userId, working_directory: workingDirectory }),
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to start terminal')
+    }
+
+    return response.json()
+  },
+
+  async getTerminalHistory(sessionId: string, limit: number = 50): Promise<{ history: any[] }> {
+    const response = await fetch(`${getApiUrl()}/api/terminal/${sessionId}/history?limit=${limit}`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to get terminal history')
+    }
+
+    return response.json()
+  },
 }
 
 export interface FeedItem {
@@ -388,4 +510,48 @@ export interface LearnerTrajectoryDashboard {
   goals: TrajectoryGoal[]
   engagement: any
   learner_model: any
+}
+
+// Panel Context Types
+export interface ContextItem {
+  id: number
+  goal_id: number
+  user_id: string
+  content_type: string
+  text_content?: string
+  file_path?: string
+  file_name?: string
+  token_count: number
+  is_active: boolean
+  created_at?: string
+  updated_at?: string
+}
+
+export interface DocumentItem {
+  id: number
+  goal_id: number
+  user_id: string
+  title: string
+  document_type: string
+  content?: any
+  plain_text?: string
+  suggestion_config: {
+    formatting: boolean
+    content: boolean
+    tasks: boolean
+  }
+  version: number
+  is_active: boolean
+  created_at?: string
+  updated_at?: string
+}
+
+export interface TerminalSession {
+  id: number
+  session_id: string
+  goal_id: number
+  user_id: string
+  working_directory: string
+  is_active: boolean
+  created_at?: string
 }

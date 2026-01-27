@@ -57,7 +57,8 @@ class SessionManager:
         user_goal: Optional[str] = None,
         user_id: Optional[str] = None,
         conversation_history: Optional[list] = None,
-        schema_state: Optional[dict] = None
+        schema_state: Optional[dict] = None,
+        exploration_history: Optional[list] = None
     ) -> SessionData:
         """Initialize new discovery session or resume existing one."""
         async with self._get_lock(session_id):
@@ -75,7 +76,8 @@ class SessionManager:
                 user_goal=user_goal,
                 session_id=session_id,  # Always pass session_id - database ID is source of truth
                 conversation_history=conversation_history,
-                schema_state=schema_state
+                schema_state=schema_state,
+                exploration_history=exploration_history
             )
 
             # Store goal in schema if provided (for new sessions without restored state)

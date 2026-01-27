@@ -9,6 +9,7 @@ interface ProfilePanelProps {
   initialSummary?: string
   isTeachingSession?: boolean
   onGoalSelected?: (goalText: string) => void
+  onTeachingCandidateClick?: (candidate: any) => void
 }
 
 // Helper functions to convert numeric values to descriptive labels
@@ -67,7 +68,7 @@ const getMarkerLevelBadge = (level: string): { label: string; className: string 
   }
 }
 
-export default function ProfilePanel({ sessionId, isConnected, initialSummary, isTeachingSession = false, onGoalSelected }: ProfilePanelProps) {
+export default function ProfilePanel({ sessionId, isConnected, initialSummary, isTeachingSession = false, onGoalSelected, onTeachingCandidateClick }: ProfilePanelProps) {
   const [schema, setSchema] = useState<any>(null)
   const [teachingSchema, setTeachingSchema] = useState<TeachingSchema | null>(null)
   const [summary, setSummary] = useState<string>(initialSummary || '')
@@ -548,21 +549,34 @@ export default function ProfilePanel({ sessionId, isConnected, initialSummary, i
               <span className="card-title">Teaching Topics</span>
               <span className="item-count">{teachingCandidates.length}</span>
             </div>
-            <div className="teaching-list">
-              {teachingCandidates.map((tc: any, idx: number) => {
-                const readiness = getReadinessLabel(tc.readiness_score)
-                return (
-                  <div key={idx} className="teaching-item">
-                    <p className="teaching-topic">{stripMarkdown(tc.topic)}</p>
-                    {tc.identified_gap && (
-                      <p className="teaching-gap">Gap: {tc.identified_gap}</p>
-                    )}
-                    <span className={`readiness-badge ${readiness.level}`}>
-                      {readiness.label}
-                    </span>
-                  </div>
-                )
-              })}
+            <div className="goal-list">
+              {/* Sort by readiness score (descending) */}
+              {[...teachingCandidates]
+                .sort((a: any, b: any) => (b.readiness_score || 0) - (a.readiness_score || 0))
+                .map((tc: any, idx: number) => {
+                  const readiness = getReadinessLabel(tc.readiness_score)
+                  const isClickable = onTeachingCandidateClick && readiness.level !== 'low'
+                  return (
+                    <div 
+                      key={tc.id || idx} 
+                      className={`goal-item ${isClickable ? 'clickable' : ''}`}
+                      onClick={isClickable ? () => onTeachingCandidateClick(tc) : undefined}
+                      title={isClickable ? 'Click to start learning this topic' : 'Continue chatting to develop this topic'}
+                    >
+                      <div className="goal-item-content">
+                        <p className="goal-text">{stripMarkdown(tc.topic)}</p>
+                        {tc.identified_gap && (
+                          <p className="goal-subtext" style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                            {stripMarkdown(tc.identified_gap.length > 60 ? tc.identified_gap.substring(0, 60) + '...' : tc.identified_gap)}
+                          </p>
+                        )}
+                      </div>
+                      <span className={`readiness-badge ${readiness.level}`}>
+                        {readiness.label}
+                      </span>
+                    </div>
+                  )
+                })}
             </div>
           </div>
         )}

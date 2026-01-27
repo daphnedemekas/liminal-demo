@@ -446,6 +446,12 @@ class InterviewState(BaseModel):
     teaching_candidate_identified: bool = False  # Has a teaching candidate been selected?
     rejected_teaching_ids: List[int] = Field(default_factory=list)  # Teaching candidates user rejected
     transition_message_sent: bool = False  # Has the teaching transition message been sent?
+    teaching_candidates_mentioned: List[int] = Field(default_factory=list)  # Track which candidates have been mentioned (avoid repeating)
+    
+    # Conversation state tracking
+    information_shared: List[str] = Field(default_factory=list)  # Track topics/information that has been shared
+    perspectives_given: List[str] = Field(default_factory=list)  # Track perspectives/background info provided
+    context_referenced: List[str] = Field(default_factory=list)  # Track when context/documents/terminal were referenced
 
 
 # ============================================================================
@@ -463,16 +469,23 @@ class Controller(BaseModel):
     # Conversation mode selection for recognition-based patterns
     # IMPORTANT: Each mode must have a corresponding prompt file in prompts/interviewer/{phase}/
     conversation_mode: Optional[Literal[
-        "calibration",        # Early turns, forced-choice A/B questions
-        "grounded_offer",     # Mid-game, offer content + reaction question
-        "hypothesis_correct", # Stuck on fuzzy topic, guess + ask what's wrong
-        "direct_probe",       # Standard question without grounding
-        # Assessment techniques for prior knowledge probing
-        "topic_probe",        # Present a concept, ask what they think it means
-        "explain_back",       # Ask user to walk through something
-        "scenario_probe",     # Pose a practical situation, see how they reason
+        # Unified goal chat modes
+        "explore_deeper",        # Ask follow-up questions to go deeper
+        "provide_perspective",   # Share information, background, what exists and what others have done
+        "resolve_confusion",     # Clarify misunderstandings
+        "suggest_candidate",     # Brief mention of teaching candidate
+        "answer_question",       # Answer user's direct questions
+        "general_continuation",  # Natural conversation flow
+        # Legacy modes (still used in some contexts)
+        "calibration",           # Early turns, forced-choice A/B questions
+        "grounded_offer",        # Mid-game, offer content + reaction question
+        "hypothesis_correct",    # Stuck on fuzzy topic, guess + ask what's wrong
+        "direct_probe",          # Standard question without grounding
+        "topic_probe",           # Present a concept, ask what they think it means
+        "explain_back",          # Ask user to walk through something
+        "scenario_probe",        # Pose a practical situation, see how they reason
         # Curriculum proposal and negotiation modes
-        "propose_tasks",      # Present batch of learning tasks with justifications
+        "propose_tasks",         # Present batch of learning tasks with justifications
         "negotiate_curriculum",  # Handle curriculum modifications and clarifications
     ]] = None
     
@@ -523,6 +536,7 @@ class TeachingRecommendation(BaseModel):
     target_topic_id: Optional[int] = None
     target_topic: Optional[str] = None
     focus_question: Optional[str] = None  # The specific question to answer
+    suggestion_message: Optional[str] = None  # Brief mention of teaching candidate (non-blocking)
     angle: Optional[str] = None  # mechanism, meaning, application, etc.
     difficulty_calibration: Optional[str] = None  # ZPD-appropriate difficulty
     format: Optional[str] = None  # dialogue, explanation, analogy, example

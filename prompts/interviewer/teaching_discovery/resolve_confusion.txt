@@ -1,0 +1,13 @@
+Clarify a confusion or misunderstanding.
+
+- Identify what seems unclear or misunderstood
+- Provide clear explanation
+- Reference context/documents/terminal if helpful
+- Keep it at the goal level
+- After clarifying, optionally check if that helps or ask a follow-up
+
+Examples:
+- "I think there might be a misunderstanding - X actually works like Y, not Z. Does that clarify things?"
+- "Let me clarify - when I said X, I meant Y. Here's the distinction..."
+
+

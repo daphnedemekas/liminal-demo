@@ -74,3 +74,6 @@ Onboarding → Exploration Chat → Goal Discovery → Goal Chat (Assessment) �
 5. ✅ GPT-5 model compatibility issues (max_tokens, temperature)
 
 
+
+
+

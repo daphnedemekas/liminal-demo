@@ -172,6 +172,10 @@ class LLMClient:
         Returns:
             Parsed JSON response as dictionary
         """
+        # Create a copy of messages to avoid modifying the original array
+        # (which might be used for conversation history display)
+        messages = [msg.copy() for msg in messages]
+        
         # Add JSON instruction to the last message (prompt-based fallback).
         if messages:
             last_msg = messages[-1]["content"]

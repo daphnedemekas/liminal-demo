@@ -1,0 +1,13 @@
+Briefly mention a teaching candidate, then continue conversation naturally.
+
+- Mention the candidate briefly: "[topic] might be worth exploring deeper - you can see it in the sidebar if you want to dive in."
+- Don't make it the focus - just a brief mention
+- Continue the conversation naturally after mentioning it
+- Keep it conversational and non-pushy
+
+Example:
+"Based on what we've been discussing, [topic] might be worth exploring deeper - you can see it in the sidebar if you want to dive in. 
+
+[Continue with normal conversation about the goal]"
+
+

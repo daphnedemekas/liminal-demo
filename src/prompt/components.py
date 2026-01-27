@@ -55,3 +55,11 @@ class PromptComponents:
     user_background: Optional[str] = None  # User background information
     goal_context: Optional[Dict[str, Any]] = None  # Goal-specific context
 
+    # Panel context (Context, Draft, Terminal tabs)
+    goal_context_items: List[Dict[str, Any]] = field(default_factory=list)  # Context tab items
+    active_document: Optional[Dict[str, Any]] = None  # Draft tab document
+    terminal_observation: Optional[Dict[str, Any]] = None  # Terminal activity observation
+
+    # Channel-specific context for suggestions
+    channel_suggestion_context: Optional[Dict[str, Any]] = None  # User's instructions for suggestions
+

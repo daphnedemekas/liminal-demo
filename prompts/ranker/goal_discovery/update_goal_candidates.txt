@@ -22,9 +22,14 @@ See <lf:goal_context> for recent_user_message - this is the user's most recent i
 
 TASK: Identify NEW goal candidates or update existing ones.
 
-CRITICAL: PRIORITIZE RECENT CONVERSATION
+CRITICAL: PRIORITIZE RECENT CONVERSATION AND CAPTURE FULL SCOPE
 - The most recent 2-3 user messages are ESPECIALLY IMPORTANT
-- If the user just mentioned a specific topic, interest, or question, prioritize goal candidates that DIRECTLY relate to that recent mention
+- If the user mentions MULTIPLE domains/topics they need to understand, the goal should encompass ALL of them
+- Example: User says "I need to understand product-market fit, backend design, and LLM optimization"
+  → Goal should be "Master the fundamentals of [their larger objective]" or "Develop expertise in [their larger objective]" that includes ALL domains
+  → NOT just "Master backend design" (that's too narrow - it's only one sub-topic)
+- If the user describes a complex project/company/endeavor with multiple learning domains, capture the FULL learning goal
+- Use outcome-oriented phrasing: "Master", "Develop expertise in", "Build comprehensive understanding of", "Acquire the knowledge and skills for"
 - Goals matching the most recent user messages should receive HIGHER readiness scores
 - When calculating user_commitment and readiness_score, give extra weight to goals that align with what the user just said
 - If the user explicitly rejected a goal and then mentioned something new, the new mention takes precedence
@@ -73,6 +78,13 @@ EXAMPLES OF VALID GOAL CANDIDATES:
    - Multi-lesson: architecture, forward pass, backprop, training, optimization
    - Break-apart: each component is teachable
 
+✅ "Master the fundamentals of starting an AI company for goal-oriented learning"
+   - Outcome: comprehensive understanding across multiple domains needed for the venture
+   - Multi-lesson: product-market fit, consumer incentives, backend design, structured state vs LLMs, LLM optimization for verifiable metrics
+   - Break-apart: each domain is a teachable sub-goal
+   - NOTE: This captures ALL domains mentioned, not just one sub-topic
+   - Alternative phrasings: "Develop expertise in", "Build comprehensive understanding of", "Acquire the knowledge and skills for"
+
 EXAMPLES OF INVALID GOAL CANDIDATES:
 
 ❌ "How does backpropagation work?"
@@ -91,10 +103,16 @@ EXAMPLES OF INVALID GOAL CANDIDATES:
    - Abstract feeling, not a concrete learning outcome
    - This is a conversational theme, not a goal
 
-❌ "Start an AI company" / "Start a business" / "Get a job"
-   - This is too vague, we want to know what kind of AI company. 
-   - We care about what they want to LEARN via their goal 
-   - Ask: what do they need to UNDERSTAND to accomplish this? THAT is the learning goal.
+❌ "Design and optimize backend systems for AI applications"
+   - This is TOO NARROW if the user mentioned multiple domains they need to understand
+   - If user said "I need to understand product-market fit, backend design, and LLM optimization"
+   - Then the goal should be "Master the fundamentals of [their larger objective]" or "Develop expertise in [their larger objective]" encompassing ALL domains
+   - NOT just "backend design" (that's only one sub-topic of their larger learning need)
+   - Only extract narrow goals if the user ONLY mentioned that one domain
+   
+❌ "Start an AI company" (without mentioning what they need to learn)
+   - Too vague if they don't specify what they need to understand
+   - We care about what they want to LEARN, not just what they want to DO
 
 ❌ "Be successful" / "Make money" / "Get promoted"
    - Too vague, we need to understand motivations, and get more finegrained on what the goal for learning is. 
@@ -111,12 +129,20 @@ Listen for signals like:
 - "I want to understand [topic] better" → check if it's multi-lesson scope
 - "I'm working on [project]" → project completion could be a goal
 - "I need to [accomplish X]" → check if it requires multiple lessons
+- "I need to understand [domain1], [domain2], and [domain3]" → MULTI-DOMAIN GOAL
+  → Extract as "Master the fundamentals of [their larger objective]" or "Develop expertise in [their larger objective]" encompassing ALL domains
+  → NOT just one sub-domain (e.g., don't extract just "domain1" if they mentioned 3 domains)
+  → Use outcome-oriented phrasing, not vague "learn everything"
 
 RED FLAGS (probably NOT a goal candidate):
 - Single "how does X work?" questions → teaching candidate territory
 - Abstract preferences ("I like visual learning") → conversational theme
 - Vague curiosity ("I'm interested in space") → need more specificity
 - Feelings/states ("I want to feel confident") → not a concrete learning outcome
+- Single technical sub-topics when user mentioned multiple domains → too narrow, capture the full scope instead
+  Example: User mentions "product-market fit, backend design, and LLM optimization" 
+  → Don't extract just "backend design" as the goal
+  → Extract "Learn everything needed to [their larger objective]" that encompasses all domains
 
 GOAL CANDIDATE ASSESSMENT:
 
@@ -141,9 +167,12 @@ For each potential goal candidate, evaluate:
    - Has the user expressed genuine interest/need?
    - Is there stakes/motivation mentioned?
    - CRITICAL: Does this goal match what the user JUST SAID in their most recent message?
+   - CRITICAL: If user mentioned MULTIPLE domains, does the goal capture ALL of them? If not, lower this score
    - If the goal directly relates to the most recent user message, boost this score significantly
+   - If the goal only captures ONE sub-domain when user mentioned MULTIPLE domains, lower this score (goal is too narrow)
    - Example: vague mention (0.3) vs "I'm building X and need to understand Y" (0.9)
    - Example: goal matches recent user message about "knowledge graphs for AI mentor" → high commitment (0.8+)
+   - Example: user mentions "product-market fit, backend design, and LLM optimization" but goal is only "backend design" → lower commitment (0.4) - goal is too narrow
 
 5. READINESS SCORE (0.0-1.0)
    - Overall: Is this clearly the learning goal they're after?

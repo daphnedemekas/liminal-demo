@@ -1,5 +1,5 @@
 """SQLAlchemy models for persistent storage."""
-from sqlalchemy import Column, String, Integer, Float, Text, DateTime, JSON, ForeignKey
+from sqlalchemy import Column, String, Integer, Float, Text, DateTime, JSON, ForeignKey, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -102,6 +102,10 @@ class UserGoal(Base):
     # Relationships
     user = relationship("UserProfile", back_populates="goals")
     sessions = relationship("ConversationSession", back_populates="goal")
+    contexts = relationship("GoalContext", back_populates="goal", cascade="all, delete-orphan")
+    documents = relationship("GoalDocument", back_populates="goal", cascade="all, delete-orphan")
+    terminal_sessions = relationship("TerminalSession", back_populates="goal", cascade="all, delete-orphan")
+    chat_channels = relationship("ChatChannel", back_populates="goal", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<UserGoal(id={self.id}, goal='{self.goal_text[:30]}...', status='{self.status}')>"
@@ -203,3 +207,178 @@ class TrajectoryCheckpoint(Base):
 
     def __repr__(self):
         return f"<TrajectoryCheckpoint(id={self.id}, user_id='{self.user_id}', session_type='{self.session_type}')>"
+
+
+class GoalContext(Base):
+    """User-provided context materials for a learning goal."""
+
+    __tablename__ = 'goal_contexts'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    goal_id = Column(Integer, ForeignKey('user_goals.id'), nullable=False, index=True)
+    user_id = Column(String, ForeignKey('user_profiles.user_id'), nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Content type: 'text', 'file', 'image', 'code'
+    content_type = Column(String, nullable=False, default='text')
+
+    # For pasted text content
+    text_content = Column(Text, nullable=True)
+
+    # For file uploads
+    file_path = Column(String, nullable=True)
+    file_name = Column(String, nullable=True)
+    file_mime_type = Column(String, nullable=True)
+
+    # Processed content for LLM (OCR results, parsed code, etc.)
+    processed_content = Column(Text, nullable=True)
+
+    # Token count for budget management
+    token_count = Column(Integer, default=0)
+
+    # Soft delete flag
+    is_active = Column(Boolean, default=True)
+
+    # Relationships
+    goal = relationship("UserGoal", back_populates="contexts")
+
+    def __repr__(self):
+        return f"<GoalContext(id={self.id}, goal_id={self.goal_id}, type='{self.content_type}')>"
+
+
+class GoalDocument(Base):
+    """User drafts associated with a learning goal."""
+
+    __tablename__ = 'goal_documents'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    goal_id = Column(Integer, ForeignKey('user_goals.id'), nullable=False, index=True)
+    user_id = Column(String, ForeignKey('user_profiles.user_id'), nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Document metadata
+    title = Column(String, default='Untitled')
+
+    # Document type: 'essay', 'application', 'code', 'notes'
+    document_type = Column(String, default='notes')
+
+    # Content storage
+    content = Column(JSON, nullable=True)  # Rich text format (JSON)
+    plain_text = Column(Text, nullable=True)  # Plain text for LLM processing
+
+    # Suggestion configuration
+    # {"formatting": true, "content": true, "tasks": false}
+    suggestion_config = Column(JSON, default=dict)
+
+    # Token count for budget management
+    token_count = Column(Integer, default=0)
+
+    # Version tracking
+    version = Column(Integer, default=1)
+
+    # Soft delete flag
+    is_active = Column(Boolean, default=True)
+
+    # Relationships
+    goal = relationship("UserGoal", back_populates="documents")
+
+    def __repr__(self):
+        return f"<GoalDocument(id={self.id}, goal_id={self.goal_id}, title='{self.title}')>"
+
+
+class TerminalSession(Base):
+    """Terminal session state for a learning goal."""
+
+    __tablename__ = 'terminal_sessions'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(String, unique=True, nullable=False, index=True)  # UUID for WebSocket
+    goal_id = Column(Integer, ForeignKey('user_goals.id'), nullable=False, index=True)
+    user_id = Column(String, ForeignKey('user_profiles.user_id'), nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    ended_at = Column(DateTime, nullable=True)
+
+    # Terminal state
+    working_directory = Column(String, default='~')
+    environment_vars = Column(JSON, default=dict)
+
+    # Command history: [{command, output, timestamp, exit_code}]
+    command_history = Column(JSON, default=list)
+
+    # Rolling window for AI observation
+    observation_buffer = Column(JSON, default=list)
+
+    # Session active flag
+    is_active = Column(Boolean, default=True)
+
+    # Relationships
+    goal = relationship("UserGoal", back_populates="terminal_sessions")
+
+    def __repr__(self):
+        return f"<TerminalSession(id={self.id}, session_id='{self.session_id}', goal_id={self.goal_id})>"
+
+
+class ChatChannel(Base):
+    """Tabbed chat channel within a learning goal."""
+
+    __tablename__ = 'chat_channels'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    goal_id = Column(Integer, ForeignKey('user_goals.id'), nullable=False, index=True)
+    user_id = Column(String, ForeignKey('user_profiles.user_id'), nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Channel type: 'main', 'sandbox', 'draft', 'custom'
+    channel_type = Column(String, nullable=False, default='main')
+
+    # User-visible name ("Main Chat", "Sandbox Suggestions", etc.)
+    name = Column(String, nullable=False)
+
+    # User's instructions for what suggestions they want in this channel
+    suggestion_context = Column(JSON, default=dict)
+
+    # Which panel feeds this channel: 'terminal', 'document', 'both', null
+    source_binding = Column(String, nullable=True)
+
+    # Channel active flag
+    is_active = Column(Boolean, default=True)
+
+    # Relationships
+    goal = relationship("UserGoal", back_populates="chat_channels")
+    messages = relationship("ChannelMessage", back_populates="channel", cascade="all, delete-orphan")
+
+    def __repr__(self):
+        return f"<ChatChannel(id={self.id}, goal_id={self.goal_id}, name='{self.name}')>"
+
+
+class ChannelMessage(Base):
+    """Messages within a chat channel."""
+
+    __tablename__ = 'channel_messages'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    channel_id = Column(Integer, ForeignKey('chat_channels.id'), nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Message role: 'user', 'assistant', 'system'
+    role = Column(String, nullable=False)
+
+    # Message content
+    content = Column(Text, nullable=False)
+
+    # Message type: 'chat', 'suggestion', 'observation', 'task_proposal'
+    message_type = Column(String, default='chat')
+
+    # What triggered this message: 'terminal_observation', 'document_analysis', 'user_input'
+    source = Column(String, nullable=True)
+
+    # Additional metadata (e.g., which command triggered this)
+    message_metadata = Column(JSON, default=dict)
+
+    # Relationships
+    channel = relationship("ChatChannel", back_populates="messages")
+
+    def __repr__(self):
+        return f"<ChannelMessage(id={self.id}, channel_id={self.channel_id}, role='{self.role}')>"

@@ -43,6 +43,7 @@ class TeachingOrchestrator:
         goal_text: str,
         user_background: str = "",
         goal_conversation_history: Optional[List[Dict]] = None,
+        existing_teaching_candidates: Optional[List[Dict[str, Any]]] = None,
         db_path: str = "data/liminal.db",
         model_config: Optional[dict] = None,
         session_id: Optional[str] = None,
@@ -60,6 +61,7 @@ class TeachingOrchestrator:
             goal_text: The broader learning goal text
             user_background: User's background info
             goal_conversation_history: Conversation from goal discovery phase
+            existing_teaching_candidates: List of other teaching candidates for this goal (for sequential awareness)
             db_path: Path to SQLite database
             model_config: Optional model configuration override
             session_id: Optional existing session ID to resume
@@ -81,6 +83,7 @@ class TeachingOrchestrator:
         self.goal_text = goal_text
         self.user_background = user_background
         self.goal_conversation_history = goal_conversation_history or []
+        self.existing_teaching_candidates = existing_teaching_candidates or []
         
         # Resume or create session
         if session_id:
@@ -101,6 +104,38 @@ class TeachingOrchestrator:
         self.conversation_history = conversation_history or []
         if conversation_history:
             print(f"[TeachingOrchestrator] Restored {len(conversation_history)} messages")
+
+    def _format_teaching_candidates_context(self) -> str:
+        """
+        Format existing teaching candidates into context string for prompts.
+        
+        Returns:
+            Formatted string describing other teaching candidates for this goal
+        """
+        if not self.existing_teaching_candidates:
+            return "No other teaching topics have been covered yet for this goal."
+        
+        context_parts = []
+        context_parts.append(f"You are aware of {len(self.existing_teaching_candidates)} other teaching topic(s) that have been or are being covered for this goal:")
+        
+        for idx, candidate in enumerate(self.existing_teaching_candidates, 1):
+            topic = candidate.get("topic", "Unknown topic")
+            status = candidate.get("status", "unknown")
+            identified_gap = candidate.get("identified_gap", "")
+            
+            status_desc = {
+                "completed": "completed",
+                "in_progress": "currently being taught",
+                "available": "available to start",
+                "locked": "locked (prerequisites not met)"
+            }.get(status, status)
+            
+            gap_text = f" (Gap: {identified_gap})" if identified_gap else ""
+            context_parts.append(f"{idx}. {topic} - {status_desc}{gap_text}")
+        
+        context_parts.append("\nWhen teaching the current topic, structure your delivery with awareness of these other topics. Reference how they connect or build on each other when relevant.")
+        
+        return "\n".join(context_parts)
 
     def _initialize_schema(self, teaching_candidate: Dict[str, Any]) -> TeachingSchema:
         """Initialize new teaching schema."""
@@ -215,6 +250,9 @@ Return just the message text, no JSON."""
         else:
             goal_conv_summary = "(No prior conversation available)"
         
+        # Format existing teaching candidates context
+        existing_candidates_context = self._format_teaching_candidates_context()
+        
         # Build teaching context
         teaching_context = {
             "goal_text": self.goal_text,
@@ -223,6 +261,7 @@ Return just the message text, no JSON."""
             "current_model_summary": self.schema.teaching_candidate.current_model_summary or "Unknown",
             "stakes_summary": self.schema.teaching_candidate.stakes_summary or "Not specified",
             "goal_conversation_summary": goal_conv_summary,
+            "existing_teaching_candidates": existing_candidates_context,
             "assessment_concepts_known": ", ".join(self.schema.assessment_concepts_known) if self.schema.assessment_concepts_known else "Still assessing",
             "assessment_concepts_unclear": ", ".join(self.schema.assessment_concepts_unclear) if self.schema.assessment_concepts_unclear else "Still assessing",
             "assessment_confidence": f"{self.schema.assessment_confidence:.2f}",
@@ -666,10 +705,14 @@ Return ONLY valid JSON."""
         # Format conversation
         recent_conv = self.conversation_history[-6:] if len(self.conversation_history) > 6 else self.conversation_history
         
+        # Format existing teaching candidates context
+        existing_candidates_context = self._format_teaching_candidates_context()
+        
         # Build teaching context
         teaching_context = {
             "teaching_state": teaching_state,
-            "user_message": user_message
+            "user_message": user_message,
+            "existing_teaching_candidates": existing_candidates_context
         }
         
         # Use assemble_prompt to build prompt with context
@@ -894,7 +937,8 @@ Return ONLY valid JSON."""
             "target_markers": ", ".join(ctrl.target_markers) if ctrl.target_markers else "general understanding",
             "action_rationale": ctrl.action_rationale,
             "source_material": self.schema.teaching_candidate.source_material or "(No reference material provided)",
-            "user_message": user_message
+            "user_message": user_message,
+            "existing_teaching_candidates": self._format_teaching_candidates_context()
         }
         
         # Use assemble_prompt to build prompt with context

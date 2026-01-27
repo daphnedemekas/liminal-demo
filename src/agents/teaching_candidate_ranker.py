@@ -157,12 +157,13 @@ class TeachingCandidateRanker(RankerAgentBase):
         conversation_history: List[Dict[str, str]]
     ) -> Dict[str, Any]:
         """
-        Check if any teaching candidate is ready.
-
-        Uses explicit criteria rather than LLM-determined readiness.
+        Check if any teaching candidate is worth mentioning briefly.
+        
+        Returns brief suggestion message instead of transition.
+        This allows conversation to continue naturally without blocking.
 
         Returns:
-            TeachingRecommendation dictionary
+            TeachingRecommendation dictionary with suggestion message if candidate found
         """
         try:
             # Fast-path: no teaching candidates
@@ -172,44 +173,37 @@ class TeachingCandidateRanker(RankerAgentBase):
             # Find the best candidate by readiness_score (still useful as a ranking metric)
             best = max(schema.teaching_candidates, key=lambda c: c.readiness_score)
 
-            # Check readiness based on score threshold
-            ready, reason = self._is_teaching_ready(best)
-            print(f"[TEACHING_DISCOVERY] Candidate '{best.topic}': ready={ready}, reason={reason}")
-
-            if not ready:
+            # Check if candidate is interesting enough to mention (lower threshold for brief mentions)
+            # We mention candidates earlier than we would transition to teaching
+            MIN_MENTION_SCORE = 0.5  # Lower threshold for brief mentions
+            if best.readiness_score < MIN_MENTION_SCORE:
                 return self._not_ready_recommendation()
 
             # Check source theme for hopeless confusion
             if best.source_theme_id is not None:
                 for theme in schema.conversational_themes:
                     if theme.id == best.source_theme_id and theme.confusion_type == "hopeless":
-                        print(f"[TEACHING_DISCOVERY] Rejected - source theme has hopeless confusion")
+                        print(f"[TEACHING_DISCOVERY] Skipping mention - source theme has hopeless confusion")
                         return self._not_ready_recommendation()
 
-            # Build recommendation
-            pacing = schema.user_profile.pacing_preference.value or "exploratory"
+            # Check if we've already mentioned this candidate (avoid repeating)
+            mentioned_candidates = getattr(schema.interview_state, 'teaching_candidates_mentioned', [])
+            if best.id in mentioned_candidates:
+                return self._not_ready_recommendation()
+
             user_goal = schema.interview_state.user_goal if schema.interview_state else None
 
-            print(f"[TEACHING_DISCOVERY] Ready! Teaching '{best.topic}'")
+            print(f"[TEACHING_DISCOVERY] Found interesting candidate '{best.topic}' (score: {best.readiness_score:.2f}) - generating brief mention")
             
-            # Generate a sophisticated transition message using LLM
-            first_move = self._generate_transition_message(
-                schema=schema,
-                conversation_history=conversation_history,
-                teaching_candidate=best,
-                user_goal=user_goal
-            )
+            # Generate brief suggestion message (non-blocking, conversational)
+            suggestion = f"I noticed {best.topic} might be worth exploring deeper - you can see it in the sidebar if you want to dive in."
 
             return {
-                "ready": True,
+                "ready": False,  # Not ready for transition, just worth mentioning
                 "target_topic_id": best.id,
                 "target_topic": best.topic,
-                "focus_question": first_move,  # Use the generated message
+                "suggestion_message": suggestion,  # Brief mention instead of transition
                 "angle": getattr(best, "angle", None),
-                "difficulty_calibration": f"Calibrated to user's {schema.prior_knowledge_assessment.assessed_level or 'intermediate'} level",
-                "format": "short explanation + check understanding",
-                "pacing": pacing,
-                "first_move": first_move
             }
 
         except Exception as e:
@@ -636,42 +630,23 @@ Write the transition:"""
         
         print(f"[TIMING] Phase 1.5 completed: {time.time() - phase1_5_start:.2f}s")
 
-        # ===== PHASE 2: Teaching candidates (GATED on assessment confidence) =====
-        # Only discover teaching candidates when we've assessed the user's level
-        assessment_confidence = temp_schema.prior_knowledge_assessment.confidence
-        ASSESSMENT_THRESHOLD = 0.5  # Sweet spot: not too conservative, not too aggressive
-        turns_elapsed = current_schema.interview_state.turns_elapsed + 1
-        TURN_LIMIT = 8  # Safety valve: if taking too long, propose anyway
+        # ===== PHASE 2: Teaching candidates (ALWAYS discover, no gates) =====
+        # Continuously discover teaching candidates in background
+        # No assessment confidence gates - candidates appear as they're discovered
+        print(f"[TIMING] Phase 2: teaching candidates (continuous discovery)")
+        phase2_start = time.time()
 
-        # Propose if we have enough confidence OR assessment is taking too long
-        should_assess = (
-            assessment_confidence >= ASSESSMENT_THRESHOLD or
-            (temp_schema.interview_state.goal_identified and turns_elapsed >= TURN_LIMIT)
+        teaching_updates = self._update_teaching_candidates(
+            temp_schema,  # Now has fresh themes!
+            conversation_history,
+            current_schema.interview_state.turns_elapsed + 1
         )
 
-        if should_assess:
-            if turns_elapsed >= TURN_LIMIT and assessment_confidence < ASSESSMENT_THRESHOLD:
-                print(f"[ASSESSMENT] Turn limit reached ({turns_elapsed} >= {TURN_LIMIT}), proposing despite low confidence ({assessment_confidence:.2f})")
-            else:
-                print(f"[TIMING] Phase 2: teaching candidates (assessment confidence {assessment_confidence:.2f} >= {ASSESSMENT_THRESHOLD})")
-            phase2_start = time.time()
-
-            teaching_updates = self._update_teaching_candidates(
-                temp_schema,  # Now has fresh themes!
-                conversation_history,
-                current_schema.interview_state.turns_elapsed + 1
-            )
-
-            # Apply teaching candidate updates
-            if teaching_updates:
-                temp_schema.teaching_candidates = [TeachingCandidate(**t) for t in teaching_updates]
-            
-            print(f"[TIMING] Phase 2 completed: {time.time() - phase2_start:.2f}s")
-        else:
-            print(f"[ASSESSMENT] Skipping Phase 2 - assessment confidence {assessment_confidence:.2f} < {ASSESSMENT_THRESHOLD} and turns {turns_elapsed} < {TURN_LIMIT}")
-            print(f"[ASSESSMENT] Still gathering prior knowledge. Techniques used: {temp_schema.prior_knowledge_assessment.techniques_used}")
-            # Keep existing teaching candidates (don't wipe them)
-            temp_schema.teaching_candidates = current_schema.teaching_candidates
+        # Apply teaching candidate updates
+        if teaching_updates:
+            temp_schema.teaching_candidates = [TeachingCandidate(**t) for t in teaching_updates]
+        
+        print(f"[TIMING] Phase 2 completed: {time.time() - phase2_start:.2f}s")
 
         # Preserve goal_candidates (not updated in Phase 2)
         temp_schema.goal_candidates = current_schema.goal_candidates
@@ -700,27 +675,20 @@ Write the transition:"""
         # Build final schema
         final_schema = temp_schema.model_copy(deep=True)
 
-        # DETERMINISTIC FIX: Force propose_tasks mode when conditions are met
-        # Don't rely on LLM to follow the decision tree - make it deterministic
-        assessment_conf = temp_schema.prior_knowledge_assessment.confidence
-        turns_elapsed = current_schema.interview_state.turns_elapsed + 1
-        has_candidates = len(temp_schema.teaching_candidates) > 0
-        already_proposed = temp_schema.task_curriculum.proposed
-
-        should_propose = (
-            not already_proposed and
-            has_candidates and
-            (assessment_conf >= 0.5 or turns_elapsed >= 8)
-        )
-
-        if should_propose:
-            print(f"[CONTROLLER OVERRIDE] Forcing propose_tasks mode (confidence={assessment_conf:.2f}, turns={turns_elapsed}, candidates={len(temp_schema.teaching_candidates)})")
-            controller_dict["conversation_mode"] = "propose_tasks"
-            controller_dict["next_action"] = "propose_task_curriculum"
-            controller_dict["question_intent"] = "present_learning_path"
-            # CRITICAL: Always request 8-12 tasks, regardless of teaching_candidates count
-            # Teaching candidates are just hints - the full curriculum should cover the complete learning journey
-            controller_dict["focus_instruction"] = f"Based on assessment, propose a complete learning path with 8-12 sequential tasks. Include personalized justifications for each task. End with Accept/Modify options."
+        # Curriculum generation is manual-only via "Generate Learning Path" button.
+        # Teaching candidate discovery continues in the background.
+        # Safety check: ensure propose_tasks is never set automatically
+        if controller_dict.get("conversation_mode") == "propose_tasks":
+            print(f"[RANKER] DEBUG: Controller LLM returned propose_tasks mode")
+            print(f"[RANKER] DEBUG: task_curriculum.proposed = {final_schema.task_curriculum.proposed}")
+            if not final_schema.task_curriculum.proposed:
+                print(f"[RANKER] WARNING: LLM tried to set propose_tasks mode - overriding to general_continuation")
+                print(f"[RANKER] Curriculum generation is manual-only via button")
+                controller_dict["conversation_mode"] = "general_continuation"
+                controller_dict["next_action"] = "continue_exploration"
+                controller_dict["question_intent"] = "general_continuation"
+            else:
+                print(f"[RANKER] INFO: propose_tasks mode is valid (curriculum already proposed via button)")
 
         # INFRASTRUCTURE FIX: Handle invalid conversation_mode gracefully
         try:
@@ -741,6 +709,13 @@ Write the transition:"""
                 # Other validation error - re-raise
                 raise
 
+        # Handle teaching candidate suggestions (brief mentions)
+        if teaching_rec_dict.get("suggestion_message"):
+            # Mark candidate as mentioned to avoid repeating
+            candidate_id = teaching_rec_dict.get("target_topic_id")
+            if candidate_id and candidate_id not in final_schema.interview_state.teaching_candidates_mentioned:
+                final_schema.interview_state.teaching_candidates_mentioned.append(candidate_id)
+        
         final_schema.teaching_recommendation = TeachingRecommendation(**teaching_rec_dict)
 
         # Update interview state

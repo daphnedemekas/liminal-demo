@@ -31,4 +31,4 @@ Everything you learn gets tracked in the learner trajectory panel, so you can se
 Throughout your learning path, you'll encounter interactive exercises and artifacts that help you practice what you're learning. The are both fun to scroll through, productive for your goals, and they help the AI verify that you're actually understanding and remembering things. 
 
 
-Thank you for taking the time to explore Liminal. We're excited to share our vision for adaptive, personalized learning and continue developing a system for truly individualized learning experiences.
+Thank you for taking the time to explore Liminal. We're excited to share our vision for adaptive, personalized learning and continue developing a platform that encourages your cognitive expansion. 

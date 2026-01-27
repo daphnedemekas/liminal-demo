@@ -114,7 +114,63 @@ def format_prompt(components: PromptComponents) -> str:
             f"Goal-specific context.\n\n"
             f"<lf:goal_context>\n{goal_json}\n</lf:goal_context>"
         )
-    
+
+    # Panel context: Context tab items
+    if components.goal_context_items:
+        context_parts = []
+        for item in components.goal_context_items:
+            item_type = item.get("type", "text")
+            content = item.get("content", "")
+            file_name = item.get("file_name")
+            if file_name:
+                context_parts.append(f'<lf:context_item type="{item_type}" file="{file_name}">\n{content}\n</lf:context_item>')
+            else:
+                context_parts.append(f'<lf:context_item type="{item_type}">\n{content}\n</lf:context_item>')
+        parts.append(
+            f"User-provided context materials.\n\n"
+            f"<lf:panel_context>\n{chr(10).join(context_parts)}\n</lf:panel_context>"
+        )
+
+    # Panel context: Active document from Draft tab
+    if components.active_document:
+        doc_title = components.active_document.get("title", "Untitled")
+        doc_type = components.active_document.get("document_type", "notes")
+        doc_content = components.active_document.get("content", "")
+        parts.append(
+            f"User's active document draft.\n\n"
+            f'<lf:document title="{doc_title}" type="{doc_type}">\n{doc_content}\n</lf:document>'
+        )
+
+    # Panel context: Terminal observation
+    if components.terminal_observation and components.terminal_observation.get("has_activity"):
+        terminal = components.terminal_observation
+        cwd = terminal.get("working_directory", "~")
+        commands = terminal.get("commands", [])
+
+        command_parts = []
+        for cmd in commands:
+            cmd_str = cmd.get("command", "")
+            output = cmd.get("output", "")
+            exit_code = cmd.get("exit_code", 0)
+            if exit_code != 0:
+                command_parts.append(f"$ {cmd_str}\n{output}\n[exit code: {exit_code}]")
+            else:
+                command_parts.append(f"$ {cmd_str}\n{output}")
+
+        if command_parts:
+            parts.append(
+                f"Recent terminal activity (cwd: {cwd}).\n\n"
+                f"<lf:terminal>\n{chr(10).join(command_parts)}\n</lf:terminal>"
+            )
+
+    # Channel suggestion context
+    if components.channel_suggestion_context:
+        context_json = json.dumps(components.channel_suggestion_context, indent=2)
+        parts.append(
+            f"Instructions for generating suggestions.\n\n"
+            f"<lf:suggestion_context>\n{context_json}\n</lf:suggestion_context>"
+        )
+
     # Documentation
     if components.docs:
         doc_parts = []
@@ -172,4 +228,7 @@ def format_prompt(components: PromptComponents) -> str:
         parts.append("Images referenced in this context.\n\n" + "\n".join(image_refs))
     
     return "\n\n".join(parts)
+
+
+
 

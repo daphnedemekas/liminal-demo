@@ -170,3 +170,6 @@ def test_trim_empty_components(tmp_path):
     assert len(dropped) == 0
     assert trimmed.repo_root == tmp_path
 
+
+
+

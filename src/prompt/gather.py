@@ -150,6 +150,138 @@ def gather_teaching_context(
     return context
 
 
+def gather_goal_context_items(
+    db,
+    goal_id: int,
+    max_tokens: int = 4000
+) -> List[Dict[str, Any]]:
+    """
+    Gather context items from the Context tab for a goal.
+
+    Args:
+        db: DatabaseManager instance
+        goal_id: ID of the goal
+        max_tokens: Maximum token budget for context items
+
+    Returns:
+        List of context items, prioritized by recency and trimmed to token budget
+    """
+    contexts = db.get_goal_contexts(goal_id, include_inactive=False)
+
+    if not contexts:
+        return []
+
+    # Sort by created_at (most recent first)
+    contexts.sort(key=lambda c: c.get("created_at", ""), reverse=True)
+
+    # Collect items until we hit the token budget
+    result = []
+    total_tokens = 0
+
+    for ctx in contexts:
+        token_count = ctx.get("token_count", 0)
+        if token_count == 0:
+            # Estimate tokens from content
+            content = ctx.get("processed_content") or ctx.get("text_content") or ""
+            token_count = len(content.split()) * 1.3  # Rough estimate
+
+        if total_tokens + token_count > max_tokens:
+            break
+
+        # Format for prompt
+        item = {
+            "id": ctx.get("id"),
+            "type": ctx.get("content_type"),
+            "content": ctx.get("processed_content") or ctx.get("text_content") or "",
+            "file_name": ctx.get("file_name"),
+        }
+        result.append(item)
+        total_tokens += token_count
+
+    return result
+
+
+def gather_document_context(
+    document: Dict[str, Any],
+    max_tokens: int = 2000
+) -> Dict[str, Any]:
+    """
+    Gather context from the active document in Draft tab.
+
+    Args:
+        document: Document dictionary from database
+        max_tokens: Maximum token budget for document content
+
+    Returns:
+        Processed document context for prompt
+    """
+    if not document:
+        return None
+
+    plain_text = document.get("plain_text") or ""
+
+    # Estimate tokens and trim if needed
+    estimated_tokens = len(plain_text.split()) * 1.3
+    if estimated_tokens > max_tokens:
+        # Trim to approximate token count
+        words = plain_text.split()
+        max_words = int(max_tokens / 1.3)
+        plain_text = " ".join(words[:max_words]) + "..."
+
+    return {
+        "id": document.get("id"),
+        "title": document.get("title", "Untitled"),
+        "document_type": document.get("document_type", "notes"),
+        "content": plain_text,
+        "version": document.get("version", 1),
+        "suggestion_config": document.get("suggestion_config", {}),
+    }
+
+
+def gather_terminal_observation(
+    session: Dict[str, Any],
+    max_commands: int = 10
+) -> Dict[str, Any]:
+    """
+    Gather terminal observation context for prompt.
+
+    Args:
+        session: Terminal session dictionary from database
+        max_commands: Maximum number of commands to include
+
+    Returns:
+        Processed terminal observation for prompt
+    """
+    if not session:
+        return None
+
+    observation_buffer = session.get("observation_buffer") or []
+
+    # Take last N commands
+    recent = observation_buffer[-max_commands:] if len(observation_buffer) > max_commands else observation_buffer
+
+    if not recent:
+        return {
+            "has_activity": False,
+            "commands": [],
+            "working_directory": session.get("working_directory", "~"),
+        }
+
+    return {
+        "has_activity": True,
+        "commands": [
+            {
+                "command": cmd.get("command", ""),
+                "output": cmd.get("output", "")[:500],  # Truncate long outputs
+                "exit_code": cmd.get("exit_code", 0),
+                "timestamp": cmd.get("timestamp"),
+            }
+            for cmd in recent
+        ],
+        "working_directory": session.get("working_directory", "~"),
+    }
+
+
 def gather_prompt_components(
     repo_root: Path,
     step: Optional[Tuple[str, str]] = None,
@@ -161,13 +293,18 @@ def gather_prompt_components(
     system_instructions: Optional[str] = None,
     run_mode: Optional[str] = None,
     exclude: Optional[List[str]] = None,
+    # Panel context parameters
+    goal_context_items: Optional[List[Dict[str, Any]]] = None,
+    active_document: Optional[Dict[str, Any]] = None,
+    terminal_observation: Optional[Dict[str, Any]] = None,
+    channel_suggestion_context: Optional[Dict[str, Any]] = None,
 ) -> PromptComponents:
     """
     Gather all prompt components into a PromptComponents object.
-    
+
     This is the main orchestrator function that collects all context pieces
     needed to build a prompt, following LoopFlow's architecture pattern.
-    
+
     Args:
         repo_root: Repository root path (required)
         step: Optional (step_name, step_content) tuple for the task
@@ -179,7 +316,11 @@ def gather_prompt_components(
         system_instructions: Optional system-level instructions
         run_mode: Optional run mode ("auto" or "interactive")
         exclude: Optional list of patterns to exclude from docs
-        
+        goal_context_items: Optional list of context items from Context tab
+        active_document: Optional active document from Draft tab
+        terminal_observation: Optional terminal observation from Terminal tab
+        channel_suggestion_context: Optional channel-specific suggestion context
+
     Returns:
         PromptComponents object with all gathered context
     """
@@ -208,5 +349,10 @@ def gather_prompt_components(
         schema_state=schema_dict,
         user_background=user_background,
         goal_context=goal_context,
+        # Panel context
+        goal_context_items=goal_context_items or [],
+        active_document=active_document,
+        terminal_observation=terminal_observation,
+        channel_suggestion_context=channel_suggestion_context,
     )
 

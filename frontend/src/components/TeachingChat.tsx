@@ -2,10 +2,14 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useAudio } from '../hooks/useAudio'
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition'
 import MessageBubble from './MessageBubble'
+import ResizableSplitPane from './ResizableSplitPane'
 import ProfilePanel from './ProfilePanel'
 import FeedPanel from './FeedPanel'
 import AudioToggle from './AudioToggle'
 import BreathingCircle from './BreathingCircle'
+import ContextTab from './ContextTab'
+import DraftTab from './DraftTab'
+import TerminalTab from './TerminalTab'
 import { stripMarkdown } from '../utils/textUtils'
 import { getApiBaseUrl } from '../config'
 
@@ -26,6 +30,7 @@ interface TeachingChatProps {
   userId: string
   onboardingInfo: string
   modelConfig?: { interviewer?: string; ranker?: string }
+  onBackToGoal?: () => void
 }
 
 interface Message {
@@ -54,10 +59,12 @@ export default function TeachingChat({
   goalText,
   userId,
   onboardingInfo,
-  modelConfig
+  modelConfig,
+  onBackToGoal
 }: TeachingChatProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [inputText, setInputText] = useState('')
+  const [activeTab, setActiveTab] = useState<'context' | 'draft' | 'terminal'>('context')
   const [isLoading, setIsLoading] = useState(false)
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [isConnected, setIsConnected] = useState(false)
@@ -490,134 +497,206 @@ export default function TeachingChat({
       />
 
       <div className="goal-chat-layout">
-        {/* Chat Area - Center */}
-        <div className="goal-chat" style={{ position: 'relative' }}>
-          {/* Voice Mode Overlay - covers the chat panel */}
-          <BreathingCircle 
-            isVisible={isAudioMode} 
-            isAISpeaking={isPlaying}
-            isUserRecording={isListening && !isLoading}
-            isProcessing={isLoading || messages.length === 0}
-            onTap={() => {
-              if (isLoading || messages.length === 0) {
-                // Don't do anything while processing or waiting for opening
-                return
-              }
-              if (isListening) {
-                stopListening()
-                if (transcript && transcript.trim()) {
-                  handleSend(transcript)
-                  resetTranscript()
-                }
-              } else if (!isPlaying) {
-                startListening()
-              }
-            }}
-            onExit={toggleAudioMode}
-            statusText={isListening && !isLoading ? transcript : undefined}
-          />
-
-          {/* Header */}
-          <div className="goal-chat-header">
-            <div className="goal-chat-title">
-              <span className="goal-icon">📚</span>
-              <h2>{stripMarkdown(candidate.topic)}</h2>
-              {isResumed && <span className="resumed-badge">Resumed</span>}
-            </div>
-            <div className="goal-chat-status">
-              <AudioToggle isAudioMode={isAudioMode} onToggle={toggleAudioMode} />
-              
-              {/* Curriculum Progress */}
-              {curriculumProgress && curriculumProgress.total_steps > 0 && (
-                <span className="curriculum-progress">
-                  Step {curriculumProgress.current_step + 1}/{curriculumProgress.total_steps}
-                  {curriculumProgress.completed_steps > 0 && 
-                    ` (${curriculumProgress.completed_steps} done)`}
-                </span>
-              )}
-              
-              <span className="goal-context-badge">Goal: {stripMarkdown(goalText)}</span>
-              
-              {/* Connection status */}
-              <span className={`connection-status ${isConnected ? 'connected' : 'disconnected'}`}>
-                {isConnected ? '●' : '○'}
-              </span>
-            </div>
-          </div>
-
-          {/* Narrative Summary Banner (when available) */}
-          {narrativeSummary && (
-            <div className="narrative-summary-banner">
-              <strong>Progress:</strong> {narrativeSummary}
-            </div>
-          )}
-
-          {/* Messages */}
-          <div className="goal-chat-messages" style={{ position: 'relative' }}>
-            {messages.map((msg, index) => (
-              <div key={msg.id}>
-                <MessageBubble
-                  role={msg.role}
-                  content={msg.content}
+        {/* Left Side: Chat + Tabs */}
+        <div className="goal-chat-main-area">
+          <ResizableSplitPane
+            initialTopHeight={50}
+            minTopHeight={20}
+            maxTopHeight={80}
+            top={
+              /* Chat Area - Top Half */
+              <div className="goal-chat" style={{ position: 'relative' }}>
+                {/* Voice Mode Overlay - covers the chat panel */}
+                <BreathingCircle 
+                  isVisible={isAudioMode} 
+                  isAISpeaking={isPlaying}
+                  isUserRecording={isListening && !isLoading}
+                  isProcessing={isLoading || messages.length === 0}
+                  onTap={() => {
+                    if (isLoading || messages.length === 0) {
+                      // Don't do anything while processing or waiting for opening
+                      return
+                    }
+                    if (isListening) {
+                      stopListening()
+                      if (transcript && transcript.trim()) {
+                        handleSend(transcript)
+                        resetTranscript()
+                      }
+                    } else if (!isPlaying) {
+                      startListening()
+                    }
+                  }}
+                  onExit={toggleAudioMode}
+                  statusText={isListening && !isLoading ? transcript : undefined}
                 />
-                
-                {/* Show curriculum Accept/Modify buttons when curriculum is proposed */}
-                {msg.type === 'curriculum_proposed' && 
-                 index === lastCurriculumProposedIndex && 
-                 hasPendingCurriculum && (
-                  <div className="curriculum-confirmation">
-                    <div className="curriculum-confirmation-buttons">
-                      <button 
-                        className="curriculum-accept-btn"
-                        onClick={handleAcceptCurriculum}
-                        disabled={isLoading || !isConnected}
+
+                {/* Header */}
+                <div className="goal-chat-header">
+                  <div className="goal-chat-title">
+                    {onBackToGoal && (
+                      <button
+                        className="back-to-goal-btn"
+                        onClick={onBackToGoal}
+                        title="Back to goal chat"
+                        style={{
+                          marginRight: '12px',
+                          padding: '6px 12px',
+                          border: '1px solid var(--border-hairline)',
+                          borderRadius: '8px',
+                          background: 'var(--bg-elevated)',
+                          cursor: 'pointer',
+                          fontSize: '13px',
+                          color: 'var(--text-secondary)'
+                        }}
                       >
-                        Accept — Let's learn
+                        ← Back to Goal
                       </button>
-                      <button 
-                        className="curriculum-modify-btn"
-                        onClick={handleModifyCurriculum}
+                    )}
+                    <span className="goal-icon">📚</span>
+                    <h2>{stripMarkdown(candidate.topic)}</h2>
+                    {isResumed && <span className="resumed-badge">Resumed</span>}
+                  </div>
+                  <div className="goal-chat-status">
+                    <AudioToggle isAudioMode={isAudioMode} onToggle={toggleAudioMode} />
+                    
+                    {/* Curriculum Progress */}
+                    {curriculumProgress && curriculumProgress.total_steps > 0 && (
+                      <span className="curriculum-progress">
+                        Step {curriculumProgress.current_step + 1}/{curriculumProgress.total_steps}
+                        {curriculumProgress.completed_steps > 0 && 
+                          ` (${curriculumProgress.completed_steps} done)`}
+                      </span>
+                    )}
+                    
+                    <span className="goal-context-badge">Goal: {stripMarkdown(goalText)}</span>
+                    
+                    {/* Connection status */}
+                    <span className={`connection-status ${isConnected ? 'connected' : 'disconnected'}`}>
+                      {isConnected ? '●' : '○'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Narrative Summary Banner (when available) */}
+                {narrativeSummary && (
+                  <div className="narrative-summary-banner">
+                    <strong>Progress:</strong> {narrativeSummary}
+                  </div>
+                )}
+
+                {/* Messages */}
+                <div className="goal-chat-messages" style={{ position: 'relative' }}>
+                  {messages.map((msg, index) => (
+                    <div key={msg.id}>
+                      <MessageBubble
+                        role={msg.role}
+                        content={msg.content}
+                      />
+                      
+                      {/* Show curriculum Accept/Modify buttons when curriculum is proposed */}
+                      {msg.type === 'curriculum_proposed' && 
+                       index === lastCurriculumProposedIndex && 
+                       hasPendingCurriculum && (
+                        <div className="curriculum-confirmation">
+                          <div className="curriculum-confirmation-buttons">
+                            <button 
+                              className="curriculum-accept-btn"
+                              onClick={handleAcceptCurriculum}
+                              disabled={isLoading || !isConnected}
+                            >
+                              Accept — Let's learn
+                            </button>
+                            <button 
+                              className="curriculum-modify-btn"
+                              onClick={handleModifyCurriculum}
+                              disabled={isLoading || !isConnected}
+                            >
+                              Modify
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {(isLoading || status) && (
+                    <div className="status-indicator">
+                      <div className="status-spinner"></div>
+                      <span>{status || 'Thinking...'}</span>
+                    </div>
+                  )}
+                  <div ref={messagesEndRef} />
+                </div>
+
+                {/* Input - hidden in voice mode since overlay handles it */}
+                {!isAudioMode && (
+                  <div className="goal-chat-input">
+                    <div className="text-input-container">
+                      <input
+                        type="text"
+                        className="text-input"
+                        value={inputText}
+                        onChange={(e) => setInputText(e.target.value)}
+                        onKeyPress={handleKeyPress}
+                        placeholder="Ask a question or share what you're thinking..."
                         disabled={isLoading || !isConnected}
+                      />
+                      <button
+                        className="send-button"
+                        onClick={() => handleSend()}
+                        disabled={!inputText.trim() || isLoading || !isConnected}
                       >
-                        Modify
+                        Send
                       </button>
                     </div>
                   </div>
                 )}
               </div>
-            ))}
-            {(isLoading || status) && (
-              <div className="status-indicator">
-                <div className="status-spinner"></div>
-                <span>{status || 'Thinking...'}</span>
-              </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
+            }
+            bottom={
+              /* Tabs Area - Bottom Half */
+              <div className="goal-tabs-area">
+        {/* Tab Navigation */}
+        <div className="goal-tabs-nav">
+          <button
+            className={`goal-tab-btn ${activeTab === 'context' ? 'active' : ''}`}
+            onClick={() => setActiveTab('context')}
+          >
+            Context
+          </button>
+          <button
+            className={`goal-tab-btn ${activeTab === 'draft' ? 'active' : ''}`}
+            onClick={() => setActiveTab('draft')}
+          >
+            Documents
+          </button>
+          <button
+            className={`goal-tab-btn ${activeTab === 'terminal' ? 'active' : ''}`}
+            onClick={() => setActiveTab('terminal')}
+          >
+            Terminal
+          </button>
+        </div>
 
-          {/* Input - hidden in voice mode since overlay handles it */}
-          {!isAudioMode && (
-            <div className="goal-chat-input">
-              <div className="text-input-container">
-                <input
-                  type="text"
-                  className="text-input"
-                  value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  placeholder="Ask a question or share what you're thinking..."
-                  disabled={isLoading || !isConnected}
-                />
-                <button
-                  className="send-button"
-                  onClick={() => handleSend()}
-                  disabled={!inputText.trim() || isLoading || !isConnected}
-                >
-                  Send
-                </button>
-              </div>
-            </div>
+        {/* Tab Content */}
+        <div className="goal-tab-content">
+          {activeTab === 'context' && (
+            <ContextTab goalId={goalId} userId={userId} />
           )}
+          {activeTab === 'draft' && (
+            <DraftTab 
+              goalId={goalId} 
+              userId={userId}
+              onSendToChat={handleSend}
+            />
+          )}
+          {activeTab === 'terminal' && (
+            <TerminalTab goalId={goalId} userId={userId} />
+          )}
+        </div>
+      </div>
+            }
+          />
         </div>
 
         {/* Profile Panel - Right side (for teaching state) */}

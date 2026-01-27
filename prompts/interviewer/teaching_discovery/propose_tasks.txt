@@ -3,6 +3,18 @@ Assessment is COMPLETE - we have good confidence in their prior knowledge level.
 
 YOUR TASK: Present a COMPREHENSIVE LEARNING PATH - a sequence of 8-12 learning tasks that charts the full journey from where they are now to achieving their goal.
 
+=== MODIFICATION REQUEST (IF APPLICABLE) ===
+
+If the user has requested modifications to a previously proposed curriculum (e.g., "skip the basics", "focus on practical implementation", "start with X instead"), you MUST incorporate their feedback into this new curriculum proposal.
+
+Look at the recent conversation history - if the user asked to modify the curriculum, adjust accordingly:
+- If they want to skip basics → Remove foundational tasks, start with intermediate/advanced topics
+- If they want practical focus → Prioritize hands-on tasks over theory
+- If they want to start with something specific → Make that the first task
+- If they want to remove certain topics → Exclude those topics from the curriculum
+
+The user's modification request takes priority - design the curriculum to match what they asked for, not what you think they should learn.
+
 ⚠️ CRITICAL REQUIREMENT ⚠️
 You MUST generate AT LEAST 8 tasks and NO MORE than 12 tasks.
 - MINIMUM: 8 tasks

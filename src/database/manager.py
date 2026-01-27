@@ -15,6 +15,11 @@ from .models import (
     FeedItem,
     LearnerTrajectory,
     TrajectoryCheckpoint,
+    GoalContext,
+    GoalDocument,
+    TerminalSession,
+    ChatChannel,
+    ChannelMessage,
 )
 
 
@@ -836,6 +841,53 @@ class DatabaseManager:
         finally:
             session.close()
 
+    def get_teaching_candidates_for_goal(self, goal_id: int) -> List[Dict[str, Any]]:
+        """
+        Get all teaching candidates (sessions) for a given goal.
+        
+        Args:
+            goal_id: ID of the learning goal
+            
+        Returns:
+            List of teaching candidate dictionaries with id, topic, status, etc.
+        """
+        session = self._get_session()
+        try:
+            # Query all teaching sessions for this goal
+            teaching_sessions = session.query(ConversationSession).filter_by(
+                goal_id=goal_id,
+                session_type='teaching'
+            ).order_by(ConversationSession.started_at.asc()).all()
+            
+            candidates = []
+            for conv_session in teaching_sessions:
+                # Extract teaching candidate info from schema_state or session data
+                schema_state = conv_session.schema_state
+                if schema_state and isinstance(schema_state, dict):
+                    # Try to get teaching candidate info from schema
+                    teaching_candidate = schema_state.get("teaching_candidate", {})
+                    if teaching_candidate:
+                        candidates.append({
+                            "id": conv_session.teaching_candidate_id,
+                            "topic": teaching_candidate.get("topic", "Unknown topic"),
+                            "identified_gap": teaching_candidate.get("identified_gap", ""),
+                            "focus_question": teaching_candidate.get("focus_question", ""),
+                            "status": "completed" if conv_session.ended_at else "in_progress"
+                        })
+                else:
+                    # Fallback: create minimal candidate info from session
+                    candidates.append({
+                        "id": conv_session.teaching_candidate_id,
+                        "topic": f"Topic {conv_session.teaching_candidate_id}",
+                        "identified_gap": "",
+                        "focus_question": "",
+                        "status": "completed" if conv_session.ended_at else "in_progress"
+                    })
+            
+            return candidates
+        finally:
+            session.close()
+
     def get_goal_by_id(self, goal_id: int) -> Optional[Dict[str, Any]]:
         """Get a specific goal by ID."""
         session = self._get_session()
@@ -1057,7 +1109,7 @@ class DatabaseManager:
                     "source_citation": item.source_citation,
                     "source_url": item.source_url,
                     "relevance_note": item.relevance_note,
-                    "display_order": item.display_order,
+                    # Note: display_order is used for query ordering but not returned in response
                 }
                 for item in items
             ]
@@ -1096,12 +1148,777 @@ class DatabaseManager:
                 user_id=user_id,
                 context_type=context_type
             )
-            
+
             if context_type == 'goal' and goal_id:
                 query = query.filter_by(goal_id=goal_id)
             elif context_type == 'teaching_candidate' and teaching_candidate_id:
                 query = query.filter_by(teaching_candidate_id=teaching_candidate_id)
-            
+
             return query.first() is not None
         finally:
             session.close()
+
+    # ============================================
+    # Goal Context Methods (Context Tab)
+    # ============================================
+
+    def create_goal_context(self, goal_id: int, user_id: str, content_type: str = 'text',
+                           text_content: str = None, file_path: str = None,
+                           file_name: str = None, file_mime_type: str = None,
+                           processed_content: str = None, token_count: int = 0) -> Dict[str, Any]:
+        """Create a new context item for a goal."""
+        session = self._get_session()
+        try:
+            context = GoalContext(
+                goal_id=goal_id,
+                user_id=user_id,
+                content_type=content_type,
+                text_content=text_content,
+                file_path=file_path,
+                file_name=file_name,
+                file_mime_type=file_mime_type,
+                processed_content=processed_content,
+                token_count=token_count,
+                is_active=True
+            )
+            session.add(context)
+            session.commit()
+            session.refresh(context)
+            return {
+                "id": context.id,
+                "goal_id": context.goal_id,
+                "user_id": context.user_id,
+                "content_type": context.content_type,
+                "text_content": context.text_content,
+                "file_path": context.file_path,
+                "file_name": context.file_name,
+                "file_mime_type": context.file_mime_type,
+                "processed_content": context.processed_content,
+                "token_count": context.token_count,
+                "is_active": context.is_active,
+                "created_at": context.created_at.isoformat() if context.created_at else None,
+                "updated_at": context.updated_at.isoformat() if context.updated_at else None,
+            }
+        finally:
+            session.close()
+
+    def get_goal_contexts(self, goal_id: int, include_inactive: bool = False) -> List[Dict[str, Any]]:
+        """Get all context items for a goal."""
+        session = self._get_session()
+        try:
+            query = session.query(GoalContext).filter_by(goal_id=goal_id)
+            if not include_inactive:
+                query = query.filter_by(is_active=True)
+            contexts = query.order_by(GoalContext.created_at.desc()).all()
+            return [
+                {
+                    "id": c.id,
+                    "goal_id": c.goal_id,
+                    "user_id": c.user_id,
+                    "content_type": c.content_type,
+                    "text_content": c.text_content,
+                    "file_path": c.file_path,
+                    "file_name": c.file_name,
+                    "file_mime_type": c.file_mime_type,
+                    "processed_content": c.processed_content,
+                    "token_count": c.token_count,
+                    "is_active": c.is_active,
+                    "created_at": c.created_at.isoformat() if c.created_at else None,
+                    "updated_at": c.updated_at.isoformat() if c.updated_at else None,
+                }
+                for c in contexts
+            ]
+        finally:
+            session.close()
+
+    def update_goal_context(self, context_id: int, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Update a goal context item."""
+        session = self._get_session()
+        try:
+            context = session.query(GoalContext).filter_by(id=context_id).first()
+            if not context:
+                return None
+            for field, value in updates.items():
+                if hasattr(context, field):
+                    setattr(context, field, value)
+            session.commit()
+            session.refresh(context)
+            return {
+                "id": context.id,
+                "goal_id": context.goal_id,
+                "user_id": context.user_id,
+                "content_type": context.content_type,
+                "text_content": context.text_content,
+                "file_path": context.file_path,
+                "file_name": context.file_name,
+                "file_mime_type": context.file_mime_type,
+                "processed_content": context.processed_content,
+                "token_count": context.token_count,
+                "is_active": context.is_active,
+                "created_at": context.created_at.isoformat() if context.created_at else None,
+                "updated_at": context.updated_at.isoformat() if context.updated_at else None,
+            }
+        finally:
+            session.close()
+
+    def delete_goal_context(self, context_id: int, soft_delete: bool = True) -> bool:
+        """Delete or soft-delete a goal context item."""
+        session = self._get_session()
+        try:
+            context = session.query(GoalContext).filter_by(id=context_id).first()
+            if not context:
+                return False
+            if soft_delete:
+                context.is_active = False
+            else:
+                session.delete(context)
+            session.commit()
+            return True
+        finally:
+            session.close()
+
+    # ============================================
+    # Goal Document Methods (Draft Tab)
+    # ============================================
+
+    def create_goal_document(self, goal_id: int, user_id: str, title: str = 'Untitled',
+                            document_type: str = 'notes', content: dict = None,
+                            plain_text: str = None, suggestion_config: dict = None) -> Dict[str, Any]:
+        """Create a new document for a goal."""
+        session = self._get_session()
+        try:
+            document = GoalDocument(
+                goal_id=goal_id,
+                user_id=user_id,
+                title=title,
+                document_type=document_type,
+                content=content or {},
+                plain_text=plain_text or '',
+                suggestion_config=suggestion_config or {"formatting": True, "content": True, "tasks": False},
+                token_count=0,
+                version=1,
+                is_active=True
+            )
+            session.add(document)
+            session.commit()
+            session.refresh(document)
+            return {
+                "id": document.id,
+                "goal_id": document.goal_id,
+                "user_id": document.user_id,
+                "title": document.title,
+                "document_type": document.document_type,
+                "content": document.content,
+                "plain_text": document.plain_text,
+                "suggestion_config": document.suggestion_config,
+                "token_count": document.token_count,
+                "version": document.version,
+                "is_active": document.is_active,
+                "created_at": document.created_at.isoformat() if document.created_at else None,
+                "updated_at": document.updated_at.isoformat() if document.updated_at else None,
+            }
+        finally:
+            session.close()
+
+    def get_goal_documents(self, goal_id: int, include_inactive: bool = False) -> List[Dict[str, Any]]:
+        """Get all documents for a goal."""
+        session = self._get_session()
+        try:
+            query = session.query(GoalDocument).filter_by(goal_id=goal_id)
+            if not include_inactive:
+                query = query.filter_by(is_active=True)
+            documents = query.order_by(GoalDocument.updated_at.desc()).all()
+            return [
+                {
+                    "id": d.id,
+                    "goal_id": d.goal_id,
+                    "user_id": d.user_id,
+                    "title": d.title,
+                    "document_type": d.document_type,
+                    "content": d.content,
+                    "plain_text": d.plain_text,
+                    "suggestion_config": d.suggestion_config,
+                    "token_count": d.token_count,
+                    "version": d.version,
+                    "is_active": d.is_active,
+                    "created_at": d.created_at.isoformat() if d.created_at else None,
+                    "updated_at": d.updated_at.isoformat() if d.updated_at else None,
+                }
+                for d in documents
+            ]
+        finally:
+            session.close()
+
+    def get_document_by_id(self, document_id: int) -> Optional[Dict[str, Any]]:
+        """Get a specific document by ID."""
+        session = self._get_session()
+        try:
+            document = session.query(GoalDocument).filter_by(id=document_id).first()
+            if not document:
+                return None
+            return {
+                "id": document.id,
+                "goal_id": document.goal_id,
+                "user_id": document.user_id,
+                "title": document.title,
+                "document_type": document.document_type,
+                "content": document.content,
+                "plain_text": document.plain_text,
+                "suggestion_config": document.suggestion_config,
+                "token_count": document.token_count,
+                "version": document.version,
+                "is_active": document.is_active,
+                "created_at": document.created_at.isoformat() if document.created_at else None,
+                "updated_at": document.updated_at.isoformat() if document.updated_at else None,
+            }
+        finally:
+            session.close()
+
+    def update_document(self, document_id: int, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Update a document. Increments version only if content actually changes."""
+        session = self._get_session()
+        try:
+            document = session.query(GoalDocument).filter_by(id=document_id).first()
+            if not document:
+                return None
+            # Track if content actually changed (compare old vs new values)
+            content_changed = False
+            for field, value in updates.items():
+                if hasattr(document, field):
+                    # Check if content fields actually changed
+                    if field in ('content', 'plain_text'):
+                        old_value = getattr(document, field)
+                        # Normalize values for comparison (handle None, empty strings, whitespace)
+                        old_normalized = (old_value or "").strip() if isinstance(old_value, str) else (old_value or "")
+                        new_normalized = (value or "").strip() if isinstance(value, str) else (value or "")
+                        # Only mark as changed if values are actually different after normalization
+                        if old_normalized != new_normalized:
+                            content_changed = True
+                    setattr(document, field, value)
+            if content_changed:
+                document.version += 1
+            session.commit()
+            session.refresh(document)
+            return {
+                "id": document.id,
+                "goal_id": document.goal_id,
+                "user_id": document.user_id,
+                "title": document.title,
+                "document_type": document.document_type,
+                "content": document.content,
+                "plain_text": document.plain_text,
+                "suggestion_config": document.suggestion_config,
+                "token_count": document.token_count,
+                "version": document.version,
+                "is_active": document.is_active,
+                "created_at": document.created_at.isoformat() if document.created_at else None,
+                "updated_at": document.updated_at.isoformat() if document.updated_at else None,
+            }
+        finally:
+            session.close()
+
+    def update_document_suggestion_config(self, document_id: int, config: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Update only the suggestion config for a document."""
+        return self.update_document(document_id, {"suggestion_config": config})
+
+    def delete_document(self, document_id: int, soft_delete: bool = True) -> bool:
+        """Delete or soft-delete a document."""
+        session = self._get_session()
+        try:
+            document = session.query(GoalDocument).filter_by(id=document_id).first()
+            if not document:
+                return False
+            if soft_delete:
+                document.is_active = False
+            else:
+                session.delete(document)
+            session.commit()
+            return True
+        finally:
+            session.close()
+
+    # ============================================
+    # Terminal Session Methods (Terminal Tab)
+    # ============================================
+
+    def create_terminal_session(self, session_id: str, goal_id: int, user_id: str,
+                                working_directory: str = '~',
+                                environment_vars: dict = None) -> Dict[str, Any]:
+        """Create a new terminal session for a goal."""
+        session = self._get_session()
+        try:
+            terminal = TerminalSession(
+                session_id=session_id,
+                goal_id=goal_id,
+                user_id=user_id,
+                working_directory=working_directory,
+                environment_vars=environment_vars or {},
+                command_history=[],
+                observation_buffer=[],
+                is_active=True
+            )
+            session.add(terminal)
+            session.commit()
+            session.refresh(terminal)
+            return {
+                "id": terminal.id,
+                "session_id": terminal.session_id,
+                "goal_id": terminal.goal_id,
+                "user_id": terminal.user_id,
+                "working_directory": terminal.working_directory,
+                "environment_vars": terminal.environment_vars,
+                "command_history": terminal.command_history,
+                "observation_buffer": terminal.observation_buffer,
+                "is_active": terminal.is_active,
+                "created_at": terminal.created_at.isoformat() if terminal.created_at else None,
+                "ended_at": terminal.ended_at.isoformat() if terminal.ended_at else None,
+            }
+        finally:
+            session.close()
+
+    def get_terminal_session(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """Get a terminal session by session_id."""
+        session = self._get_session()
+        try:
+            terminal = session.query(TerminalSession).filter_by(session_id=session_id).first()
+            if not terminal:
+                return None
+            return {
+                "id": terminal.id,
+                "session_id": terminal.session_id,
+                "goal_id": terminal.goal_id,
+                "user_id": terminal.user_id,
+                "working_directory": terminal.working_directory,
+                "environment_vars": terminal.environment_vars,
+                "command_history": terminal.command_history,
+                "observation_buffer": terminal.observation_buffer,
+                "is_active": terminal.is_active,
+                "created_at": terminal.created_at.isoformat() if terminal.created_at else None,
+                "ended_at": terminal.ended_at.isoformat() if terminal.ended_at else None,
+            }
+        finally:
+            session.close()
+
+    def get_active_terminal_for_goal(self, goal_id: int) -> Optional[Dict[str, Any]]:
+        """Get the active terminal session for a goal."""
+        session = self._get_session()
+        try:
+            terminal = session.query(TerminalSession).filter_by(
+                goal_id=goal_id,
+                is_active=True
+            ).order_by(TerminalSession.created_at.desc()).first()
+            if not terminal:
+                return None
+            return {
+                "id": terminal.id,
+                "session_id": terminal.session_id,
+                "goal_id": terminal.goal_id,
+                "user_id": terminal.user_id,
+                "working_directory": terminal.working_directory,
+                "environment_vars": terminal.environment_vars,
+                "command_history": terminal.command_history,
+                "observation_buffer": terminal.observation_buffer,
+                "is_active": terminal.is_active,
+                "created_at": terminal.created_at.isoformat() if terminal.created_at else None,
+                "ended_at": terminal.ended_at.isoformat() if terminal.ended_at else None,
+            }
+        finally:
+            session.close()
+
+    def update_terminal_session(self, session_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Update a terminal session."""
+        session = self._get_session()
+        try:
+            terminal = session.query(TerminalSession).filter_by(session_id=session_id).first()
+            if not terminal:
+                return None
+            for field, value in updates.items():
+                if hasattr(terminal, field):
+                    setattr(terminal, field, value)
+            session.commit()
+            session.refresh(terminal)
+            return {
+                "id": terminal.id,
+                "session_id": terminal.session_id,
+                "goal_id": terminal.goal_id,
+                "user_id": terminal.user_id,
+                "working_directory": terminal.working_directory,
+                "environment_vars": terminal.environment_vars,
+                "command_history": terminal.command_history,
+                "observation_buffer": terminal.observation_buffer,
+                "is_active": terminal.is_active,
+                "created_at": terminal.created_at.isoformat() if terminal.created_at else None,
+                "ended_at": terminal.ended_at.isoformat() if terminal.ended_at else None,
+            }
+        finally:
+            session.close()
+
+    def append_terminal_command(self, session_id: str, command: str, output: str,
+                               exit_code: int = 0) -> Optional[Dict[str, Any]]:
+        """Append a command to terminal history and update observation buffer."""
+        from datetime import datetime
+        session = self._get_session()
+        try:
+            terminal = session.query(TerminalSession).filter_by(session_id=session_id).first()
+            if not terminal:
+                return None
+
+            # Create command entry
+            command_entry = {
+                "command": command,
+                "output": output,
+                "exit_code": exit_code,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+
+            # Append to history
+            history = terminal.command_history or []
+            history.append(command_entry)
+            terminal.command_history = history
+
+            # Update observation buffer (keep last 10 commands)
+            buffer = terminal.observation_buffer or []
+            buffer.append(command_entry)
+            if len(buffer) > 10:
+                buffer = buffer[-10:]
+            terminal.observation_buffer = buffer
+
+            session.commit()
+            session.refresh(terminal)
+            return {
+                "id": terminal.id,
+                "session_id": terminal.session_id,
+                "command_history": terminal.command_history,
+                "observation_buffer": terminal.observation_buffer,
+            }
+        finally:
+            session.close()
+
+    def get_terminal_history(self, session_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+        """Get command history for a terminal session."""
+        session = self._get_session()
+        try:
+            terminal = session.query(TerminalSession).filter_by(session_id=session_id).first()
+            if not terminal:
+                return []
+            history = terminal.command_history or []
+            return history[-limit:] if limit else history
+        finally:
+            session.close()
+
+    def end_terminal_session(self, session_id: str) -> bool:
+        """End a terminal session."""
+        from datetime import datetime
+        session = self._get_session()
+        try:
+            terminal = session.query(TerminalSession).filter_by(session_id=session_id).first()
+            if not terminal:
+                return False
+            terminal.is_active = False
+            terminal.ended_at = datetime.utcnow()
+            session.commit()
+            return True
+        finally:
+            session.close()
+
+    # ============================================
+    # Chat Channel Methods (Tabbed Chat)
+    # ============================================
+
+    def create_chat_channel(self, goal_id: int, user_id: str, channel_type: str = 'main',
+                           name: str = 'Main Chat', suggestion_context: dict = None,
+                           source_binding: str = None) -> Dict[str, Any]:
+        """Create a new chat channel for a goal."""
+        session = self._get_session()
+        try:
+            channel = ChatChannel(
+                goal_id=goal_id,
+                user_id=user_id,
+                channel_type=channel_type,
+                name=name,
+                suggestion_context=suggestion_context or {},
+                source_binding=source_binding,
+                is_active=True
+            )
+            session.add(channel)
+            session.commit()
+            session.refresh(channel)
+            return {
+                "id": channel.id,
+                "goal_id": channel.goal_id,
+                "user_id": channel.user_id,
+                "channel_type": channel.channel_type,
+                "name": channel.name,
+                "suggestion_context": channel.suggestion_context,
+                "source_binding": channel.source_binding,
+                "is_active": channel.is_active,
+                "created_at": channel.created_at.isoformat() if channel.created_at else None,
+            }
+        finally:
+            session.close()
+
+    def get_goal_channels(self, goal_id: int, include_inactive: bool = False) -> List[Dict[str, Any]]:
+        """Get all chat channels for a goal."""
+        session = self._get_session()
+        try:
+            query = session.query(ChatChannel).filter_by(goal_id=goal_id)
+            if not include_inactive:
+                query = query.filter_by(is_active=True)
+            channels = query.order_by(ChatChannel.created_at.asc()).all()
+            return [
+                {
+                    "id": c.id,
+                    "goal_id": c.goal_id,
+                    "user_id": c.user_id,
+                    "channel_type": c.channel_type,
+                    "name": c.name,
+                    "suggestion_context": c.suggestion_context,
+                    "source_binding": c.source_binding,
+                    "is_active": c.is_active,
+                    "created_at": c.created_at.isoformat() if c.created_at else None,
+                }
+                for c in channels
+            ]
+        finally:
+            session.close()
+
+    def get_channel_by_id(self, channel_id: int) -> Optional[Dict[str, Any]]:
+        """Get a specific chat channel by ID."""
+        session = self._get_session()
+        try:
+            channel = session.query(ChatChannel).filter_by(id=channel_id).first()
+            if not channel:
+                return None
+            return {
+                "id": channel.id,
+                "goal_id": channel.goal_id,
+                "user_id": channel.user_id,
+                "channel_type": channel.channel_type,
+                "name": channel.name,
+                "suggestion_context": channel.suggestion_context,
+                "source_binding": channel.source_binding,
+                "is_active": channel.is_active,
+                "created_at": channel.created_at.isoformat() if channel.created_at else None,
+            }
+        finally:
+            session.close()
+
+    def update_channel_suggestion_context(self, channel_id: int, suggestion_context: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Update the suggestion context for a chat channel."""
+        session = self._get_session()
+        try:
+            channel = session.query(ChatChannel).filter_by(id=channel_id).first()
+            if not channel:
+                return None
+            channel.suggestion_context = suggestion_context
+            session.commit()
+            session.refresh(channel)
+            return {
+                "id": channel.id,
+                "goal_id": channel.goal_id,
+                "user_id": channel.user_id,
+                "channel_type": channel.channel_type,
+                "name": channel.name,
+                "suggestion_context": channel.suggestion_context,
+                "source_binding": channel.source_binding,
+                "is_active": channel.is_active,
+                "created_at": channel.created_at.isoformat() if channel.created_at else None,
+            }
+        finally:
+            session.close()
+
+    def get_channels_by_source_binding(self, goal_id: int, source_binding: str) -> List[Dict[str, Any]]:
+        """Get all channels bound to a specific source (terminal, document, both)."""
+        session = self._get_session()
+        try:
+            channels = session.query(ChatChannel).filter_by(
+                goal_id=goal_id,
+                source_binding=source_binding,
+                is_active=True
+            ).all()
+            return [
+                {
+                    "id": c.id,
+                    "goal_id": c.goal_id,
+                    "user_id": c.user_id,
+                    "channel_type": c.channel_type,
+                    "name": c.name,
+                    "suggestion_context": c.suggestion_context,
+                    "source_binding": c.source_binding,
+                    "is_active": c.is_active,
+                    "created_at": c.created_at.isoformat() if c.created_at else None,
+                }
+                for c in channels
+            ]
+        finally:
+            session.close()
+
+    def delete_channel(self, channel_id: int, soft_delete: bool = True) -> bool:
+        """Delete or soft-delete a chat channel."""
+        session = self._get_session()
+        try:
+            channel = session.query(ChatChannel).filter_by(id=channel_id).first()
+            if not channel:
+                return False
+            if soft_delete:
+                channel.is_active = False
+            else:
+                session.delete(channel)
+            session.commit()
+            return True
+        finally:
+            session.close()
+
+    # ============================================
+    # Channel Message Methods
+    # ============================================
+
+    def create_channel_message(self, channel_id: int, role: str, content: str,
+                              message_type: str = 'chat', source: str = None,
+                              metadata: dict = None) -> Dict[str, Any]:
+        """Create a new message in a chat channel."""
+        session = self._get_session()
+        try:
+            message = ChannelMessage(
+                channel_id=channel_id,
+                role=role,
+                content=content,
+                message_type=message_type,
+                source=source,
+                message_metadata=metadata or {}
+            )
+            session.add(message)
+            session.commit()
+            session.refresh(message)
+            return {
+                "id": message.id,
+                "channel_id": message.channel_id,
+                "role": message.role,
+                "content": message.content,
+                "message_type": message.message_type,
+                "source": message.source,
+                "metadata": message.message_metadata,
+                "created_at": message.created_at.isoformat() if message.created_at else None,
+            }
+        finally:
+            session.close()
+
+    def get_channel_messages(self, channel_id: int, limit: int = 100,
+                            offset: int = 0) -> List[Dict[str, Any]]:
+        """Get messages for a chat channel with pagination."""
+        session = self._get_session()
+        try:
+            query = session.query(ChannelMessage).filter_by(channel_id=channel_id)
+            query = query.order_by(ChannelMessage.created_at.asc())
+            if offset:
+                query = query.offset(offset)
+            if limit:
+                query = query.limit(limit)
+            messages = query.all()
+            return [
+                {
+                    "id": m.id,
+                    "channel_id": m.channel_id,
+                    "role": m.role,
+                    "content": m.content,
+                    "message_type": m.message_type,
+                    "source": m.source,
+                    "metadata": m.message_metadata,
+                    "created_at": m.created_at.isoformat() if m.created_at else None,
+                }
+                for m in messages
+            ]
+        finally:
+            session.close()
+
+    def get_recent_channel_messages(self, channel_id: int, limit: int = 20) -> List[Dict[str, Any]]:
+        """Get most recent messages for a channel (for context building)."""
+        session = self._get_session()
+        try:
+            messages = session.query(ChannelMessage).filter_by(channel_id=channel_id).order_by(
+                ChannelMessage.created_at.desc()
+            ).limit(limit).all()
+            # Reverse to get chronological order
+            messages = list(reversed(messages))
+            return [
+                {
+                    "id": m.id,
+                    "channel_id": m.channel_id,
+                    "role": m.role,
+                    "content": m.content,
+                    "message_type": m.message_type,
+                    "source": m.source,
+                    "metadata": m.message_metadata,
+                    "created_at": m.created_at.isoformat() if m.created_at else None,
+                }
+                for m in messages
+            ]
+        finally:
+            session.close()
+
+    def get_messages_by_type(self, channel_id: int, message_type: str,
+                            limit: int = 50) -> List[Dict[str, Any]]:
+        """Get messages of a specific type (suggestions, observations, etc.)."""
+        session = self._get_session()
+        try:
+            messages = session.query(ChannelMessage).filter_by(
+                channel_id=channel_id,
+                message_type=message_type
+            ).order_by(ChannelMessage.created_at.desc()).limit(limit).all()
+            return [
+                {
+                    "id": m.id,
+                    "channel_id": m.channel_id,
+                    "role": m.role,
+                    "content": m.content,
+                    "message_type": m.message_type,
+                    "source": m.source,
+                    "metadata": m.message_metadata,
+                    "created_at": m.created_at.isoformat() if m.created_at else None,
+                }
+                for m in messages
+            ]
+        finally:
+            session.close()
+
+    # ============================================
+    # Goal Panel Initialization Helpers
+    # ============================================
+
+    def initialize_goal_panels(self, goal_id: int, user_id: str) -> Dict[str, Any]:
+        """Initialize default chat channels for a new goal's panel system."""
+        # Create default main channel
+        main_channel = self.create_chat_channel(
+            goal_id=goal_id,
+            user_id=user_id,
+            channel_type='main',
+            name='Main Chat',
+            suggestion_context={},
+            source_binding=None
+        )
+
+        # Create sandbox suggestions channel (bound to terminal)
+        sandbox_channel = self.create_chat_channel(
+            goal_id=goal_id,
+            user_id=user_id,
+            channel_type='sandbox',
+            name='Sandbox Suggestions',
+            suggestion_context={"instructions": "Provide helpful suggestions based on terminal activity"},
+            source_binding='terminal'
+        )
+
+        # Create draft feedback channel (bound to document)
+        draft_channel = self.create_chat_channel(
+            goal_id=goal_id,
+            user_id=user_id,
+            channel_type='draft',
+            name='Draft Feedback',
+            suggestion_context={"instructions": "Provide feedback on document drafts"},
+            source_binding='document'
+        )
+
+        return {
+            "main_channel": main_channel,
+            "sandbox_channel": sandbox_channel,
+            "draft_channel": draft_channel
+        }

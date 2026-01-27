@@ -4,10 +4,14 @@ import { useAudio } from '../hooks/useAudio'
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition'
 import { api } from '../services/api'
 import MessageBubble from './MessageBubble'
+import ResizableSplitPane from './ResizableSplitPane'
 import ProfilePanel from './ProfilePanel'
 import FeedPanel from './FeedPanel'
 import AudioToggle from './AudioToggle'
 import BreathingCircle from './BreathingCircle'
+import ContextTab from './ContextTab'
+import DraftTab from './DraftTab'
+import TerminalTab from './TerminalTab'
 import { ModelConfig } from './ModelSelector'
 import { stripMarkdown } from '../utils/textUtils'
 
@@ -44,6 +48,8 @@ export default function GoalChat({
   const [initialized, setInitialized] = useState(false)
   const [isResumed, setIsResumed] = useState(false)
   const [profileSummary, setProfileSummary] = useState<string | undefined>(undefined)
+  const [activeTab, setActiveTab] = useState<'context' | 'draft' | 'terminal'>('context')
+  const [isGeneratingPath, setIsGeneratingPath] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const initRef = useRef(false)
 
@@ -71,6 +77,19 @@ export default function GoalChat({
     sendMessage(messageText, isAudioMode)
     setInputText('')
   }, [inputText, isConnected, sendMessage, isAudioMode])
+
+  // Handle manual learning path generation
+  const handleGenerateLearningPath = useCallback(() => {
+    if (!isConnected || isGeneratingPath) return
+    
+    setIsGeneratingPath(true)
+    sendCommand('__GENERATE_LEARNING_PATH__')
+    
+    // Reset loading state after a delay (will also reset when response comes)
+    setTimeout(() => {
+      setIsGeneratingPath(false)
+    }, 5000)
+  }, [isConnected, isGeneratingPath, sendCommand])
 
   // Initialize or resume goal-specific session
   useEffect(() => {
@@ -186,11 +205,21 @@ export default function GoalChat({
     }
   }, [messages, onTeachingCandidateAccepted])
 
+  // Check for task_curriculum_proposed or error - reset loading state
+  useEffect(() => {
+    const lastMessage = messages[messages.length - 1]
+    if (lastMessage?.type === 'task_curriculum_proposed' || 
+        (lastMessage?.role === 'assistant' && lastMessage?.content?.startsWith('⚠️'))) {
+      setIsGeneratingPath(false)
+    }
+  }, [messages])
+
   // Check for task_curriculum_accepted - notify parent to add all tasks
   useEffect(() => {
     const lastMessage = messages[messages.length - 1]
     if (lastMessage?.type === 'task_curriculum_accepted' && lastMessage.tasks) {
       console.log('[GoalChat] Curriculum accepted with tasks:', lastMessage.tasks)
+      setIsGeneratingPath(false)
       const conversationHistory = messages
         .filter(m => m.role === 'user' || m.role === 'assistant')
         .map(m => ({ role: m.role, content: m.content }))
@@ -384,8 +413,15 @@ export default function GoalChat({
       )}
 
       <div className="goal-chat-layout">
-        {/* Chat Area */}
-        <div className="goal-chat" style={{ position: 'relative' }}>
+        {/* Left Side: Chat + Tabs */}
+        <div className="goal-chat-main-area">
+          <ResizableSplitPane
+            initialTopHeight={50}
+            minTopHeight={20}
+            maxTopHeight={80}
+            top={
+              /* Chat Area - Top Half */
+              <div className="goal-chat" style={{ position: 'relative' }}>
           {/* Voice Mode Overlay - covers the chat panel */}
           <BreathingCircle 
             isVisible={isAudioMode} 
@@ -417,19 +453,29 @@ export default function GoalChat({
             <span className="goal-icon"></span>
             <h2>{goal}</h2>
           </div>
-          <div className="goal-chat-status">
-            <AudioToggle isAudioMode={isAudioMode} onToggle={toggleAudioMode} />
-            {isResumed && <span className="resumed-badge">Resumed</span>}
-            {status ? (
-              <span className="status-indicator-small">
-                <span className="status-dot"></span>
-                {status}
-              </span>
-            ) : isConnected ? (
-              <span className="connected-indicator">Connected</span>
-            ) : (
-              <span className="connecting-indicator">Connecting...</span>
-            )}
+          <div className="goal-chat-header-actions">
+            <button
+              className="generate-path-btn"
+              onClick={handleGenerateLearningPath}
+              disabled={!isConnected || isGeneratingPath}
+              title="Generate a structured learning path based on current conversation"
+            >
+              {isGeneratingPath ? 'Generating...' : 'Generate Learning Path'}
+            </button>
+            <div className="goal-chat-status">
+              <AudioToggle isAudioMode={isAudioMode} onToggle={toggleAudioMode} />
+              {isResumed && <span className="resumed-badge">Resumed</span>}
+              {status ? (
+                <span className="status-indicator-small">
+                  <span className="status-dot"></span>
+                  {status}
+                </span>
+              ) : isConnected ? (
+                <span className="connected-indicator">Connected</span>
+              ) : (
+                <span className="connecting-indicator">Connecting...</span>
+              )}
+            </div>
           </div>
         </div>
 
@@ -437,13 +483,16 @@ export default function GoalChat({
         <div className="goal-chat-messages" style={{ position: 'relative' }}>
           {messages.map((msg, index) => (
             <div key={msg.id}>
-              <MessageBubble
-                role={msg.role}
-                content={msg.content}
-                audioUrl={msg.audio_url}
-                isAudioMode={isAudioMode}
-                onAudioPlay={() => msg.audio_url && playAudio(msg.audio_url)}
-              />
+              {/* Don't show MessageBubble for curriculum proposals - the UI component shows everything */}
+              {msg.type !== 'task_curriculum_proposed' && (
+                <MessageBubble
+                  role={msg.role}
+                  content={msg.content}
+                  audioUrl={msg.audio_url}
+                  isAudioMode={isAudioMode}
+                  onAudioPlay={() => msg.audio_url && playAudio(msg.audio_url)}
+                />
+              )}
               {/* Show teaching candidate confirmation buttons (legacy single-candidate) */}
               {msg.type === 'teaching_proposed' && 
                msg.teachingCandidate && 
@@ -476,11 +525,30 @@ export default function GoalChat({
                 </div>
               )}
 
-              {/* Show task curriculum Accept/Modify buttons (new batch proposal) */}
+              {/* Show task curriculum with tasks list and Accept/Modify buttons (new batch proposal) */}
               {msg.type === 'task_curriculum_proposed' && 
                index === lastCurriculumProposedIndex && 
                hasPendingCurriculum && (
                 <div className="curriculum-confirmation">
+                  {/* Display curriculum tasks if available */}
+                  {msg.curriculum && msg.curriculum.tasks && msg.curriculum.tasks.length > 0 && (
+                    <div className="curriculum-tasks-preview">
+                      <h4>Learning Path ({msg.curriculum.tasks.length} tasks)</h4>
+                      <ol className="curriculum-tasks-list">
+                        {msg.curriculum.tasks.map((task: any, idx: number) => (
+                          <li key={task.id || idx} className={`curriculum-task-item ${task.status || (idx === 0 ? 'available' : 'locked')}`}>
+                            <strong>{task.topic || `Task ${idx + 1}`}</strong>
+                            {task.justification && (
+                              <p className="task-justification">{task.justification}</p>
+                            )}
+                            {task.status && (
+                              <span className={`task-status ${task.status}`}>{task.status}</span>
+                            )}
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+                  )}
                   <div className="curriculum-confirmation-buttons">
                     <button 
                       className="curriculum-accept-btn"
@@ -535,14 +603,73 @@ export default function GoalChat({
             </div>
           </div>
         )}
-      </div>
+              </div>
+            }
+            bottom={
+              /* Tabs Area - Bottom Half */
+              <div className="goal-tabs-area">
+                {/* Tab Navigation */}
+                <div className="goal-tabs-nav">
+                  <button
+                    className={`goal-tab-btn ${activeTab === 'context' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('context')}
+                  >
+                    Context
+                  </button>
+                  <button
+                    className={`goal-tab-btn ${activeTab === 'draft' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('draft')}
+                  >
+                    Documents
+                  </button>
+                  <button
+                    className={`goal-tab-btn ${activeTab === 'terminal' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('terminal')}
+                  >
+                    Terminal
+                  </button>
+                </div>
 
-        {/* Profile Panel */}
+                {/* Tab Content */}
+                <div className="goal-tab-content">
+                  {activeTab === 'context' && (
+                    <ContextTab goalId={goalId} userId={userId} />
+                  )}
+                  {activeTab === 'draft' && (
+                    <DraftTab 
+                      goalId={goalId} 
+                      userId={userId}
+                      onSendToChat={handleSend}
+                    />
+                  )}
+                  {activeTab === 'terminal' && (
+                    <TerminalTab goalId={goalId} userId={userId} />
+                  )}
+                </div>
+              </div>
+            }
+          />
+        </div>
+
+        {/* Profile Panel - Right Side */}
         {shouldShowSidePanels && (
           <ProfilePanel 
             sessionId={actualSessionId} 
             isConnected={isConnected} 
             initialSummary={profileSummary}
+            onTeachingCandidateClick={(candidate) => {
+              // Convert to TeachingCandidate format and call handler
+              onTeachingCandidateAccepted({
+                id: candidate.id,
+                topic: candidate.topic,
+                focus_question: candidate.focus_question || '',
+                identified_gap: candidate.identified_gap || '',
+                readiness_score: candidate.readiness_score ?? 0.5,
+                goalConversationHistory: messages
+                  .filter(m => m.role === 'user' || m.role === 'assistant')
+                  .map(m => ({ role: m.role, content: m.content }))
+              } as TeachingCandidate)
+            }}
           />
         )}
       </div>

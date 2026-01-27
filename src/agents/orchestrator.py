@@ -35,7 +35,8 @@ class DiscoveryOrchestrator:
         user_goal: Optional[str] = None,
         session_id: Optional[str] = None,  # If provided, resume existing session
         conversation_history: Optional[list] = None,  # Pre-loaded conversation history
-        schema_state: Optional[dict] = None  # Pre-loaded schema state for resuming
+        schema_state: Optional[dict] = None,  # Pre-loaded schema state for resuming
+        exploration_history: Optional[list] = None  # Exploration conversation history for goal sessions
     ):
         """
         Initialize discovery orchestrator.
@@ -82,7 +83,12 @@ class DiscoveryOrchestrator:
 
         # Load or create user profile from database
         db_user = self.db.get_or_create_user(self.user_id)
-        
+
+        # Store user's existing background info (from onboarding/exploration)
+        self.user_background = db_user.onboarding_info if db_user.onboarding_info else None
+        if self.user_background:
+            print(f"[Orchestrator] Found existing user background ({len(self.user_background)} chars)")
+
         # Only create new session entry if this is a new session
         if not session_id:
             self.db.create_session(self.session_id, self.user_id)
@@ -116,15 +122,42 @@ class DiscoveryOrchestrator:
         self.conversation_history = conversation_history or []
         if conversation_history:
             print(f"[Orchestrator] Restored {len(conversation_history)} messages from history")
+        
+        # Store exploration history for goal sessions (context from exploration chat)
+        self.exploration_history = exploration_history or []
+        if exploration_history:
+            print(f"[Orchestrator] Loaded {len(exploration_history)} messages from exploration chat for context")
 
     def start(self) -> str:
         """
-        Start conversation - returns empty string since we go straight to contextual response.
+        Start conversation.
+
+        For goal sessions with existing user background, returns goal-directed opening.
+        For new users or exploration, returns empty (waits for user to provide background).
 
         Returns:
-            Empty string (the real opening comes after user sends background)
+            Opening message or empty string
         """
-        # No opening message - we wait for user background and then generate contextual response
+        # For goal sessions with existing user background, generate opening directly
+        if self.user_goal and self.user_background and len(self.conversation_history) == 0:
+            print(f"[Orchestrator] Goal session with existing user - generating opening directly")
+            # Check if we have exploration conversation history (from when goal was created)
+            exploration_context = getattr(self, 'exploration_history', None)
+            if exploration_context:
+                print(f"[Orchestrator] Using {len(exploration_context)} messages from exploration chat as context")
+            opening_question = self.interviewer.generate_goal_directed_opening(
+                user_background=self.user_background,
+                goal=self.user_goal,
+                exploration_context=exploration_context
+            )
+            self.conversation_history.append({
+                "role": "assistant",
+                "content": opening_question
+            })
+            self.db.save_conversation_history(self.session_id, self.conversation_history)
+            return opening_question
+
+        # For new users or exploration, wait for user to provide background
         return ""
 
     def process_user_message(self, user_message: str, skip_history: bool = False) -> str:
@@ -140,9 +173,11 @@ class DiscoveryOrchestrator:
         """
         # Check if this is the first user message (onboarding background)
         is_first_message = len([m for m in self.conversation_history if m["role"] == "user"]) == 0
-        
-        # If this is the first message, prepend the standard opening prompt
+
+        # If this is the first message and no conversation started yet, add onboarding question
+        # (Goal sessions with existing background already have an opening from start())
         if is_first_message and len(self.conversation_history) == 0:
+            # New user or exploration session - ask for background
             opening_prompt = "Before we begin exploring, tell me a bit about yourself - what do you do, what are you interested in, and what's been on your mind lately?"
             self.conversation_history.append({
                 "role": "assistant",
@@ -163,15 +198,21 @@ class DiscoveryOrchestrator:
 
         # For first message: Generate response FIRST, then run ranker (faster UX)
         # The opening question doesn't need ranker output - it only uses user_background
-        if is_first_message:
+        # BUT: If start() already generated an opening (goal session with background), don't generate another one
+        has_existing_opening = len([m for m in self.conversation_history if m["role"] == "assistant"]) > 0
+        
+        if is_first_message and not has_existing_opening:
             # Check if user has a goal (from schema init, not ranker)
             user_goal = self.user_goal  # Use stored goal from __init__
 
             if user_goal:
                 print(f"[Interviewer] Generating goal-directed opening question (goal: {user_goal})...")
+                # Check if we have exploration conversation history
+                exploration_context = getattr(self, 'exploration_history', None)
                 opening_question = self.interviewer.generate_goal_directed_opening(
                     user_background=user_message,
-                    goal=user_goal
+                    goal=user_goal,
+                    exploration_context=exploration_context
                 )
             else:
                 print("[Interviewer] Generating contextual opening question based on user background...")
@@ -199,6 +240,19 @@ class DiscoveryOrchestrator:
             self.db.save_session_state(self.session_id, self.schema.model_dump())
 
             return opening_question
+        elif is_first_message and has_existing_opening and skip_history:
+            # Opening already exists from start() and this is onboarding (skip_history=True)
+            # Just update the schema with onboarding info, don't generate a response
+            print("[Orchestrator] Opening already exists, processing onboarding silently (updating schema only)...")
+            ranker = self._get_ranker()
+            self.schema = ranker.update_schema(
+                self.schema,
+                self.conversation_history,
+                user_message
+            )
+            self.db.save_session_state(self.session_id, self.schema.model_dump())
+            # Return empty string - no response needed, opening already shown
+            return ""
 
         # Delegate to phase-specific handler
         if self.schema.interview_state.goal_identified:
@@ -254,14 +308,29 @@ class DiscoveryOrchestrator:
         # which sends the __ACCEPT_CURRICULUM__ command directly to the backend.
         # We don't detect text-based acceptance here to avoid false positives.
 
-        # Run ranker first (needed for controller guidance)
-        ranker = self._get_ranker()
-        print(f"[Ranker] Analyzing conversation using {ranker.__class__.__name__}...")
-        self.schema = ranker.update_schema(
-            self.schema,
-            self.conversation_history,
-            user_message
+        # Check if this is a curriculum modification request
+        # If curriculum is proposed but not accepted, and controller is in negotiate mode,
+        # we can skip the full ranker pipeline and go straight to curriculum regeneration
+        is_curriculum_modification = (
+            self.schema.task_curriculum.proposed and 
+            not self.schema.task_curriculum.accepted and
+            self.schema.controller.conversation_mode == "negotiate_curriculum" and
+            self.schema.controller.next_action == "propose_task_curriculum"
         )
+        
+        if is_curriculum_modification:
+            print("[Orchestrator] Curriculum modification detected - skipping ranker for faster response")
+            # Still need to update controller state, but can skip full ranker pipeline
+            # The interviewer will handle the curriculum regeneration
+        else:
+            # Run ranker first (needed for controller guidance)
+            ranker = self._get_ranker()
+            print(f"[Ranker] Analyzing conversation using {ranker.__class__.__name__}...")
+            self.schema = ranker.update_schema(
+                self.schema,
+                self.conversation_history,
+                user_message
+            )
 
         # Debug output for controller state
         self._log_controller_state()
@@ -270,11 +339,8 @@ class DiscoveryOrchestrator:
         self._save_schema_and_profile()
 
         # Check if ready for teaching
-        # BUT: If controller wants to propose curriculum, skip transition and let interviewer propose first
-        controller_wants_curriculum = (
-            self.schema.controller and 
-            self.schema.controller.conversation_mode == "propose_tasks"
-        )
+        # Skip transition if controller wants to propose curriculum (manual button click)
+        controller_wants_curriculum = self._controller_wants_curriculum()
         
         if self.schema.teaching_recommendation.ready and not controller_wants_curriculum:
             # Only send transition if we haven't already
@@ -286,6 +352,14 @@ class DiscoveryOrchestrator:
                 transition_msg = self._create_transition_message()
                 self.schema.interview_state.transition_message_sent = True
                 return transition_msg
+
+        # Check if there's a teaching candidate suggestion to mention
+        teaching_suggestion = None
+        if self.schema.teaching_recommendation and self.schema.teaching_recommendation.suggestion_message:
+            teaching_suggestion = self.schema.teaching_recommendation.suggestion_message
+            candidate_id = self.schema.teaching_recommendation.target_topic_id
+            candidate_topic = self.schema.teaching_recommendation.target_topic
+            print(f"[Orchestrator] Found teaching candidate suggestion: {candidate_topic} (ID: {candidate_id})")
 
         # Generate interviewer response
         print("[Interviewer] Generating response...")
@@ -299,14 +373,10 @@ class DiscoveryOrchestrator:
         if isinstance(interviewer_response, dict) and interviewer_response.get("type") == "curriculum_proposal":
             return self._handle_curriculum_proposal(interviewer_response)
 
-        # Check controller state
-        controller_wants_curriculum = (
-            self.schema.controller and 
-            self.schema.controller.conversation_mode == "propose_tasks"
-        )
+        # Check if controller wants curriculum (only happens via manual button click)
+        controller_wants_curriculum = self._controller_wants_curriculum()
         
         # If controller wants curriculum, interviewer MUST return structured response
-        # If it didn't, that's a bug - log error but don't add fallback
         if controller_wants_curriculum and not isinstance(interviewer_response, dict):
             print("[Orchestrator] ERROR: Controller wants curriculum but interviewer returned string instead of structured response")
             print("[Orchestrator] This should never happen - interviewer should always return dict in propose_tasks mode")
@@ -327,7 +397,24 @@ class DiscoveryOrchestrator:
         else:
             next_question = interviewer_response
 
+        # Append teaching candidate suggestion if present
+        if teaching_suggestion:
+            print(f"[Orchestrator] Appending teaching candidate suggestion to response")
+            # Append suggestion to the response
+            next_question = f"{next_question}\n\n{teaching_suggestion}"
+            # Clear suggestion so it's not repeated
+            self.schema.teaching_recommendation.suggestion_message = None
+            # Save updated schema
+            self.db.save_session_state(self.session_id, self.schema.model_dump())
+
         return self._finalize_response(next_question)
+
+    def _controller_wants_curriculum(self) -> bool:
+        """Check if controller wants to propose curriculum (manual button click)."""
+        return (
+            self.schema.controller and 
+            self.schema.controller.conversation_mode == "propose_tasks"
+        )
 
     def _log_controller_state(self):
         """Log controller state for debugging."""
@@ -547,9 +634,12 @@ class DiscoveryOrchestrator:
 
             if user_goal:
                 print(f"[Interviewer] Generating goal-directed opening question (goal: {user_goal})...")
+                # Check if we have exploration conversation history
+                exploration_context = getattr(self, 'exploration_history', None)
                 opening_question = self.interviewer.generate_goal_directed_opening(
                     user_background=user_message,
-                    goal=user_goal
+                    goal=user_goal,
+                    exploration_context=exploration_context
                 )
             else:
                 print("[Interviewer] Generating contextual opening question based on user background...")
@@ -848,22 +938,21 @@ class DiscoveryOrchestrator:
             "content": "[Rejected goal - keep exploring]"
         })
         
-        # Generate a real response to the user's last message using the interviewer
-        print("[Interviewer] Generating response after goal rejection...")
-        next_question = self.interviewer.generate_next_question(
+        # Run ranker first to update schema and controller (needed for proper response generation)
+        print("[Ranker] Running ranker after goal rejection...")
+        ranker = self._get_ranker()
+        self.schema = ranker.update_schema(
             self.schema,
-            self.conversation_history
+            self.conversation_history,
+            "[Rejected goal - keep exploring]"
         )
         
-        # Add to history
-        self.conversation_history.append({
-            "role": "assistant",
-            "content": next_question
-        })
+        # Save schema state
+        self._save_schema_and_profile()
         
-        # Save updated state AND conversation history
-        self.db.save_session_state(self.session_id, self.schema.model_dump())
-        self.db.save_conversation_history(self.session_id, self.conversation_history)
+        # Generate a real response to the user's last message using the interviewer
+        print("[Interviewer] Generating response after goal rejection...")
+        next_question = self._generate_and_save_response("[Rejected goal - keep exploring]")
         
         return next_question
 
@@ -1037,6 +1126,92 @@ class DiscoveryOrchestrator:
                 for task in tasks
             ]
         }
+
+    def generate_learning_path(self) -> dict:
+        """
+        Manually trigger learning path (curriculum) generation.
+        This is called on-demand when user clicks "Generate Learning Path" button.
+        
+        Returns:
+            Dictionary with success status and message
+        """
+        # Check if goal is identified
+        if not self.schema.interview_state.goal_identified:
+            return {
+                "success": False,
+                "message": "Goal must be identified before generating a learning path."
+            }
+        
+        # Check if we have teaching candidates
+        if not self.schema.teaching_candidates or len(self.schema.teaching_candidates) == 0:
+            return {
+                "success": False,
+                "message": "Need teaching candidates before generating a learning path. Continue the conversation to discover topics."
+            }
+        
+        # Check if curriculum was already proposed
+        if self.schema.task_curriculum.proposed:
+            return {
+                "success": False,
+                "message": "Learning path has already been proposed. Accept or modify the existing proposal."
+            }
+        
+        # Trigger curriculum generation by setting controller to propose_tasks mode
+        print(f"[Orchestrator] ===== MANUAL LEARNING PATH GENERATION =====")
+        print(f"[Orchestrator] Goal: '{self.schema.interview_state.user_goal}'")
+        print(f"[Orchestrator] Teaching candidates: {len(self.schema.teaching_candidates)}")
+        
+        # Update controller to trigger curriculum proposal
+        self.schema.controller.conversation_mode = "propose_tasks"
+        self.schema.controller.next_action = "propose_task_curriculum"
+        self.schema.controller.question_intent = "present_learning_path"
+        self.schema.controller.focus_instruction = (
+            "Based on assessment, propose a complete learning path with 8-12 sequential tasks. "
+            "Include personalized justifications for each task. End with Accept/Modify options."
+        )
+        
+        # Save updated state
+        self.db.save_session_state(self.session_id, self.schema.model_dump())
+        
+        # Generate the curriculum proposal directly
+        # The interviewer will see propose_tasks mode and generate the curriculum
+        curriculum_response = self.interviewer.generate_response(
+            "",  # Empty message to trigger curriculum generation
+            self.schema,
+            self.conversation_history
+        )
+        
+        # Check if we got a curriculum proposal dict
+        if isinstance(curriculum_response, dict) and curriculum_response.get("type") == "curriculum_proposal":
+            # Handle the curriculum proposal - this sets task_curriculum.proposed = True
+            # Note: _handle_curriculum_proposal returns a marker string, but we want the actual text
+            self._handle_curriculum_proposal(curriculum_response)
+            
+            # Extract the clean text message from the curriculum response
+            curriculum_text = curriculum_response.get("text", "")
+            if not curriculum_text:
+                # Fallback: generate a nice message from the tasks
+                tasks = curriculum_response.get("tasks", [])
+                goal = self.schema.interview_state.user_goal or "your learning goal"
+                curriculum_text = f"Based on your goal '{goal}' and what I've learned about your background, here's a complete learning path I've designed for you:\n\n" + "\n".join([f"{t.get('id', i+1)}. {t.get('topic', 'Task')}\n   Why for you: {t.get('justification', '')}" for i, t in enumerate(tasks)]) + "\n\nThis is my best guess at the complete journey. We can adjust this as we go based on what works for you."
+            
+            return {
+                "success": True,
+                "message": curriculum_text,
+                "curriculum": curriculum_response
+            }
+        else:
+            # Fallback: if we got a string, treat it as regular response
+            self.conversation_history.append({
+                "role": "assistant",
+                "content": str(curriculum_response)
+            })
+            self.db.save_conversation_history(self.session_id, self.conversation_history)
+            
+            return {
+                "success": True,
+                "message": str(curriculum_response)
+            }
 
     def _create_transition_message(self) -> str:
         """

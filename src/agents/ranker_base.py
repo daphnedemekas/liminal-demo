@@ -32,8 +32,10 @@ def _build_escalation_response(
     Build an escalation controller response based on conversation state.
 
     Uses unified thresholds:
-    - High confidence (>=0.5) OR many turns (>=7): propose full curriculum
-    - Otherwise: offer grounded recommendation
+    - High confidence (>=0.5) OR many turns (>=7): offer concrete recommendation
+    - Otherwise: continue exploration
+
+    Note: Curriculum proposal is manual-only via button, not automatic.
 
     Args:
         assessment_confidence: Current confidence in user's knowledge assessment
@@ -48,22 +50,25 @@ def _build_escalation_response(
     TURNS_THRESHOLD = 7
 
     if assessment_confidence >= CONFIDENCE_THRESHOLD or turns_elapsed >= TURNS_THRESHOLD:
-        return {
-            "next_action": "propose_task_curriculum",
-            "question_intent": "present_learning_path",
-            "conversation_mode": "propose_tasks",
-            "target_ambiguity": None,
-            "focus_instruction": f"[Escalated: {reason}] We have enough assessment data. Propose a concrete learning path with 8-12 tasks based on what we've learned.",
-            "branch_condition": "deflection",
-            "fallback_questions": []
-        }
-    else:
+        # Don't automatically propose curriculum - that's manual via button
+        # Instead, make a concrete recommendation or continue exploration
         return {
             "next_action": "provide_scaffolding",
             "question_intent": "reduce_cost",
             "conversation_mode": "grounded_offer",
             "target_ambiguity": None,
-            "focus_instruction": f"[Escalated: {reason}] Offer a concrete starting point with a specific recommendation. Don't ask them to choose - make a recommendation and explain why.",
+            "focus_instruction": f"[Escalated: {reason}] Offer a concrete starting point or recommendation within the goal. Stay at goal level - don't propose detailed curriculum.",
+            "branch_condition": "deflection",
+            "fallback_questions": []
+        }
+    else:
+        # Lower confidence/turns - continue exploration
+        return {
+            "next_action": "continue_exploration",
+            "question_intent": "deepen_understanding",
+            "conversation_mode": "direct_probe",
+            "target_ambiguity": None,
+            "focus_instruction": f"[Escalated: {reason}] Continue exploring to understand their position better.",
             "branch_condition": "deflection",
             "fallback_questions": []
         }
@@ -150,6 +155,7 @@ class RankerAgentBase(ABC):
             "target_topic_id": None,
             "target_topic": None,
             "focus_question": None,
+            "suggestion_message": None,  # No suggestion to mention
             "angle": None,
             "difficulty_calibration": None,
             "format": None,
@@ -766,10 +772,19 @@ Respond with ONLY the category name, nothing else."""
                 "user_message": user_message or ""
             }
 
+            # Select the appropriate controller prompt based on curriculum state
+            # If curriculum is proposed, use negotiation prompt; otherwise use normal prompt
+            controller_task = "generate_controller"
+            if schema.task_curriculum and schema.task_curriculum.proposed:
+                controller_task = "generate_controller_negotiation"
+                print(f"[CONTROLLER] Using negotiation prompt (curriculum proposed)")
+            else:
+                print(f"[CONTROLLER] Using normal prompt (no curriculum proposed)")
+            
             # Use assemble_prompt to build prompt with context
             # Note: schema is already included via schema_state parameter
             formatted_prompt, dropped = assemble_prompt(
-                step_name="generate_controller",
+                step_name=controller_task,
                 prompt_loader=self.prompt_loader,
                 repo_root=self.repo_root,
                 schema_state=schema,
@@ -822,21 +837,35 @@ Respond with ONLY the category name, nothing else."""
             assessment_confidence = getattr(schema.prior_knowledge_assessment, 'confidence', 0.0) if hasattr(schema, 'prior_knowledge_assessment') else 0.0
             turns_elapsed = schema.interview_state.turns_elapsed if schema.interview_state else 0
 
-            # 1. Intent variety check - escalate if same intent used 2+ times
+            # 1. Intent variety check - force different intent if same used 2+ times
             if proposed_intent and recent_intents:
                 intent_count = recent_intents.count(proposed_intent)
                 if intent_count >= 2:
-                    print(f"[CONTROLLER] WARNING: Intent '{proposed_intent}' used {intent_count}+ times, forcing escalation")
-                    escalation = _build_escalation_response(
-                        assessment_confidence,
-                        turns_elapsed,
-                        reason=f"repeated intent '{proposed_intent}' ({intent_count}+ times)"
-                    )
-                    response.update(escalation)
+                    print(f"[CONTROLLER] WARNING: Intent '{proposed_intent}' used {intent_count}+ times, forcing different approach")
+                    # Instead of escalation, force a different conversation mode
+                    # Prefer information sharing over more questions
+                    if response.get("conversation_mode") in ["explore_deeper", "direct_probe", "topic_probe"]:
+                        response["conversation_mode"] = "provide_perspective"
+                        response["next_action"] = "provide_perspective"
+                        response["question_intent"] = "share_information"
+                        response["focus_instruction"] = "Share information or perspectives instead of asking another question. Reference context if relevant."
+                    else:
+                        # Already in a different mode, just change intent
+                        response["question_intent"] = "general_continuation"
+                        response["focus_instruction"] = "Continue conversation with different approach - avoid repeating previous questions."
 
             # Ensure branch_condition is always included in response (LLM might omit it)
             if not response.get("branch_condition") or response.get("branch_condition") is None:
                 response["branch_condition"] = branch_condition or "unclear"
+
+            # Ensure propose_tasks is never set automatically (only via manual button)
+            # The prompt should prevent this, but add a safety check
+            if response.get("conversation_mode") == "propose_tasks" and not schema.task_curriculum.proposed:
+                print(f"[CONTROLLER] WARNING: LLM tried to set propose_tasks mode - overriding to general_continuation")
+                print(f"[CONTROLLER] Curriculum generation is manual-only via button")
+                response["conversation_mode"] = "general_continuation"
+                response["next_action"] = "continue_exploration"
+                response["question_intent"] = "general_continuation"
 
             return response
 

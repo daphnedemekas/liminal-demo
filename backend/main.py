@@ -12,7 +12,7 @@ else:
     # In Railway/production, just load from environment
     load_dotenv(override=False)
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -153,6 +153,13 @@ async def create_goal(request: CreateGoalRequest):
     """Create a new goal for user."""
     try:
         goal = db.create_goal(request.user_id, request.goal_text)
+        # Initialize default panels (channels) for the new goal
+        try:
+            db.initialize_goal_panels(goal.id, request.user_id)
+            print(f"[CreateGoal] Initialized panels for goal {goal.id}")
+        except Exception as panel_err:
+            print(f"[CreateGoal] Warning: Failed to initialize panels: {panel_err}")
+            # Don't fail goal creation if panel init fails
         return CreateGoalResponse(
             id=goal.id,
             goal_text=goal.goal_text
@@ -789,10 +796,22 @@ async def get_or_generate_feed(request: FeedRequest):
                 goal_id=request.goal_id,
                 teaching_candidate_id=request.teaching_candidate_id
             )
-            return FeedResponse(
-                items=[FeedItemResponse(**item) for item in saved_items],
-                generated=True
-            )
+            print(f"[Feed] Retrieved {len(saved_items)} saved items from database")
+            try:
+                response_items = [FeedItemResponse(**item) for item in saved_items]
+                return FeedResponse(
+                    items=response_items,
+                    generated=True
+                )
+            except Exception as e:
+                print(f"[Feed] Error creating FeedItemResponse from saved items: {e}")
+                import traceback
+                traceback.print_exc()
+                # Fall back to returning generated items directly
+                return FeedResponse(
+                    items=[FeedItemResponse(id=i, **item) for i, item in enumerate(items)],
+                    generated=True
+                )
         else:
             # Return generated items directly (without IDs)
             return FeedResponse(
@@ -859,6 +878,12 @@ async def start_teaching(request: TeachingStartRequest):
     Initialize or resume a teaching session with curriculum-based learning.
     """
     try:
+        # Fetch existing teaching candidates for this goal (for sequential awareness)
+        existing_candidates = db.get_teaching_candidates_for_goal(request.goal_id)
+        # Exclude the current teaching candidate from the list
+        existing_candidates = [c for c in existing_candidates if c.get("id") != request.teaching_candidate_id]
+        print(f"[Teaching] Found {len(existing_candidates)} existing teaching candidates for goal {request.goal_id}")
+        
         # Check if existing session for this goal + teaching candidate
         existing = db.get_session_for_teaching(request.goal_id, request.teaching_candidate_id)
         
@@ -890,6 +915,7 @@ async def start_teaching(request: TeachingStartRequest):
                 goal_text=request.goal_text,
                 user_background=request.user_background,
                 goal_conversation_history=request.goal_conversation_history,
+                existing_teaching_candidates=existing_candidates,
                 db_path=db_path,
                 model_config=request.llm_config,
                 session_id=session_id,
@@ -928,6 +954,7 @@ async def start_teaching(request: TeachingStartRequest):
             goal_text=request.goal_text,
             user_background=request.user_background,
             goal_conversation_history=request.goal_conversation_history,
+            existing_teaching_candidates=existing_candidates,
             db_path=db_path,
             model_config=request.llm_config
         )
@@ -1098,42 +1125,77 @@ async def teaching_websocket(websocket: WebSocket, session_id: str):
                         session_info = db.get_session_by_id(session_id)
                         if session_info and session_info.get("goal_id"):
                             goal_id = session_info["goal_id"]
-                            teaching_candidate_id = schema.get("teaching_candidate_id")
+                            # Get teaching_candidate_id from session_info (not schema)
+                            teaching_candidate_id = session_info.get("teaching_candidate_id")
                             
-                            # Get current teaching candidates from goal
-                            goal = db.get_goal_by_id(goal_id)
-                            if goal and goal.get("teaching_candidate"):
-                                teaching_candidates = goal["teaching_candidate"]
-                                
-                                # Ensure it's a list
-                                if not isinstance(teaching_candidates, list):
-                                    teaching_candidates = [teaching_candidates] if teaching_candidates else []
-                                
-                                # Find and mark current candidate as completed
-                                found_current = False
-                                next_available_idx = None
-                                
-                                for idx, tc in enumerate(teaching_candidates):
-                                    # Compare IDs (handle both int and string types)
-                                    tc_id = tc.get("id") if isinstance(tc, dict) else None
-                                    if tc_id is not None and int(tc_id) == int(teaching_candidate_id):
-                                        tc["status"] = "completed"
-                                        found_current = True
-                                        # Next candidate should be unlocked
-                                        if idx + 1 < len(teaching_candidates):
-                                            next_available_idx = idx + 1
-                                        break
-                                
-                                # Unlock the next candidate
-                                if next_available_idx is not None:
-                                    next_tc = teaching_candidates[next_available_idx]
-                                    if isinstance(next_tc, dict):
-                                        next_tc["status"] = "available"
-                                        print(f"[Teaching] Unlocked next teaching candidate: {next_tc.get('topic', 'unknown')}")
-                                
-                                # Save updated teaching candidates back to goal
-                                db.set_goal_teaching_candidates(goal_id, teaching_candidates)
-                                print(f"[Teaching] Marked teaching candidate {teaching_candidate_id} as completed for goal {goal_id}")
+                            # Validate that we have the required information
+                            if not teaching_candidate_id:
+                                print(f"[Teaching] WARNING: No teaching_candidate_id found in session_info for session {session_id}")
+                                # Try to get from schema as fallback
+                                teaching_candidate_id = schema.get("teaching_candidate_id")
+                                if teaching_candidate_id:
+                                    print(f"[Teaching] Using teaching_candidate_id from schema as fallback: {teaching_candidate_id}")
+                                else:
+                                    print(f"[Teaching] ERROR: Cannot update task status - no teaching_candidate_id available")
+                                    # Continue without updating task status
+                            
+                            if teaching_candidate_id:
+                                # Get current teaching candidates from goal
+                                goal = db.get_goal_by_id(goal_id)
+                                if goal and goal.get("teaching_candidate"):
+                                    teaching_candidates = goal["teaching_candidate"]
+                                    
+                                    # Ensure it's a list
+                                    if not isinstance(teaching_candidates, list):
+                                        teaching_candidates = [teaching_candidates] if teaching_candidates else []
+                                    
+                                    print(f"[Teaching] Found {len(teaching_candidates)} teaching candidates for goal {goal_id}")
+                                    print(f"[Teaching] Looking for teaching_candidate_id: {teaching_candidate_id}")
+                                    
+                                    # Find and mark current candidate as completed
+                                    found_current = False
+                                    next_available_idx = None
+                                    
+                                    for idx, tc in enumerate(teaching_candidates):
+                                        # Compare IDs (handle both int and string types)
+                                        tc_id = tc.get("id") if isinstance(tc, dict) else None
+                                        if tc_id is not None:
+                                            try:
+                                                # Handle both int and string types for comparison
+                                                if int(tc_id) == int(teaching_candidate_id):
+                                                    tc["status"] = "completed"
+                                                    found_current = True
+                                                    print(f"[Teaching] Marked task {tc_id} ({tc.get('topic', 'unknown')}) as completed")
+                                                    # Next candidate should be unlocked
+                                                    if idx + 1 < len(teaching_candidates):
+                                                        next_available_idx = idx + 1
+                                                    break
+                                            except (ValueError, TypeError) as e:
+                                                print(f"[Teaching] WARNING: Could not compare IDs - tc_id={tc_id}, teaching_candidate_id={teaching_candidate_id}, error={e}")
+                                                continue
+                                    
+                                    if not found_current:
+                                        print(f"[Teaching] WARNING: Could not find teaching_candidate_id {teaching_candidate_id} in teaching_candidates list")
+                                        print(f"[Teaching] Available IDs: {[tc.get('id') if isinstance(tc, dict) else 'N/A' for tc in teaching_candidates]}")
+                                    
+                                    # Unlock the next candidate
+                                    if next_available_idx is not None:
+                                        next_tc = teaching_candidates[next_available_idx]
+                                        if isinstance(next_tc, dict):
+                                            next_tc["status"] = "available"
+                                            print(f"[Teaching] Unlocked next teaching candidate: {next_tc.get('topic', 'unknown')} (ID: {next_tc.get('id', 'unknown')})")
+                                        else:
+                                            print(f"[Teaching] WARNING: Next candidate at index {next_available_idx} is not a dict")
+                                    else:
+                                        print(f"[Teaching] No next candidate to unlock (current is last or not found)")
+                                    
+                                    # Save updated teaching candidates back to goal
+                                    db.set_goal_teaching_candidates(goal_id, teaching_candidates)
+                                    print(f"[Teaching] Saved updated teaching candidates to goal {goal_id}")
+                                else:
+                                    print(f"[Teaching] WARNING: Goal {goal_id} not found or has no teaching_candidate data")
+                            else:
+                                print(f"[Teaching] WARNING: Cannot update task status - teaching_candidate_id is None")
                     except Exception as e:
                         print(f"[Teaching] Failed to update teaching candidate status: {e}")
                         import traceback
@@ -1305,8 +1367,16 @@ async def start_discovery(request: SessionCreateRequest = SessionCreateRequest()
             print(f"[Discovery] Creating new session: {session_id[:8]}...")
             
             # If this is for a goal, create session with goal_id
+            exploration_history = None
             if request.goal_id and request.user_id:
                 db.create_session_with_type(session_id, request.user_id, 'goal', request.goal_id)
+                # Get exploration conversation history to provide context for goal chat
+                exploration = db.get_user_exploration_session(request.user_id)
+                if exploration and exploration.get("conversation_history"):
+                    # Include exploration history as context (last 10 messages to avoid token bloat)
+                    exploration_history = exploration.get("conversation_history", [])
+                    exploration_history = exploration_history[-10:] if len(exploration_history) > 10 else exploration_history
+                    print(f"[Discovery] Including {len(exploration_history)} messages from exploration chat for goal context")
             elif request.user_id:
                 db.create_session_with_type(session_id, request.user_id, 'exploration')
 
@@ -1318,7 +1388,8 @@ async def start_discovery(request: SessionCreateRequest = SessionCreateRequest()
             user_goal=request.goal,
             user_id=request.user_id,
             conversation_history=conversation_history if is_resumed else None,
-            schema_state=schema_state if is_resumed else None
+            schema_state=schema_state if is_resumed else None,
+            exploration_history=exploration_history if not is_resumed and request.goal_id else None
         )
 
         # Get opening question for new sessions OR resumed sessions with no history
@@ -1615,6 +1686,68 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
                     _maybe_checkpoint()
                     continue
 
+                # Check for manual learning path generation command
+                if user_message == "__GENERATE_LEARNING_PATH__":
+                    # Clear status
+                    await websocket.send_json({
+                        "type": "status",
+                        "status": ""
+                    })
+                    result = session_data.discovery_session.generate_learning_path()
+
+                    if not result.get("success"):
+                        await websocket.send_json({
+                            "type": "error",
+                            "message": result.get("message", "Failed to generate learning path")
+                        })
+                        continue
+
+                    # Check if curriculum was generated and proposed
+                    if session_data.discovery_session.schema.task_curriculum.proposed:
+                        tasks = session_data.discovery_session.schema.task_curriculum.tasks
+                        curriculum_message = result.get("message", "Learning path generated")
+                        
+                        # Send a simple message - the UI component will show the full curriculum
+                        simple_message = f"I've designed a learning path with {len(tasks)} tasks to help you achieve your goal. Review it below and let me know if you'd like to adjust anything."
+                        
+                        await websocket.send_json({
+                            "type": "task_curriculum_proposed",
+                            "content": simple_message,
+                            "curriculum": {
+                                "tasks": [
+                                    {
+                                        "id": task.id,
+                                        "topic": task.topic,
+                                        "justification": task.justification,
+                                        "prerequisites": task.prerequisites,
+                                        "status": task.status
+                                    }
+                                    for task in tasks
+                                ]
+                            },
+                            "tasks": [
+                                {
+                                    "id": task.id,
+                                    "topic": task.topic,
+                                    "justification": task.justification,
+                                    "prerequisites": task.prerequisites,
+                                    "status": task.status
+                                }
+                                for task in tasks
+                            ],
+                            "message": simple_message
+                        })
+                    else:
+                        # Fallback: send the message even if curriculum wasn't fully processed
+                        await websocket.send_json({
+                            "type": "message",
+                            "content": result.get("message", "Learning path generation in progress"),
+                            "role": "assistant"
+                        })
+                    
+                    _maybe_checkpoint()
+                    continue
+
                 # Check for curriculum accept command (batch task proposal)
                 if user_message == "__ACCEPT_CURRICULUM__":
                     # Clear status
@@ -1692,6 +1825,16 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
                     process_with_flag
                 )
 
+                # If response is empty (onboarding with existing opening), skip sending anything
+                if not response or response.strip() == "":
+                    # Clear any status and return early
+                    await websocket.send_json({
+                        "type": "status",
+                        "status": ""
+                    })
+                    _maybe_checkpoint()
+                    continue
+
                 # Check if a goal was proposed (needs user confirmation)
                 if response.startswith("__GOAL_PROPOSED__:"):
                     proposed_goal = response.split(":", 1)[1]
@@ -1723,9 +1866,19 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
                     
                     # Build a message showing the proposed learning path
                     tasks = curriculum.get('tasks', [])
+                    print(f"[Backend] Curriculum proposal: {len(tasks)} tasks found")
                     overall_justification = curriculum.get('overall_justification', "Here's the learning path I've designed for you:")
-                    task_list = "\n\n".join([f"**{i+1}. {t['topic']}**\n{t['justification']}" for i, t in enumerate(tasks)])
-                    curriculum_message = f"{overall_justification}\n\n{task_list}\n\n---\n\nThis is my best guess at the complete journey. We can adjust this as we learn more about what works for you."
+                    
+                    # Format task list with better error handling
+                    if tasks and len(tasks) > 0:
+                        task_list = "\n\n".join([
+                            f"**{i+1}. {t.get('topic', 'Task')}**\n{t.get('justification', 'Explore this topic')}" 
+                            for i, t in enumerate(tasks)
+                        ])
+                        curriculum_message = f"{overall_justification}\n\n{task_list}\n\n---\n\nThis is my best guess at the complete journey. We can adjust this as we learn more about what works for you."
+                    else:
+                        print(f"[Backend] WARNING: No tasks found in curriculum! Curriculum keys: {curriculum.keys()}")
+                        curriculum_message = f"{overall_justification}\n\n*No tasks were generated. Please try generating the learning path again.*"
                     
                     # Generate TTS for curriculum proposal (non-blocking with timeout)
                     curriculum_audio_url = None
@@ -1752,12 +1905,14 @@ async def discovery_websocket(websocket: WebSocket, session_id: str):
                         "type": "status",
                         "status": ""
                     })
+                    # Send a simple message - the UI component will show the full curriculum
+                    simple_message = f"I've designed a learning path with {len(tasks)} tasks to help you achieve your goal. Review it below and let me know if you'd like to adjust anything."
                     await websocket.send_json({
                         "type": "task_curriculum_proposed",
                         "curriculum": curriculum,
-                        "content": curriculum_message,
+                        "content": simple_message,
                         "audio_url": curriculum_audio_url,
-                        "message": curriculum_message
+                        "message": simple_message
                     })
                     _maybe_checkpoint()
                     continue
@@ -1927,6 +2082,814 @@ async def get_discovery_schema(session_id: str):
     # Get schema from discovery session
     schema = session_data.discovery_session.get_schema()
     return schema
+
+
+# ============================================
+# Panel Endpoints (Context, Draft, Terminal Tabs)
+# ============================================
+
+from backend.services.terminal_manager import terminal_manager
+from backend.services.terminal_observer import create_terminal_observer
+from backend.services.document_suggestion import document_suggestion_service
+from backend.services.suggestion_router import create_suggestion_router
+
+# Initialize suggestion router with database
+suggestion_router = create_suggestion_router(db)
+
+# Pydantic models for panel endpoints
+class ContextTextRequest(BaseModel):
+    goal_id: int
+    user_id: str
+    text_content: str
+    content_type: str = "text"
+
+class ContextResponse(BaseModel):
+    id: int
+    goal_id: int
+    user_id: str
+    content_type: str
+    text_content: Optional[str] = None
+    file_path: Optional[str] = None
+    file_name: Optional[str] = None
+    token_count: int
+    is_active: bool
+    created_at: Optional[str] = None
+
+class DocumentCreateRequest(BaseModel):
+    goal_id: int
+    user_id: str
+    title: str = "Untitled"
+    document_type: str = "notes"
+    content: Optional[dict] = None
+    plain_text: Optional[str] = None
+
+class DocumentUpdateRequest(BaseModel):
+    title: Optional[str] = None
+    document_type: Optional[str] = None
+    content: Optional[dict] = None
+    plain_text: Optional[str] = None
+
+class DocumentConfigRequest(BaseModel):
+    formatting: bool = True
+    content: bool = True
+    tasks: bool = False
+
+class DocumentResponse(BaseModel):
+    id: int
+    goal_id: int
+    user_id: str
+    title: str
+    document_type: str
+    content: Optional[dict] = None
+    plain_text: Optional[str] = None
+    suggestion_config: dict
+    version: int
+    is_active: bool
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+class TerminalStartRequest(BaseModel):
+    goal_id: int
+    user_id: str
+    working_directory: str = "~"
+
+class TerminalResponse(BaseModel):
+    id: int
+    session_id: str
+    goal_id: int
+    user_id: str
+    working_directory: str
+    is_active: bool
+    created_at: Optional[str] = None
+
+class ChannelCreateRequest(BaseModel):
+    goal_id: int
+    user_id: str
+    channel_type: str = "custom"
+    name: str
+    suggestion_context: Optional[dict] = None
+    source_binding: Optional[str] = None
+
+class ChannelContextRequest(BaseModel):
+    instructions: Optional[str] = None
+    focus_areas: Optional[List[str]] = None
+    excluded_topics: Optional[List[str]] = None
+
+class ChannelResponse(BaseModel):
+    id: int
+    goal_id: int
+    user_id: str
+    channel_type: str
+    name: str
+    suggestion_context: dict
+    source_binding: Optional[str] = None
+    is_active: bool
+    created_at: Optional[str] = None
+
+class ChannelMessageResponse(BaseModel):
+    id: int
+    channel_id: int
+    role: str
+    content: str
+    message_type: str
+    source: Optional[str] = None
+    metadata: dict
+    created_at: Optional[str] = None
+
+
+# ---- Context Tab Endpoints ----
+
+@app.post("/api/goal/{goal_id}/context", response_model=ContextResponse)
+async def add_context(goal_id: int, request: ContextTextRequest):
+    """Add text context to a goal."""
+    try:
+        # Verify goal_id matches
+        if goal_id != request.goal_id:
+            raise HTTPException(status_code=400, detail="Goal ID mismatch")
+
+        context = db.create_goal_context(
+            goal_id=request.goal_id,
+            user_id=request.user_id,
+            content_type=request.content_type,
+            text_content=request.text_content,
+            processed_content=request.text_content,  # For text, processed = original
+            token_count=len(request.text_content.split())  # Rough estimate
+        )
+        return ContextResponse(**context)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/goal/{goal_id}/contexts", response_model=List[ContextResponse])
+async def get_contexts(goal_id: int):
+    """Get all context items for a goal."""
+    try:
+        contexts = db.get_goal_contexts(goal_id)
+        return [ContextResponse(**c) for c in contexts]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/goal/{goal_id}/context/{context_id}", response_model=ContextResponse)
+async def update_context(goal_id: int, context_id: int, updates: dict):
+    """Update a context item."""
+    try:
+        context = db.update_goal_context(context_id, updates)
+        if not context:
+            raise HTTPException(status_code=404, detail="Context not found")
+        return ContextResponse(**context)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/goal/{goal_id}/context/{context_id}")
+async def delete_context(goal_id: int, context_id: int):
+    """Delete a context item (soft delete)."""
+    try:
+        success = db.delete_goal_context(context_id, soft_delete=True)
+        if not success:
+            raise HTTPException(status_code=404, detail="Context not found")
+        return {"success": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ---- Draft Tab Endpoints ----
+
+@app.post("/api/goal/{goal_id}/document", response_model=DocumentResponse)
+async def create_document(goal_id: int, request: DocumentCreateRequest):
+    """Create a new document for a goal."""
+    try:
+        if goal_id != request.goal_id:
+            raise HTTPException(status_code=400, detail="Goal ID mismatch")
+
+        document = db.create_goal_document(
+            goal_id=request.goal_id,
+            user_id=request.user_id,
+            title=request.title,
+            document_type=request.document_type,
+            content=request.content,
+            plain_text=request.plain_text
+        )
+        return DocumentResponse(**document)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/goal/{goal_id}/documents", response_model=List[DocumentResponse])
+async def get_documents(goal_id: int):
+    """Get all documents for a goal."""
+    try:
+        documents = db.get_goal_documents(goal_id)
+        return [DocumentResponse(**d) for d in documents]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/document/{document_id}", response_model=DocumentResponse)
+async def get_document(document_id: int):
+    """Get a specific document."""
+    try:
+        document = db.get_document_by_id(document_id)
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+        return DocumentResponse(**document)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/document/{document_id}", response_model=DocumentResponse)
+async def update_document(document_id: int, request: DocumentUpdateRequest):
+    """Update a document."""
+    try:
+        updates = {k: v for k, v in request.model_dump().items() if v is not None}
+        document = db.update_document(document_id, updates)
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+        return DocumentResponse(**document)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/document/{document_id}/config", response_model=DocumentResponse)
+async def update_document_config(document_id: int, request: DocumentConfigRequest):
+    """Update document suggestion preferences."""
+    try:
+        config = request.model_dump()
+        document = db.update_document_suggestion_config(document_id, config)
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+        return DocumentResponse(**document)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/document/{document_id}/expand-suggestion")
+async def expand_suggestion(document_id: int, request: dict):
+    """Expand a document suggestion with implementation ideas and questions."""
+    try:
+        suggestion = request.get("suggestion", {})
+        document_content = request.get("document_content", "")
+        goal_id = request.get("goal_id")
+        
+        if not suggestion or not suggestion.get("text"):
+            raise HTTPException(status_code=400, detail="Suggestion text required")
+        
+        # Get goal context
+        goal = db.get_goal_by_id(goal_id) if goal_id else None
+        goal_text = goal["goal_text"] if goal else ""
+        
+        # Use LLM to expand the suggestion
+        from src.llm_client import LLMClient
+        from src.config import get_model_name
+        
+        llm = LLMClient()
+        model = get_model_name("ranker", default="openai:gpt-4o-mini")
+        
+        prompt = f"""You are helping someone improve their document. They received this suggestion:
+
+SUGGESTION TYPE: {suggestion.get('suggestion_type', 'general')}
+SUGGESTION: {suggestion.get('text', '')}
+LOCATION: {suggestion.get('location', 'N/A')}
+
+CONTEXT:
+- Goal: "{goal_text}"
+- Document content (excerpt): {document_content[:1000]}
+
+Generate a concise, direct message that includes:
+1. Brief explanation of the suggestion (1-2 sentences)
+2. 2-3 specific, actionable implementation ideas
+3. 1-2 focused questions to guide implementation
+
+Write directly and concisely. Skip greetings and filler phrases like "Hey there!" or "I noticed". Get straight to the point. Return just the message text, no JSON or formatting markers."""
+
+        expanded_message = llm.chat(
+            messages=[{"role": "user", "content": prompt}],
+            model=model,
+            temperature=0.7,
+            max_tokens=500
+        )
+        
+        return {
+            "expanded_message": expanded_message.strip(),
+            "suggestion": suggestion
+        }
+    except Exception as e:
+        print(f"[ExpandSuggestion] Error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ---- Terminal Tab Endpoints ----
+
+@app.post("/api/terminal/start", response_model=TerminalResponse)
+async def start_terminal(request: TerminalStartRequest):
+    """Initialize a terminal session."""
+    try:
+        session_id = str(uuid.uuid4())
+
+        # Create terminal session in database
+        terminal = db.create_terminal_session(
+            session_id=session_id,
+            goal_id=request.goal_id,
+            user_id=request.user_id,
+            working_directory=request.working_directory
+        )
+
+        # Create actual PTY session
+        await terminal_manager.create_session(
+            session_id=session_id,
+            working_dir=request.working_directory
+        )
+
+        return TerminalResponse(**terminal)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/terminal/{session_id}/history")
+async def get_terminal_history(session_id: str, limit: int = 50):
+    """Get command history for a terminal session."""
+    try:
+        history = db.get_terminal_history(session_id, limit=limit)
+        return {"history": history}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ---- Chat Channel Endpoints ----
+
+@app.post("/api/goal/{goal_id}/channel", response_model=ChannelResponse)
+async def create_channel(goal_id: int, request: ChannelCreateRequest):
+    """Create a new chat channel for a goal."""
+    try:
+        if goal_id != request.goal_id:
+            raise HTTPException(status_code=400, detail="Goal ID mismatch")
+
+        channel = db.create_chat_channel(
+            goal_id=request.goal_id,
+            user_id=request.user_id,
+            channel_type=request.channel_type,
+            name=request.name,
+            suggestion_context=request.suggestion_context or {},
+            source_binding=request.source_binding
+        )
+        return ChannelResponse(**channel)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/goal/{goal_id}/channels", response_model=List[ChannelResponse])
+async def get_channels(goal_id: int):
+    """Get all chat channels for a goal."""
+    try:
+        channels = db.get_goal_channels(goal_id)
+        return [ChannelResponse(**c) for c in channels]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/channel/{channel_id}/context", response_model=ChannelResponse)
+async def update_channel_context(channel_id: int, request: ChannelContextRequest):
+    """Update suggestion context for a channel."""
+    try:
+        context = {
+            "instructions": request.instructions,
+            "focus_areas": request.focus_areas or [],
+            "excluded_topics": request.excluded_topics or []
+        }
+        channel = db.update_channel_suggestion_context(channel_id, context)
+        if not channel:
+            raise HTTPException(status_code=404, detail="Channel not found")
+        return ChannelResponse(**channel)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/channel/{channel_id}/messages", response_model=List[ChannelMessageResponse])
+async def get_channel_messages(channel_id: int, limit: int = 100, offset: int = 0):
+    """Get messages for a channel."""
+    try:
+        messages = db.get_channel_messages(channel_id, limit=limit, offset=offset)
+        return [ChannelMessageResponse(**m) for m in messages]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/goal/{goal_id}/panels/init")
+async def initialize_goal_panels(goal_id: int, user_id: str = Query(None)):
+    """Initialize default chat channels for a goal's panel system."""
+    try:
+        # Get user_id from query param or from goal
+        if not user_id:
+            goal = db.get_goal_by_id(goal_id)
+            if goal:
+                user_id = goal.get("user_id")
+        if not user_id:
+            raise HTTPException(status_code=400, detail="user_id required")
+        result = db.initialize_goal_panels(goal_id, user_id)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================
+# Panel WebSocket Handlers
+# ============================================
+
+# Store active WebSocket connections
+active_document_connections: dict = {}  # document_id -> List[WebSocket]
+active_terminal_connections: dict = {}  # session_id -> List[WebSocket]
+active_channel_connections: dict = {}  # channel_id -> List[WebSocket]
+terminal_observers: dict = {}  # session_id -> TerminalObserver
+
+
+@app.websocket("/ws/document/{document_id}")
+async def document_websocket(websocket: WebSocket, document_id: int):
+    """WebSocket for real-time document sync and AI suggestions."""
+    await websocket.accept()
+
+    # Add to connections
+    if document_id not in active_document_connections:
+        active_document_connections[document_id] = []
+    active_document_connections[document_id].append(websocket)
+
+    try:
+        # Get document info
+        document = db.get_document_by_id(document_id)
+        if not document:
+            await websocket.send_json({"type": "error", "message": "Document not found"})
+            await websocket.close()
+            return
+
+        goal_id = document["goal_id"]
+
+        while True:
+            data = await websocket.receive_json()
+            msg_type = data.get("type")
+
+            if msg_type == "update":
+                # Client sends document update
+                content = data.get("content", {})
+                plain_text = data.get("plain_text", "")
+
+                # Only update if we have actual content (avoid empty updates)
+                updates = {}
+                if plain_text is not None and plain_text != "":
+                    updates["plain_text"] = plain_text
+                if content is not None and content != {}:
+                    updates["content"] = content
+                
+                # Only update database if there are actual changes
+                updated = None
+                if updates:
+                    updated = db.update_document(document_id, updates)
+
+                # Send sync acknowledgment
+                await websocket.send_json({
+                    "type": "sync_ack",
+                    "version": updated["version"] if updated else 0
+                })
+
+                # Schedule AI suggestions with debouncing
+                async def send_suggestions(suggestions):
+                    try:
+                        # Properly serialize dataclass to dict
+                        from dataclasses import asdict
+                        suggestions_dict = [asdict(s) for s in suggestions]
+                        await websocket.send_json({
+                            "type": "suggestions",
+                            "suggestions": suggestions_dict
+                        })
+
+                        # Also route to appropriate channels
+                        await suggestion_router.route_document_suggestions(
+                            goal_id=goal_id,
+                            document_id=document_id,
+                            suggestions=suggestions_dict
+                        )
+                    except Exception as e:
+                        print(f"[DocumentWS] Error sending suggestions: {e}")
+
+                # Get goal context for suggestions
+                goal = db.get_goal_by_id(goal_id)
+                goal_context = {"goal_text": goal["goal_text"]} if goal else {}
+                config = document.get("suggestion_config", {})
+
+                from backend.services.document_suggestion import SuggestionConfig as DocSuggestionConfig
+                suggestion_config = DocSuggestionConfig(
+                    formatting=config.get("formatting", True),
+                    content=config.get("content", True),
+                    tasks=config.get("tasks", False)
+                )
+
+                document_suggestion_service.schedule_suggestions(
+                    document_id=document_id,
+                    plain_text=plain_text,
+                    goal_context=goal_context,
+                    config=suggestion_config,
+                    callback=send_suggestions
+                )
+
+            elif msg_type == "request_suggestion":
+                # Client explicitly requests suggestion
+                print(f"[DocumentWS] Requesting suggestions for document {document_id}")
+                selection = data.get("selection", "")
+                plain_text = selection or document.get("plain_text", "")
+                
+                print(f"[DocumentWS] Document plain_text length: {len(plain_text) if plain_text else 0}")
+                
+                if not plain_text or len(plain_text.strip()) < 20:
+                    error_msg = "Document needs at least 20 characters for AI analysis"
+                    print(f"[DocumentWS] {error_msg}")
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": error_msg
+                    })
+                    return
+
+                goal = db.get_goal_by_id(goal_id)
+                goal_context = {"goal_text": goal["goal_text"]} if goal else {}
+                config = document.get("suggestion_config", {})
+
+                from backend.services.document_suggestion import SuggestionConfig as DocSuggestionConfig
+                suggestion_config = DocSuggestionConfig(
+                    formatting=config.get("formatting", True),
+                    content=config.get("content", True),
+                    tasks=config.get("tasks", False)
+                )
+
+                try:
+                    print(f"[DocumentWS] Generating suggestions for {len(plain_text)} characters...")
+                    print(f"[DocumentWS] Goal context: {goal_context}")
+                    print(f"[DocumentWS] Suggestion config: formatting={suggestion_config.formatting}, content={suggestion_config.content}, tasks={suggestion_config.tasks}")
+                    
+                    suggestions = await document_suggestion_service.generate_suggestions(
+                        document_id=document_id,
+                        plain_text=plain_text,
+                        goal_context=goal_context,
+                        config=suggestion_config
+                    )
+                    
+                    print(f"[DocumentWS] Generated {len(suggestions)} suggestions")
+                    # Properly serialize dataclass to dict
+                    from dataclasses import asdict
+                    suggestions_dict = [asdict(s) for s in suggestions]
+                    print(f"[DocumentWS] Serialized suggestions: {suggestions_dict}")
+                    
+                    await websocket.send_json({
+                        "type": "suggestions",
+                        "suggestions": suggestions_dict
+                    })
+                    print(f"[DocumentWS] Sent suggestions message to client")
+                except Exception as e:
+                    print(f"[DocumentWS] Error generating suggestions: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": f"Failed to generate suggestions: {str(e)}"
+                    })
+
+            elif msg_type == "update_config":
+                # Client updates suggestion config
+                config = data.get("config", {})
+                db.update_document_suggestion_config(document_id, config)
+                await websocket.send_json({"type": "config_updated", "config": config})
+
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        print(f"[DocumentWS] Error: {e}")
+    finally:
+        # Remove from connections
+        if document_id in active_document_connections:
+            active_document_connections[document_id] = [
+                ws for ws in active_document_connections[document_id] if ws != websocket
+            ]
+
+
+@app.websocket("/ws/terminal/{session_id}")
+async def terminal_websocket(websocket: WebSocket, session_id: str):
+    """WebSocket for terminal I/O streaming."""
+    await websocket.accept()
+
+    # Add to connections
+    if session_id not in active_terminal_connections:
+        active_terminal_connections[session_id] = []
+    active_terminal_connections[session_id].append(websocket)
+
+    # Create observer for this session
+    observer = create_terminal_observer()
+    terminal_observers[session_id] = observer
+
+    try:
+        # Get terminal session info
+        terminal_info = db.get_terminal_session(session_id)
+        if not terminal_info:
+            await websocket.send_json({"type": "error", "message": "Terminal session not found"})
+            await websocket.close()
+            return
+
+        goal_id = terminal_info["goal_id"]
+
+        # Get or create PTY session
+        pty_session = await terminal_manager.get_session(session_id)
+        if not pty_session:
+            pty_session = await terminal_manager.create_session(
+                session_id=session_id,
+                working_dir=terminal_info["working_directory"]
+            )
+
+        if not pty_session:
+            await websocket.send_json({"type": "error", "message": "Failed to create terminal"})
+            await websocket.close()
+            return
+
+        # Set up output callback to send to WebSocket
+        async def handle_output(data: str):
+            try:
+                await websocket.send_json({"type": "output", "data": data})
+            except Exception:
+                pass
+
+        pty_session.on_output = lambda data: asyncio.create_task(handle_output(data))
+
+        # Command parsing state
+        current_command = ""
+        output_buffer = ""
+
+        while True:
+            data = await websocket.receive_json()
+            msg_type = data.get("type")
+
+            if msg_type == "input":
+                input_data = data.get("data", "")
+
+                # Track commands (simple heuristic: input ending with newline)
+                if "\n" in input_data or "\r" in input_data:
+                    current_command = input_data.strip()
+
+                await terminal_manager.write_input(session_id, input_data)
+
+            elif msg_type == "resize":
+                rows = data.get("rows", 24)
+                cols = data.get("cols", 80)
+                await terminal_manager.resize(session_id, rows, cols)
+
+            elif msg_type == "command_complete":
+                # Client signals command completed
+                command = data.get("command", current_command)
+                output = data.get("output", "")
+                exit_code = data.get("exit_code", 0)
+
+                print(f"[TerminalWS] Command complete: {command[:50]}... (exit_code={exit_code}, output_len={len(output)})")
+
+                # Save to database
+                try:
+                    db.append_terminal_command(session_id, command, output, exit_code)
+                except Exception as e:
+                    print(f"[TerminalWS] Failed to save command to database: {e}")
+
+                # Process observation
+                try:
+                    observation = observer.process_command(command, output, exit_code)
+                    print(f"[TerminalWS] Observation: activity={observation.activity_type}, should_trigger={observation.should_trigger_suggestion}, priority={observation.suggestion_priority}")
+
+                    # Check if we should trigger a suggestion
+                    if observer.should_trigger_suggestion_now():
+                        suggestion_context = observer.get_suggestion_context()
+
+                        # Send observation to WebSocket
+                        await websocket.send_json({
+                            "type": "observation",
+                            "activity": observation.activity_type,
+                            "suggestion": f"Detected {observation.activity_type} activity"
+                        })
+                        print(f"[TerminalWS] Sent observation to client: {observation.activity_type}")
+
+                        # Route to appropriate channels
+                        try:
+                            await suggestion_router.route_terminal_observation(
+                                goal_id=goal_id,
+                                observation=suggestion_context
+                            )
+                        except Exception as e:
+                            print(f"[TerminalWS] Failed to route observation: {e}")
+                except Exception as e:
+                    print(f"[TerminalWS] Error processing observation: {e}")
+
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        print(f"[TerminalWS] Error: {e}")
+    finally:
+        # Clean up
+        if session_id in active_terminal_connections:
+            active_terminal_connections[session_id] = [
+                ws for ws in active_terminal_connections[session_id] if ws != websocket
+            ]
+        if session_id in terminal_observers:
+            del terminal_observers[session_id]
+
+
+@app.websocket("/ws/channel/{channel_id}")
+async def channel_websocket(websocket: WebSocket, channel_id: int):
+    """WebSocket for real-time channel messages and suggestions."""
+    await websocket.accept()
+
+    # Add to connections
+    if channel_id not in active_channel_connections:
+        active_channel_connections[channel_id] = []
+    active_channel_connections[channel_id].append(websocket)
+
+    # Register callback with suggestion router
+    async def message_callback(message: dict):
+        try:
+            await websocket.send_json({
+                "type": "message",
+                "message": message
+            })
+        except Exception:
+            pass
+
+    suggestion_router.register_channel_callback(channel_id, message_callback)
+
+    try:
+        # Get channel info
+        channel = db.get_channel_by_id(channel_id)
+        if not channel:
+            await websocket.send_json({"type": "error", "message": "Channel not found"})
+            await websocket.close()
+            return
+
+        # Send recent messages
+        messages = db.get_recent_channel_messages(channel_id, limit=20)
+        await websocket.send_json({
+            "type": "history",
+            "messages": messages
+        })
+
+        while True:
+            data = await websocket.receive_json()
+            msg_type = data.get("type")
+
+            if msg_type == "message":
+                # User sends a message
+                content = data.get("content", "")
+                role = data.get("role", "user")
+
+                message = db.create_channel_message(
+                    channel_id=channel_id,
+                    role=role,
+                    content=content,
+                    message_type="chat",
+                    source="user_input"
+                )
+
+                # Broadcast to all connected clients
+                for ws in active_channel_connections.get(channel_id, []):
+                    try:
+                        await ws.send_json({
+                            "type": "message",
+                            "message": message
+                        })
+                    except Exception:
+                        pass
+
+            elif msg_type == "update_context":
+                # User updates channel suggestion context
+                context = data.get("context", {})
+                updated = db.update_channel_suggestion_context(channel_id, context)
+                await websocket.send_json({
+                    "type": "context_updated",
+                    "suggestion_context": updated["suggestion_context"] if updated else {}
+                })
+
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        print(f"[ChannelWS] Error: {e}")
+    finally:
+        # Clean up
+        if channel_id in active_channel_connections:
+            active_channel_connections[channel_id] = [
+                ws for ws in active_channel_connections[channel_id] if ws != websocket
+            ]
+        suggestion_router.unregister_channel_callback(channel_id, message_callback)
 
 
 # ============================================

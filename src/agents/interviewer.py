@@ -167,7 +167,7 @@ CONSTRAINTS
             # No fallback - re-raise to show error to user
             raise Exception(f"Contextual opening generation failed: {str(e)}")
 
-    def generate_goal_directed_opening(self, user_background: str, goal: str) -> str:
+    def generate_goal_directed_opening(self, user_background: str, goal: str, exploration_context: Optional[List[Dict[str, str]]] = None) -> str:
         """
         Generate a goal-directed opening question based on user's background and learning goal.
 
@@ -181,13 +181,30 @@ CONSTRAINTS
         Returns:
             Goal-directed opening question
         """
+        # Format exploration context if available
+        exploration_context_str = ""
+        if exploration_context and len(exploration_context) > 0:
+            exploration_text = gather_conversation(exploration_context, max_messages=10, max_chars=1500)
+            if exploration_text:
+                exploration_context_str = f"""
+
+EXPLORATION CONVERSATION (where this goal came from):
+{exploration_text}
+
+IMPORTANT: This goal emerged from the exploration conversation above. Use this context to:
+- Avoid asking questions that were already asked in exploration
+- Build on what was already discussed
+- Reference specific things they mentioned if relevant
+- Continue the conversation naturally, don't repeat what was already covered
+"""
+        
         goal_directed_prompt = f"""You are starting a goal-directed learning conversation. The user shared their background and a learning goal:
 
 USER BACKGROUND:
 {user_background}
 
 LEARNING GOAL:
-{goal}
+{goal}{exploration_context_str}
 
 YOUR TASK: Generate ONE opening question that helps identify the best FIRST STEP toward their goal.
 
@@ -204,22 +221,33 @@ QUESTION DESIGN:
 - Assume they want to learn about {goal}
 - Help identify whether they need conceptual foundations, practical skills, or specific techniques
 - Ask about their relationship to the goal, not just their knowledge level
-- Offer choices or contrasts when possible
+- Focus on understanding their background, motivation, or starting point
 - One question only, 1-2 sentences max
+
+PREFERRED QUESTION TYPES:
+- Background/prior knowledge: "What's your current experience with [aspect of goal]?"
+- Motivation/stakes: "What's driving your interest in [goal]? Is there a specific situation or problem you're trying to solve?"
+- Concerns/uncertainties: "What aspect of [goal] feels most uncertain or challenging to you right now?"
+- Starting point: "Where would you say you're starting from with [goal]? What do you already understand, and what feels like the biggest gap?"
 
 EXAMPLES:
 
 Goal: "Learn jazz harmony"
 Background: Classical piano, music theory basics, interested in improvisation
-Question: "When you think about jazz harmony, are you more curious about understanding why the chord progressions work the way they do, or getting your hands to naturally find those sounds?"
+Question: "What's your current experience with jazz harmony? Are you coming in fresh, or do you have some background with chord progressions?"
 
 Goal: "Understand vector calculus"
 Background: Engineering student, solid algebra, physics applications
-Question: "For vector calculus, are you more drawn to building geometric intuition for what the operators mean, or getting fluent with the computational techniques you'll need for physics?"
+Question: "What's driving your interest in vector calculus? Is there a specific physics problem or application you're trying to solve?"
 
 Goal: "Master chess endgames"
 Background: Plays recreationally, loses in endgames, wants to improve
-Question: "In the endgames you've played, is it more often that you don't know the winning plan, or you know it but struggle to execute accurately?"
+Question: "What aspect of chess endgames feels most uncertain or challenging to you right now?"
+
+AVOID:
+- Forced-choice questions ("are you more curious about X or Y?")
+- Questions that ask them to choose between two options
+- Questions that assume they must pick one direction
 
 Generate ONLY the question:"""
 
@@ -259,8 +287,22 @@ Generate ONLY the question:"""
             Next question to ask
         """
         # conversation_mode determines which prompt to load
-        # Valid modes: calibration, grounded_offer, hypothesis_correct, direct_probe, propose_tasks, negotiate_curriculum, topic_probe, explain_back, scenario_probe
+        # Valid modes: explore_deeper, provide_perspective, resolve_confusion, suggest_candidate, answer_question, general_continuation
+        # Legacy modes: calibration, grounded_offer, hypothesis_correct, direct_probe, propose_tasks, negotiate_curriculum, topic_probe, explain_back, scenario_probe
         prompt_module = schema.controller.conversation_mode or "general_continuation"
+        
+        # Safety check: propose_tasks should only be set via manual button click
+        # Allow propose_tasks if next_action is "propose_task_curriculum" (set by generate_learning_path)
+        # This indicates manual curriculum generation is in progress
+        is_manual_generation = (
+            prompt_module == "propose_tasks" and 
+            schema.controller.next_action == "propose_task_curriculum"
+        )
+        
+        if prompt_module == "propose_tasks" and not schema.task_curriculum.proposed and not is_manual_generation:
+            print(f"[INTERVIEWER] WARNING: propose_tasks mode detected without curriculum proposed - switching to general_continuation")
+            print(f"[INTERVIEWER] Curriculum generation is manual-only via button")
+            prompt_module = "general_continuation"
         
         if not schema.controller.conversation_mode:
             print(f"[Interviewer] Warning: No conversation_mode set, using general_continuation")
@@ -559,13 +601,31 @@ Generate ONLY the question:"""
                 }
         """
         # Check controller mode first
+        # propose_tasks should only be set via manual button click (generate_learning_path)
         is_proposing_curriculum = schema.controller.conversation_mode == "propose_tasks"
         is_negotiating_curriculum = schema.controller.conversation_mode == "negotiate_curriculum"
+        
+        # Safety check: if propose_tasks is set without curriculum being proposed, something went wrong
+        # BUT allow it if next_action is "propose_task_curriculum" (manual generation in progress)
+        is_manual_generation = (
+            is_proposing_curriculum and 
+            schema.controller.next_action == "propose_task_curriculum"
+        )
+        
+        if is_proposing_curriculum and not schema.task_curriculum.proposed and not is_manual_generation:
+            print(f"[INTERVIEWER] WARNING: propose_tasks mode detected without curriculum proposed - treating as regular conversation")
+            is_proposing_curriculum = False
 
         if is_negotiating_curriculum:
-            print("[Interviewer] Controller in negotiate_curriculum mode - returning clarifying question")
-            # Return regular response - a clarifying question about curriculum modifications
-            return self.generate_next_question(schema, conversation_history)
+            # If next_action is propose_task_curriculum, user wants to regenerate curriculum with modifications
+            if schema.controller and schema.controller.next_action == "propose_task_curriculum":
+                print("[Interviewer] Controller in negotiate_curriculum mode with propose_task_curriculum - regenerating curriculum with modifications")
+                # Regenerate curriculum incorporating user's modification request
+                return self._generate_curriculum_proposal_json(schema, conversation_history)
+            else:
+                print("[Interviewer] Controller in negotiate_curriculum mode - returning clarifying question")
+                # Return regular response - a clarifying question about curriculum modifications
+                return self.generate_next_question(schema, conversation_history)
 
         if is_proposing_curriculum:
             # Use JSON mode for curriculum proposals - much more reliable than text parsing
@@ -605,32 +665,42 @@ Generate ONLY the question:"""
             phase=phase,
         )
         
+        # Check if this is a modification request (curriculum already proposed)
+        is_modification = schema.task_curriculum.proposed and not schema.task_curriculum.accepted
+        modification_note = ""
+        if is_modification:
+            # Get the last user message which should contain the modification request
+            last_user_msg = next((m for m in reversed(conversation_history) if m.get("role") == "user"), None)
+            if last_user_msg:
+                modification_note = f"\n\nIMPORTANT: The user has requested modifications to the curriculum. Their request: '{last_user_msg.get('content', '')}'\n\nYou MUST incorporate this feedback. If they asked to skip basics, remove foundational tasks. If they want practical focus, prioritize hands-on tasks. Design the curriculum to match what they asked for."
+        
         # Add JSON schema instruction
-        json_schema_instruction = """
+        json_schema_instruction = f"""
 You MUST respond with valid JSON in this exact format:
-{
+{{
   "text": "The natural language curriculum proposal message to show the user",
   "tasks": [
-    {
+    {{
       "id": 1,
       "topic": "Task name",
       "justification": "Why this task matters for the user",
       "prerequisites": [],
       "status": "available"
-    },
-    {
+    }},
+    {{
       "id": 2,
       "topic": "Next task name",
       "justification": "Why this task matters",
       "prerequisites": [1],
       "status": "locked"
-    }
+    }}
     // ... 8-12 tasks total
   ]
-}
+}}
 
 Generate 8-12 tasks. The first task should have status "available" and prerequisites []. 
 Subsequent tasks should have prerequisites [previous_task_id] and status "locked".
+{modification_note}
 """
         
         messages = [

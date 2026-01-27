@@ -62,10 +62,17 @@ export default function MessageBubble({
     }
   }, [isAudioMode, isUserRecording, audioUrl, role, onAudioPlay])
 
-  // Strip quotes from assistant messages
+  // Strip quotes and JSON markers from assistant messages
   const displayContent = useMemo(() => {
     if (role === 'assistant') {
-      return stripQuotes(content)
+      let cleaned = stripQuotes(content)
+      // Remove any JSON marker strings that might have slipped through
+      if (cleaned.includes('__TASK_CURRICULUM_PROPOSED__:')) {
+        // Extract just the text before the marker, or use a default message
+        const parts = cleaned.split('__TASK_CURRICULUM_PROPOSED__:')
+        cleaned = parts[0].trim() || "Here's the learning path I've designed for you."
+      }
+      return cleaned
     }
     return content
   }, [role, content])

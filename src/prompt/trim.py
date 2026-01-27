@@ -250,3 +250,6 @@ def trim_prompt_components(
     
     return components, dropped
 
+
+
+

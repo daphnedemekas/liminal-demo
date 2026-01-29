@@ -151,7 +151,7 @@ export default function FeedPanel({
       case 'goal':
         return goalText ? `About: ${stripMarkdown(goalText).slice(0, 40)}...` : 'Learning Goal'
       case 'teaching_candidate':
-        return teachingTopic ? `Deep Dive: ${stripMarkdown(teachingTopic).slice(0, 30)}...` : 'Topic Focus'
+        return teachingTopic ? `Focus: ${stripMarkdown(teachingTopic).slice(0, 30)}...` : 'Topic Focus'
       default:
         return 'Related Content'
     }

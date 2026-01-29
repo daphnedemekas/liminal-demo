@@ -146,6 +146,20 @@ export const api = {
     return response.json()
   },
 
+  async saveTeachingCandidates(goalId: number, teachingCandidates: any[]): Promise<void> {
+    const response = await fetch(`${getApiUrl()}/api/user/goals/teaching-candidates`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ goal_id: goalId, teaching_candidates: teachingCandidates }),
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to save teaching candidates')
+    }
+  },
+
   async createGoal(userId: string, goalText: string): Promise<{ id: number; goal_text: string }> {
     const response = await fetch(`${getApiUrl()}/api/user/goals`, {
       method: 'POST',

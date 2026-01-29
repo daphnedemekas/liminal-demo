@@ -174,16 +174,21 @@ export default function GoalChat({
         .filter(m => m.role === 'user' || m.role === 'assistant')
         .map(m => ({ role: m.role, content: m.content }))
       const candidate = lastMessage.teachingCandidate
-      onTeachingCandidateAccepted({
+      const tc = {
         id: candidate.id,
         topic: candidate.topic,
         focus_question: candidate.focus_question || '',
         identified_gap: candidate.identified_gap || '',
         readiness_score: candidate.readiness_score ?? 0.5,
         goalConversationHistory: conversationHistory
-      } as TeachingCandidate)
+      } as TeachingCandidate
+      onTeachingCandidateAccepted(tc)
+      // Persist to DB so it survives page refresh
+      api.saveTeachingCandidates(goalId, [tc]).catch(err =>
+        console.error('[GoalChat] Failed to persist teaching candidate:', err)
+      )
     }
-  }, [messages, onTeachingCandidateAccepted])
+  }, [messages, onTeachingCandidateAccepted, goalId])
 
   // Check for task_curriculum_proposed or error - reset loading state
   useEffect(() => {
@@ -212,6 +217,10 @@ export default function GoalChat({
       if (onCurriculumAccepted) {
         onCurriculumAccepted(tasksWithHistory)
       }
+      // Also persist to DB as safety net (backend should have saved already)
+      api.saveTeachingCandidates(goalId, tasksWithHistory).catch(err =>
+        console.error('[GoalChat] Failed to persist curriculum:', err)
+      )
     }
   }, [messages, onCurriculumAccepted])
 

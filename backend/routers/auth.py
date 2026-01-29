@@ -130,6 +130,37 @@ async def get_user_data(user_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class SaveTeachingCandidatesRequest(BaseModel):
+    goal_id: int
+    teaching_candidates: List[dict]
+
+
+@router.post("/user/goals/teaching-candidates")
+async def save_teaching_candidates(request: SaveTeachingCandidatesRequest):
+    """Save teaching candidates for a goal (merges with existing, deduplicates by id)."""
+    try:
+        goal = _db.get_goal_by_id(request.goal_id)
+        if not goal:
+            raise HTTPException(status_code=404, detail="Goal not found")
+
+        existing = goal.get("teaching_candidate") or []
+        if not isinstance(existing, list):
+            existing = [existing] if existing else []
+
+        existing_ids = {tc.get("id") for tc in existing}
+        for tc in request.teaching_candidates:
+            if tc.get("id") not in existing_ids:
+                existing.append(tc)
+                existing_ids.add(tc.get("id"))
+
+        _db.set_goal_teaching_candidates(request.goal_id, existing)
+        return {"success": True, "count": len(existing)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/user/goals", response_model=CreateGoalResponse)
 async def create_goal(request: CreateGoalRequest):
     """Create a new goal for user."""

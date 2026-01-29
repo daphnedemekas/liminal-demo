@@ -119,6 +119,42 @@ async def get_user_data(user_id: str):
         goals = _db.get_user_goals(user_id)
         exploration = _db.get_user_exploration_session(user_id)
 
+        # Auto-backfill teaching candidates from sessions if missing
+        needs_reload = False
+        for goal in goals:
+            if goal.get("has_teaching_candidate"):
+                continue
+            try:
+                sessions = _db.list_sessions_for_goal(goal["id"])
+                teaching_sessions = [s for s in sessions if s.get("session_type") == "teaching" and s.get("teaching_candidate_id")]
+                if not teaching_sessions:
+                    continue
+                candidates = []
+                seen_ids = set()
+                for ts in teaching_sessions:
+                    tc_id = ts.get("teaching_candidate_id")
+                    if tc_id in seen_ids:
+                        continue
+                    seen_ids.add(tc_id)
+                    schema = ts.get("schema_state") or {}
+                    tc_data = schema.get("teaching_candidate") or {}
+                    candidates.append({
+                        "id": tc_id,
+                        "topic": tc_data.get("topic") or f"Deep dive {tc_id}",
+                        "focus_question": tc_data.get("focus_question") or "",
+                        "identified_gap": tc_data.get("identified_gap") or "",
+                        "status": "available",
+                    })
+                if candidates:
+                    _db.set_goal_teaching_candidates(goal["id"], candidates)
+                    needs_reload = True
+                    print(f"[Backfill] Goal {goal['id']}: recovered {len(candidates)} teaching candidates from sessions")
+            except Exception as e:
+                print(f"[Backfill] Error for goal {goal['id']}: {e}")
+
+        if needs_reload:
+            goals = _db.get_user_goals(user_id)
+
         return UserDataResponse(
             user_id=user.user_id,
             username=user.username or "",
@@ -126,6 +162,46 @@ async def get_user_data(user_id: str):
             goals=[GoalResponse(**g) for g in goals],
             exploration_session=exploration
         )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/user/{user_id}/backfill-teaching-candidates")
+async def backfill_teaching_candidates(user_id: str):
+    """Backfill teaching candidates from conversation sessions for all goals that are missing them."""
+    try:
+        goals = _db.get_user_goals(user_id)
+        backfilled = 0
+        for goal in goals:
+            if goal.get("has_teaching_candidate"):
+                continue
+            # Check if there are teaching sessions for this goal
+            sessions = _db.list_sessions_for_goal(goal["id"])
+            teaching_sessions = [s for s in sessions if s.get("session_type") == "teaching" and s.get("teaching_candidate_id")]
+            if not teaching_sessions:
+                continue
+            # Extract candidate info from schema_state
+            candidates = []
+            seen_ids = set()
+            for ts in teaching_sessions:
+                tc_id = ts.get("teaching_candidate_id")
+                if tc_id in seen_ids:
+                    continue
+                seen_ids.add(tc_id)
+                schema = ts.get("schema_state") or {}
+                tc_data = schema.get("teaching_candidate") or {}
+                candidates.append({
+                    "id": tc_id,
+                    "topic": tc_data.get("topic") or f"Deep dive {tc_id}",
+                    "focus_question": tc_data.get("focus_question") or "",
+                    "identified_gap": tc_data.get("identified_gap") or "",
+                    "status": "available",
+                })
+            if candidates:
+                _db.set_goal_teaching_candidates(goal["id"], candidates)
+                backfilled += 1
+                print(f"[Backfill] Goal {goal['id']}: saved {len(candidates)} candidates")
+        return {"success": True, "goals_backfilled": backfilled}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

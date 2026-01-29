@@ -110,6 +110,7 @@ export default function FeedPanel({
   const [hasMore, setHasMore] = useState(false)
   const [page, setPage] = useState(0)
   const abortRef = useRef<AbortController | null>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
   const scrollSentinelRef = useRef<HTMLDivElement>(null)
 
   const fetchFeedStream = useCallback(async (loadPage = 0, append = false, refresh = false) => {
@@ -231,9 +232,10 @@ export default function FeedPanel({
   // Infinite scroll: observe sentinel element at bottom
   useEffect(() => {
     if (!scrollSentinelRef.current || !hasMore) return
+    const root = scrollContainerRef.current || null
     const observer = new IntersectionObserver(
       ([entry]) => { if (entry.isIntersecting) handleLoadMore() },
-      { rootMargin: '200px' }
+      { root, rootMargin: '200px' }
     )
     observer.observe(scrollSentinelRef.current)
     return () => observer.disconnect()
@@ -337,7 +339,7 @@ export default function FeedPanel({
         </div>
       </div>
 
-      <div className="feed-items">
+      <div className="feed-items" ref={scrollContainerRef}>
         {items.length === 0 ? (
           <div className="feed-empty">
             <p>No items yet. Continue your conversation and refresh.</p>

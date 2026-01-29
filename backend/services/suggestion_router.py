@@ -194,6 +194,24 @@ class SuggestionRouter:
             if error_count > 1:
                 parts.append(f"I've noticed {error_count} errors in your recent commands.")
 
+        # Add learning-focused context
+        learning_opp = trigger.get("learning_opportunity")
+        if learning_opp:
+            parts.append(f"This could be a good moment to explore: **{learning_opp}**")
+
+        understanding = trigger.get("understanding_signal")
+        if understanding == "struggling":
+            parts.append("It looks like you're hitting some friction — want me to help break down what's happening?")
+        elif understanding == "copying":
+            parts.append("I see you're using AI assistance. Want to understand what the generated code is doing?")
+        elif understanding == "exploring":
+            parts.append("Looks like you're investigating — I can provide background on what you're looking at.")
+
+        # Include broader learning opportunities from recent activity
+        learning_opps = summary.get("learning_opportunities", [])
+        if learning_opps and not learning_opp:
+            parts.append(f"Topics worth exploring based on your recent activity: {', '.join(learning_opps[:3])}")
+
         if not parts:
             return "I'm observing your terminal activity."
 

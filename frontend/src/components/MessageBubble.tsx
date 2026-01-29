@@ -70,7 +70,7 @@ export default function MessageBubble({
       if (cleaned.includes('__TASK_CURRICULUM_PROPOSED__:')) {
         // Extract just the text before the marker, or use a default message
         const parts = cleaned.split('__TASK_CURRICULUM_PROPOSED__:')
-        cleaned = parts[0].trim() || "Here's the learning path I've designed for you."
+        cleaned = parts[0].trim() || "Here's the project path I've designed for you."
       }
       return cleaned
     }

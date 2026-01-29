@@ -50,7 +50,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
       <div className="login-container">
         <div className="login-header">
           <h1 className="login-title">Liminal</h1>
-          <p className="login-subtitle">Discover what you're curious about</p>
+          <p className="login-subtitle">Your companion for long-term projects</p>
         </div>
 
         <form onSubmit={handleSubmit} className="login-form">

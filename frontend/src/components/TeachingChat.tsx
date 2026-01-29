@@ -134,7 +134,6 @@ export default function TeachingChat({
             })
           )
           setMessages(restoredMessages)
-          console.log(`[TeachingChat] Restored ${restoredMessages.length} messages`)
         } else if (data.opening_message) {
           // New session - add opening message with type
           setMessages([{
@@ -157,8 +156,8 @@ export default function TeachingChat({
         // Connect WebSocket
         connectWebSocket(data.session_id)
         
-      } catch (error) {
-        console.error('[TeachingChat] Init error:', error)
+      } catch {
+        // failed silently
         setStatus('Failed to initialize. Please refresh.')
         
         // Fallback message
@@ -184,39 +183,32 @@ export default function TeachingChat({
         wsRef.current.close()
       }
       // Reset initRef so restoration can happen again when component remounts
-      console.log('[TeachingChat] Component unmounting, resetting initRef')
       initRef.current = false
     }
   }, [candidate, goalId, goalText, userId, onboardingInfo])
 
   const connectWebSocket = useCallback((sid: string) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      console.log('[TeachingChat] WebSocket already connected')
       return
     }
 
-    console.log(`[TeachingChat] Connecting WebSocket for session ${sid.slice(0, 8)}...`)
     const ws = new WebSocket(`${getWsUrl()}/ws/teaching/${sid}`)
 
     ws.onopen = () => {
-      console.log('[TeachingChat] WebSocket connected')
       setIsConnected(true)
       setStatus(null)  // Clear any loading status
     }
 
     ws.onclose = () => {
-      console.log('[TeachingChat] WebSocket disconnected')
       setIsConnected(false)
     }
 
-    ws.onerror = (error) => {
-      console.error('[TeachingChat] WebSocket error:', error)
+    ws.onerror = () => {
       setIsConnected(false)
     }
 
       ws.onmessage = (event) => {
       const data = JSON.parse(event.data)
-      console.log('[TeachingChat] Received:', data.type, 'phase:', data.phase)
 
       switch (data.type) {
         case 'status':
@@ -303,7 +295,6 @@ export default function TeachingChat({
           break
 
         case 'error':
-          console.error('[TeachingChat] Error:', data.message)
           setMessages(prev => [...prev, {
             id: crypto.randomUUID(),
             role: 'assistant',
@@ -314,7 +305,6 @@ export default function TeachingChat({
           break
 
         default:
-          console.log('[TeachingChat] Unknown message type:', data.type)
           // For any message, ensure loading is false and input is enabled
           setIsLoading(false)
           setStatus(null)
@@ -354,7 +344,6 @@ export default function TeachingChat({
         audio_mode: isAudioMode  // Tell backend if user wants audio
       }))
     } else {
-      console.error('[TeachingChat] WebSocket not connected')
       setIsLoading(false)
       setStatus('Connection lost. Please refresh.')
     }
@@ -367,7 +356,6 @@ export default function TeachingChat({
   // Stop recording IMMEDIATELY when audio is about to play
   useEffect(() => {
     if (isPlaying && isListening) {
-      console.log('[Voice] Stopping recording - audio playing')
       stopListening()
     }
   }, [isPlaying, isListening, stopListening])
@@ -396,7 +384,6 @@ export default function TeachingChat({
   // Stop recording when processing starts
   useEffect(() => {
     if (isLoading && isListening) {
-      console.log('[Voice] Stopping recording - processing started')
       stopListening()
     }
   }, [isLoading, isListening, stopListening])
@@ -412,7 +399,6 @@ export default function TeachingChat({
     if (isAudioMode && !isPlaying && !isListening && isSpeechSupported && !isLoading && isConnected && !hasNoMessages && !audioJustEnded) {
       const timer = setTimeout(() => {
         if (!isPlaying && !isLoading) {
-          console.log('[Voice] Starting recording after audio finished')
           startListening()
         }
       }, 500)
@@ -424,7 +410,6 @@ export default function TeachingChat({
       const remainingDelay = 1500 - timeSinceAudioEnd + 100
       const timer = setTimeout(() => {
         if (!isPlaying && !isLoading) {
-          console.log('[Voice] Starting recording after audio delay')
           startListening()
         }
       }, remainingDelay)

@@ -43,6 +43,7 @@ interface UseWebSocketReturn {
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>  // For restoring history - supports both direct value and updater function
   isConnected: boolean
   status: string | null
+  onSchemaUpdate: (listener: (schema: any) => void) => () => void
 }
 
 export function useWebSocket(sessionId: string, phase: 'discovery' | 'learning'): UseWebSocketReturn {
@@ -52,8 +53,9 @@ export function useWebSocket(sessionId: string, phase: 'discovery' | 'learning')
   const wsRef = useRef<WebSocket | null>(null)
   const streamingMessageIdRef = useRef<string | null>(null)
   const retryCountRef = useRef(0)
-  const maxRetries = 3
+  const maxRetries = 5
   const connectionTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const schemaListenersRef = useRef<Set<(schema: any) => void>>(new Set())
 
   // Connect to WebSocket with timeout and retry
   useEffect(() => {
@@ -73,9 +75,8 @@ export function useWebSocket(sessionId: string, phase: 'discovery' | 'learning')
       const wsBase = apiUrl.replace('http://', 'ws://').replace('https://', 'wss://')
       const wsUrl = `${wsBase}/ws/${phase}/${sessionId}`
       
-      console.log(`[WebSocket] Connecting to ${phase}... (attempt ${retryCountRef.current + 1})`)
       setStatus('Connecting...')
-      
+
       const ws = new WebSocket(wsUrl)
       wsRef.current = ws
 
@@ -85,11 +86,12 @@ export function useWebSocket(sessionId: string, phase: 'discovery' | 'learning')
           console.log('[WebSocket] Connection timeout, closing...')
           ws.close()
           
-          // Retry if under max retries
+          // Retry with exponential backoff
           if (retryCountRef.current < maxRetries) {
             retryCountRef.current++
+            const backoffMs = Math.min(1000 * Math.pow(2, retryCountRef.current - 1), 16000)
             setStatus(`Retrying... (${retryCountRef.current}/${maxRetries})`)
-            retryTimeout = setTimeout(connect, 1000)
+            retryTimeout = setTimeout(connect, backoffMs)
           } else {
             setStatus('Connection failed. Please refresh.')
           }
@@ -97,7 +99,6 @@ export function useWebSocket(sessionId: string, phase: 'discovery' | 'learning')
       }, 5000)
 
       ws.onopen = () => {
-        console.log(`[WebSocket] Connected: ${phase}`)
         if (connectionTimeoutRef.current) clearTimeout(connectionTimeoutRef.current)
         retryCountRef.current = 0
         setIsConnected(true)
@@ -105,9 +106,13 @@ export function useWebSocket(sessionId: string, phase: 'discovery' | 'learning')
       }
 
       ws.onmessage = (event) => {
-        console.log('[useWebSocket] Received message:', event.data.substring(0, 100) + '...')
         const data = JSON.parse(event.data)
-        console.log('[useWebSocket] Parsed data type:', data.type)
+
+        // Handle schema updates (pushed from backend instead of polling)
+        if (data.type === 'schema_update') {
+          schemaListenersRef.current.forEach(listener => listener(data.schema))
+          return
+        }
 
         // Handle error messages
         if (data.type === 'error') {
@@ -321,12 +326,9 @@ export function useWebSocket(sessionId: string, phase: 'discovery' | 'learning')
         setMessages(prev => [...prev, newMessage])
       }
 
-      ws.onerror = (error) => {
-        console.error('[WebSocket] Error:', error)
-      }
+      ws.onerror = () => {}
 
       ws.onclose = () => {
-        console.log('[WebSocket] Disconnected')
         setIsConnected(false)
       }
     }
@@ -346,16 +348,7 @@ export function useWebSocket(sessionId: string, phase: 'discovery' | 'learning')
 
   // Send message function
   const sendMessage = useCallback((content: string, audioMode: boolean = false) => {
-    console.log('[useWebSocket] sendMessage called:', {
-      hasWs: !!wsRef.current,
-      readyState: wsRef.current?.readyState,
-      isOpen: wsRef.current?.readyState === WebSocket.OPEN,
-      contentLength: content.length,
-      audioMode
-    })
-
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      console.log('[useWebSocket] Sending message to server...')
       // Add user message to UI immediately
       const userMessage: Message = {
         id: crypto.randomUUID(),
@@ -369,11 +362,6 @@ export function useWebSocket(sessionId: string, phase: 'discovery' | 'learning')
         content,
         audio_mode: audioMode  // Tell backend if user wants audio
       }))
-    } else {
-      console.error('[useWebSocket] Cannot send - WebSocket not ready!', {
-        current: wsRef.current,
-        readyState: wsRef.current?.readyState
-      })
     }
   }, [])
 
@@ -385,11 +373,14 @@ export function useWebSocket(sessionId: string, phase: 'discovery' | 'learning')
   // Send command without showing in UI (for internal commands like __ACCEPT_GOAL__)
   const sendCommand = useCallback((command: string) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      console.log('[useWebSocket] Sending command:', command)
       wsRef.current.send(JSON.stringify({ content: command }))
-    } else {
-      console.error('[useWebSocket] Cannot send command - WebSocket not ready!')
     }
+  }, [])
+
+  // Subscribe to schema updates pushed via WebSocket
+  const onSchemaUpdate = useCallback((listener: (schema: any) => void) => {
+    schemaListenersRef.current.add(listener)
+    return () => { schemaListenersRef.current.delete(listener) }
   }, [])
 
   return {
@@ -400,5 +391,6 @@ export function useWebSocket(sessionId: string, phase: 'discovery' | 'learning')
     setMessages,
     isConnected,
     status,
+    onSchemaUpdate,
   }
 }

@@ -27,7 +27,19 @@ OUTPUT FORMAT: Return a JSON array where each object has these fields:
 - "title": Brief catchy title (5-8 words)
 - "content": 2-4 sentences of substantive content with specific facts, mechanisms, or insights
 - "source_citation": Author(s) (Year). Title. Journal/Book. OR well-known researcher/theory name
+- "source_url": Full URL to the source (article, paper, blog post, video). Use REAL URLs only — do not fabricate links. If you don't have a real URL, omit this field.
+- "source_type": One of: "video", "article", "paper", "blog", "course". Choose the type that best matches the source.
+- "thumbnail_url": (optional) URL to a thumbnail image for the source. Only include if you are confident it's a real image URL.
+- "embed_url": (optional) For YouTube videos, provide the embed URL (e.g., "https://www.youtube.com/embed/VIDEO_ID"). Only for video source_type.
 - "relevance_note": One sentence on why this matters for the user's learning journey
+
+CONTENT MIX:
+Aim for a diverse mix of source types:
+- 1-2 videos (YouTube educational content, conference talks, lectures)
+- 2-3 articles or blog posts (technical blogs, tutorials, explainers)
+- 1-2 academic papers or books (seminal works, recent research)
+- 1 course or tutorial recommendation (if applicable)
+Do not force all items to be the same type.
 
 GUIDELINES BY CONTEXT TYPE:
 

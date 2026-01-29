@@ -17,7 +17,6 @@ interface User {
 }
 
 function App() {
-  console.log('[App] Rendering App component')
   const [phase, setPhase] = useState<Phase>('login')
   const [onboardingInfo, setOnboardingInfo] = useState<string>('')
   const [currentModel, setCurrentModel] = useState<string>('openai:gpt-4o')
@@ -83,12 +82,8 @@ function App() {
         setOnboardingInfo(userData.onboarding_info)
       }
       
-      console.log('[App] Loaded user data:', {
-        goals: loadedGoals.length,
-        hasOnboarding: !!userData.onboarding_info
-      })
-    } catch (err) {
-      console.error('[App] Failed to load user data:', err)
+    } catch {
+      // failed silently
     } finally {
       setIsLoadingUserData(false)
     }
@@ -96,36 +91,28 @@ function App() {
 
   // Handle login - go directly to discovery (skip model selection)
   const handleLogin = useCallback(async (userId: string, username: string, isNewUser: boolean, savedOnboardingInfo?: string) => {
-    console.log('[App] handleLogin called:', { userId, username, isNewUser })
     try {
       setUser({ id: userId, username })
       
       if (!isNewUser) {
-        console.log('[App] Loading user data for existing user')
         await loadUserData(userId)
         if (savedOnboardingInfo) {
           setOnboardingInfo(savedOnboardingInfo)
         }
       }
       
-      // Always go directly to discovery
-      console.log('[App] Setting phase to discovery')
       setActiveGoalSessionId(null)
       setActiveTeachingId(null)
       setActiveMainView('exploration')
       setPhase('discovery')
-      console.log('[App] Login complete')
-    } catch (error) {
-      console.error('[App] Error in handleLogin:', error)
-      // Keep user on login screen if there's an error
+    } catch {
+      // failed silently - keep user on login screen
     }
   }, [loadUserData])
 
 
   // Handle when a goal is accepted in discovery chat
   const handleGoalAccepted = useCallback(async (goal: string, _discoverySessionId: string) => {
-    console.log('[App] Goal accepted:', goal)
-    
     let goalId = 0
     let displayId: string = crypto.randomUUID()
     if (user) {
@@ -133,9 +120,8 @@ function App() {
         const savedGoal = await api.createGoal(user.id, goal)
         goalId = savedGoal.id
         displayId = savedGoal.id.toString() as string
-        console.log('[App] Goal saved to database:', savedGoal)
-      } catch (err) {
-        console.error('[App] Failed to save goal:', err)
+      } catch {
+        // failed silently
       }
     }
     
@@ -189,12 +175,11 @@ function App() {
   // Handle creating a new learning path directly (without exploration)
   const handleCreatePath = useCallback(async () => {
     if (!user) {
-      console.error('[App] Cannot create path: user not logged in')
       return
     }
 
     // Prompt user for goal text
-    const goalText = prompt('What learning path would you like to create?')
+    const goalText = prompt('What project would you like to start?')
     if (!goalText || !goalText.trim()) {
       return // User cancelled or entered empty text
     }
@@ -202,7 +187,6 @@ function App() {
     try {
       // Create goal in database
       const savedGoal = await api.createGoal(user.id, goalText.trim())
-      console.log('[App] Goal created:', savedGoal)
 
       // Create a session for this goal
       await api.startDiscoverySession(
@@ -227,16 +211,13 @@ function App() {
       setActiveGoalSessionId(newSession.id)
       setActiveTeachingId(null)
       setActiveMainView('goal')
-    } catch (error) {
-      console.error('[App] Failed to create path:', error)
-      alert('Failed to create learning path. Please try again.')
+    } catch {
+      alert('Failed to create project. Please try again.')
     }
   }, [user, modelConfig])
 
   // Handle when teaching candidate is accepted - ADD to goal's teaching list (with deduplication)
   const handleTeachingCandidateAccepted = useCallback((candidate: any, goalSessionId: string) => {
-    console.log('[App] Teaching candidate accepted for goal:', goalSessionId, candidate)
-
     // Convert to Sidebar's TeachingCandidate format
     const sidebarCandidate: TeachingCandidate = {
       id: candidate.id,
@@ -268,8 +249,6 @@ function App() {
   // Handle when curriculum is accepted - ADD all tasks to goal's teaching list
   const handleCurriculumAccepted = useCallback((tasks: any[]) => {
     if (!activeGoalSessionId) return
-
-    console.log('[App] Curriculum accepted with tasks:', tasks.length)
 
     // Convert to Sidebar's TeachingCandidate format
     const sidebarTasks: TeachingCandidate[] = tasks.map(t => ({
@@ -325,8 +304,6 @@ function App() {
   // )
 
   const showSidebar = phase === 'discovery'
-
-  console.log('[App] Phase:', phase, 'showSidebar:', showSidebar, 'user:', user)
 
   return (
     <div className="app-container" style={{ minHeight: '100vh', width: '100%', backgroundColor: '#fafafa' }}>

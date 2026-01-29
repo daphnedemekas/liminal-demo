@@ -26,30 +26,46 @@ For each concept mentioned, assess their proficiency:
 
 1. "heard_of" - They've encountered the term but can't explain it
    - Example: "I've heard of RAG" or "something about vectors?"
-   
+   - Concrete: "I've heard of backpropagation"
+
 2. "understands_basics" - They can describe what it is at a high level
    - Example: "RAG retrieves relevant documents and adds them to the prompt"
-   
+   - Concrete: "It's how neural networks learn by adjusting weights"
+
 3. "can_explain" - They can explain HOW it works mechanistically
    - Example: "The query gets embedded, then we do similarity search in the vector DB..."
-   
+   - Concrete: "The chain rule propagates error gradients backwards through layers..."
+
 4. "can_apply" - They've used it or can reason about tradeoffs
    - Example: "In my project I found that chunk size really matters for retrieval quality"
-   
+   - Concrete: "I've implemented backprop from scratch / debugged vanishing gradients"
+
 5. "expert" - Deep knowledge, can discuss edge cases, alternatives, research
    - Example: "Hybrid search with BM25 + dense retrieval often outperforms pure semantic..."
 
 === GRANULARITY GUIDELINES ===
 
+SPECIFICITY TEST: The concept name must contain a mechanism, process, or specific entity — not just a domain label.
+
 DON'T collect:
 - Vague concepts like "machine learning" (too general)
 - Concepts unrelated to the learning goal (even if mentioned by the user)
 - General background knowledge that doesn't relate to the goal
+- **Business/marketing terms that are just labels** (e.g., "product-market fit", "consumer incentives", "go-to-market strategy") - these are not teachable concepts, they're just terminology
+- **Abstract goals or preferences** (e.g., "wants to understand deeply", "likes visual explanations")
+- **Domain names without specific mechanisms** (e.g., "backend design" is too vague - need "how REST APIs handle state" or "why database transactions use ACID properties")
 
-DO collect specific sub-concepts that are DIRECTLY relevant to the learning goal:
+DO collect specific sub-concepts that are DIRECTLY relevant to the learning goal AND have teachable depth:
+- **Must have a "how" or "why"** that can be explained (mechanisms, principles, structures)
+- **Must be something you could teach in 5-15 minutes** with concrete content
 - For chess endgames goal: "king and pawn endgame principles", "opposition in king endgames", "pawn promotion techniques"
-- For RAG goal: "the purpose of RAG (retrieve docs to reduce hallucinations)", "chunking strategies for document retrieval"
-- For any goal: Only concepts that help assess their readiness for THAT specific goal
+- For RAG goal: "how RAG retrieves documents to ground LLM responses", "why chunk size affects retrieval quality", "how vector similarity search works"
+- For any goal: Only concepts that help assess their readiness for THAT specific goal AND have actual teachable content
+
+**TEST FOR TEACHABILITY**: Before including a concept, ask:
+1. "Could I explain HOW this works or WHY it matters?" (If no → not a teachable concept)
+2. "Is this just a label/term, or does it have underlying mechanisms?" (If just a label → exclude)
+3. "Could I find a chapter/article specifically about this mechanism?" (If no → too vague)
 
 === ANALYSIS FRAMEWORK ===
 
@@ -82,19 +98,21 @@ concept_updates: array of objects, each with:
   - proficiency: "heard_of" | "understands_basics" | "can_explain" | "can_apply" | "expert"
   - evidence: string (quote from their response supporting this assessment)
   - is_gap: boolean (true if this is something they DON'T know or are confused about)
+  - resource_hint: string (a suggested Wikipedia article, textbook chapter, or course module that proves this is a real, specific topic)
+  - gap_type: "inferred" | "confirmed" — "confirmed" means the user explicitly said they don't understand; "inferred" means the LLM is guessing based on absence of evidence
 practical_experience: string or null
 learning_style_hints: array of strings
 evidence: object with technique, quote, revealed fields
-ready_for_task_proposal: boolean
+ready_for_task_proposal: boolean (NOTE: Raise confidence threshold — do not set ready_for_task_proposal=true unless level_confidence >= 0.6)
 reasoning: string
 
 Example:
 assessed_level would be "intermediate"
 level_confidence would be 0.6
 concept_updates would be [
-  {{"concept": "the purpose of RAG (retrieve docs to ground LLM)", "proficiency": "understands_basics", "evidence": "I've read about RAG as one approach", "is_gap": false}},
-  {{"concept": "how to evaluate retrieval quality", "proficiency": "heard_of", "evidence": "I'm not sure what else is out there", "is_gap": true}},
-  {{"concept": "chunking strategies for documents", "proficiency": "heard_of", "evidence": null, "is_gap": true}}
+  {{"concept": "the purpose of RAG (retrieve docs to ground LLM)", "proficiency": "understands_basics", "evidence": "I've read about RAG as one approach", "is_gap": false, "resource_hint": "Wikipedia: Retrieval-augmented generation", "gap_type": null}},
+  {{"concept": "how to evaluate retrieval quality", "proficiency": "heard_of", "evidence": "I'm not sure what else is out there", "is_gap": true, "resource_hint": "IR textbook ch. on precision/recall/NDCG", "gap_type": "confirmed"}},
+  {{"concept": "chunking strategies for documents", "proficiency": "heard_of", "evidence": null, "is_gap": true, "resource_hint": "LangChain docs: Text Splitters", "gap_type": "inferred"}}
 ]
 
 CRITICAL RULES:
@@ -106,6 +124,14 @@ CRITICAL RULES:
 6. Quote ACTUAL words from their response as evidence
 7. Mark gaps (is_gap: true) for things they explicitly don't know or are confused about (but only if relevant to the goal)
 8. Before including any concept, ask: "Is this DIRECTLY relevant to the learning goal?" If no, exclude it
-9. Return ONLY valid JSON - no text before or after
+9. **TEACHABILITY TEST**: Before including a concept, verify it has teachable depth:
+   - ❌ "product-market fit" → Just a business term, no mechanism to explain
+   - ❌ "consumer incentives" → Just a label, what's the actual concept?
+   - ❌ "backend design" → Too vague, what specific mechanism?
+   - ✅ "how REST APIs handle stateless communication" → Has a mechanism
+   - ✅ "why database transactions use ACID properties" → Has principles to explain
+   - ✅ "how vector similarity search finds relevant documents" → Has a process to teach
+10. **If the user mentions a term but doesn't demonstrate understanding of the underlying concept, don't extract the term as a concept** - only extract if there's evidence they understand or are confused about the MECHANISM
+11. Return ONLY valid JSON - no text before or after
 
 

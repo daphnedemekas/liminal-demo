@@ -31,6 +31,11 @@
 
 ## Q: Do you want to explore a topic that is new to you, or get clearer on something you've already visited?
 
+## Project-focused questions:
+## Q: What's a project you've been thinking about but haven't started yet?
+## Q: Is there something you're working on that you'd like to make more progress on?
+## Q: What's a goal you keep coming back to but haven't fully figured out?
+
 ## To detect entry mode (people/problems/ideas):
 
 ## Q: Do you tend to get interested in things through people, problems, or ideas first?

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { api } from '../services/api'
 import { stripMarkdown } from '../utils/textUtils'
 
@@ -8,6 +8,9 @@ interface FeedItem {
   content: string
   source_citation?: string
   source_url?: string
+  source_type?: 'video' | 'article' | 'paper' | 'blog' | 'course' | 'general'
+  thumbnail_url?: string
+  embed_url?: string
   relevance_note?: string
 }
 
@@ -19,7 +22,62 @@ interface FeedPanelProps {
   teachingCandidateId?: string
   teachingTopic?: string
   userBackground?: string
-  goalsSummary?: string  // For exploration - summary of all goals
+  goalsSummary?: string
+}
+
+function LazyVideoEmbed({ embedUrl, title }: { embedUrl: string; title: string }) {
+  const [loaded, setLoaded] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!ref.current) return
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) setLoaded(true) },
+      { rootMargin: '100px' }
+    )
+    observer.observe(ref.current)
+    return () => observer.disconnect()
+  }, [])
+
+  return (
+    <div ref={ref} className="feed-video-embed">
+      {loaded ? (
+        <iframe
+          src={embedUrl}
+          title={title}
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+          loading="lazy"
+        />
+      ) : (
+        <div className="feed-video-placeholder">
+          <span className="feed-video-play-icon">▶</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SkeletonCard() {
+  return (
+    <div className="feed-item feed-skeleton">
+      <div className="skeleton-line skeleton-title" />
+      <div className="skeleton-line skeleton-text" />
+      <div className="skeleton-line skeleton-text short" />
+      <div className="skeleton-line skeleton-source" />
+    </div>
+  )
+}
+
+function getSourceIcon(sourceType?: string) {
+  switch (sourceType) {
+    case 'video': return '🎬'
+    case 'article': return '📰'
+    case 'paper': return '📄'
+    case 'blog': return '✍️'
+    case 'course': return '🎓'
+    default: return '📖'
+  }
 }
 
 export default function FeedPanel({
@@ -37,6 +95,7 @@ export default function FeedPanel({
   const [error, setError] = useState<string | null>(null)
   const [justGenerated, setJustGenerated] = useState(false)
   const [hasEverLoaded, setHasEverLoaded] = useState(false)
+  const [expandedVideo, setExpandedVideo] = useState<number | null>(null)
 
   const fetchFeed = useCallback(async () => {
     setLoading(true)
@@ -57,8 +116,7 @@ export default function FeedPanel({
       setItems(response.items)
       setJustGenerated(response.generated)
       setHasEverLoaded(true)
-    } catch (err) {
-      console.error('[FeedPanel] Error fetching feed:', err)
+    } catch (_) {
       setError('Failed to load feed')
       setItems([])
     } finally {
@@ -70,27 +128,18 @@ export default function FeedPanel({
     fetchFeed()
   }
 
-  // Auto-load feed on mount (only once) - delay to let opening question generate first
+  // Auto-load feed on mount with delay
   useEffect(() => {
     if (!hasEverLoaded && !loading) {
-      // Delay feed loading so the chat opening question can generate first
-      // The user will be reading the question while feed loads in background
-      const timer = setTimeout(() => {
-        fetchFeed()
-      }, 5000)  // 5 second delay
+      const timer = setTimeout(() => { fetchFeed() }, 5000)
       return () => clearTimeout(timer)
     }
   }, [hasEverLoaded, loading, fetchFeed])
 
-  // Auto-refresh when context changes (goal/teaching panel switches)
+  // Auto-refresh when context changes
   useEffect(() => {
-    // Auto-refresh when context changes significantly (goal text, teaching topic)
-    // This triggers when the user switches panels or a new goal/teaching is created
     if (hasEverLoaded && !loading) {
-      // Add a small delay to let the conversation context update
-      const timer = setTimeout(() => {
-        fetchFeed()
-      }, 2000)
+      const timer = setTimeout(() => { fetchFeed() }, 2000)
       return () => clearTimeout(timer)
     }
   }, [goalText, teachingTopic, goalId, teachingCandidateId])
@@ -108,22 +157,23 @@ export default function FeedPanel({
     }
   }
 
-  // Loading state
+  // Skeleton loading state
   if (loading) {
     return (
       <div className="feed-panel">
         <div className="feed-header">
           <h3>{getContextLabel()}</h3>
         </div>
-        <div className="feed-loading">
-          <div className="feed-loading-spinner" />
-          <p>Curating relevant content...</p>
+        <div className="feed-items">
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
         </div>
       </div>
     )
   }
 
-  // Error state
   if (error) {
     return (
       <div className="feed-panel">
@@ -140,21 +190,21 @@ export default function FeedPanel({
     )
   }
 
-  // Initial state - not yet loaded (will auto-load after delay)
   if (!hasEverLoaded && !loading) {
     return (
       <div className="feed-panel">
         <div className="feed-header">
           <h3>{getContextLabel()}</h3>
         </div>
-        <div className="feed-empty">
-          <p>Content will load shortly...</p>
+        <div className="feed-items">
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
         </div>
       </div>
     )
   }
 
-  // Loaded state with items
   return (
     <div className="feed-panel">
       <div className="feed-header">
@@ -173,29 +223,78 @@ export default function FeedPanel({
           </button>
         </div>
       </div>
-      
+
       <div className="feed-items">
         {items.length === 0 ? (
           <div className="feed-empty">
             <p>No items yet. Continue your conversation and refresh.</p>
             <button onClick={handleGenerate} className="feed-generate-btn">
-              ✨ Generate Feed
+              Generate Feed
             </button>
           </div>
         ) : (
           items.map((item) => (
-            <div key={item.id} className="feed-item">
-              <h4 className="feed-item-title">{stripMarkdown(item.title)}</h4>
-              <p className="feed-item-content">{item.content}</p>
-              {item.source_citation && (
-                <div className="feed-item-source">
-                  <span className="feed-source-icon">📖</span>
-                  <span className="feed-source-text">{item.source_citation}</span>
+            <div key={item.id} className={`feed-item feed-item-${item.source_type || 'general'}`}>
+              {/* Thumbnail for articles/blogs/papers */}
+              {item.thumbnail_url && item.source_type !== 'video' && (
+                <div className="feed-item-thumbnail">
+                  <img src={item.thumbnail_url} alt="" loading="lazy" />
                 </div>
               )}
-              {item.relevance_note && (
-                <p className="feed-item-relevance">{item.relevance_note}</p>
-              )}
+
+              <div className="feed-item-body">
+                <div className="feed-item-type-badge">
+                  <span>{getSourceIcon(item.source_type)}</span>
+                  <span className="feed-type-label">{item.source_type || 'resource'}</span>
+                </div>
+
+                <h4 className="feed-item-title">
+                  {item.source_url ? (
+                    <a href={item.source_url} target="_blank" rel="noopener noreferrer">
+                      {stripMarkdown(item.title)}
+                    </a>
+                  ) : (
+                    stripMarkdown(item.title)
+                  )}
+                </h4>
+
+                <p className="feed-item-content">{item.content}</p>
+
+                {/* Video embed */}
+                {item.source_type === 'video' && item.embed_url && (
+                  <>
+                    {expandedVideo === item.id ? (
+                      <LazyVideoEmbed embedUrl={item.embed_url} title={item.title} />
+                    ) : (
+                      <button
+                        className="feed-play-btn"
+                        onClick={() => setExpandedVideo(item.id)}
+                      >
+                        ▶ Watch Video
+                      </button>
+                    )}
+                  </>
+                )}
+
+                {item.source_citation && (
+                  <div className="feed-item-source">
+                    <span className="feed-source-icon">{getSourceIcon(item.source_type)}</span>
+                    <span className="feed-source-text">
+                      {item.source_url ? (
+                        <a href={item.source_url} target="_blank" rel="noopener noreferrer">
+                          {item.source_citation}
+                        </a>
+                      ) : (
+                        item.source_citation
+                      )}
+                    </span>
+                  </div>
+                )}
+
+                {item.relevance_note && (
+                  <p className="feed-item-relevance">{item.relevance_note}</p>
+                )}
+              </div>
             </div>
           ))
         )}

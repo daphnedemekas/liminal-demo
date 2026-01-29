@@ -53,7 +53,7 @@ export default function GoalChat({
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const initRef = useRef(false)
 
-  const { messages, sendMessage, sendCommand, isConnected, status, addMessage, setMessages } = useWebSocket(actualSessionId || '', 'discovery')
+  const { messages, sendMessage, sendCommand, isConnected, status, addMessage, setMessages, onSchemaUpdate } = useWebSocket(actualSessionId || '', 'discovery')
   
   // These must be after useWebSocket since they depend on messages
   const hasFirstAssistantMessage = messages.some((msg) => msg.role === 'assistant')
@@ -96,16 +96,8 @@ export default function GoalChat({
     if (initRef.current) return
     initRef.current = true
 
-    console.log('[GoalChat] Initializing goal session for:', goal, 'goalId:', goalId)
-
     // Start/resume discovery session with user_id and goal_id
     api.startDiscoverySession(modelConfig, goal, userId, goalId).then((response) => {
-      console.log('[GoalChat] Goal session response:', {
-        session_id: response.session_id,
-        is_resumed: response.is_resumed,
-        history_length: response.conversation_history?.length || 0
-      })
-      
       setActualSessionId(response.session_id)
       setIsResumed(response.is_resumed)
       
@@ -116,9 +108,6 @@ export default function GoalChat({
       
       // If resuming, load the conversation history
       if (response.is_resumed && response.conversation_history?.length > 0) {
-        console.log('[GoalChat] Resuming with', response.conversation_history.length, 'messages')
-        // Filter out onboarding/background messages (they're used for context but shouldn't be displayed)
-        // Onboarding messages are typically long and contain background info
         let historyToRestore = response.conversation_history.filter((msg: any) => {
           // Skip user messages that look like onboarding (long background text)
           if (msg.role === 'user' && onboardingInfo) {
@@ -129,7 +118,6 @@ export default function GoalChat({
                 (msgContent.length > 100 && 
                  (msgContent.includes('interested') || msgContent.includes('background') || 
                   msgContent.toLowerCase().includes('do') && msgContent.toLowerCase().includes('interested')))) {
-              console.log('[GoalChat] Filtering out onboarding message from history')
               return false
             }
           }
@@ -151,13 +139,9 @@ export default function GoalChat({
       }
       
       setInitialized(true)
-    }).catch(err => {
-      console.error('[GoalChat] Failed to start goal session:', err)
-    })
-    
-    // Reset initRef on unmount so restoration can happen again when component remounts
+    }).catch(_err => {})
+
     return () => {
-      console.log('[GoalChat] Component unmounting, resetting initRef')
       initRef.current = false
     }
   }, [goalId, goal, userId, modelConfig, addMessage, setMessages])
@@ -174,10 +158,7 @@ export default function GoalChat({
     // 4. Either: not resumed, OR resumed but with no messages (first time opening goal panel)
     const needsOnboarding = !isResumed || messages.length === 0
     if (isConnected && initialized && !onboardingSent && onboardingInfo && needsOnboarding) {
-      console.log('[GoalChat] Sending onboarding to trigger opening message', { isResumed, messagesLength: messages.length })
       setOnboardingSent(true)
-      // Send the user's background context silently (not shown in UI)
-      // Use special command format so backend knows not to display it
       setTimeout(() => {
         sendCommand(`__ONBOARDING__${onboardingInfo}`)
       }, 100)
@@ -188,8 +169,6 @@ export default function GoalChat({
   useEffect(() => {
     const lastMessage = messages[messages.length - 1]
     if (lastMessage?.type === 'create_teaching_panel' && lastMessage.teachingCandidate) {
-      console.log('[GoalChat] Creating teaching panel:', lastMessage.teachingCandidate.topic)
-      // Pass the goal conversation history along with the candidate
       const conversationHistory = messages
         .filter(m => m.role === 'user' || m.role === 'assistant')
         .map(m => ({ role: m.role, content: m.content }))
@@ -218,7 +197,6 @@ export default function GoalChat({
   useEffect(() => {
     const lastMessage = messages[messages.length - 1]
     if (lastMessage?.type === 'task_curriculum_accepted' && lastMessage.tasks) {
-      console.log('[GoalChat] Curriculum accepted with tasks:', lastMessage.tasks)
       setIsGeneratingPath(false)
       const conversationHistory = messages
         .filter(m => m.role === 'user' || m.role === 'assistant')
@@ -244,7 +222,6 @@ export default function GoalChat({
   // Stop recording IMMEDIATELY when audio is about to play
   useEffect(() => {
     if (isPlaying && isListening) {
-      console.log('[Voice] Stopping recording - audio playing')
       stopListening()
     }
   }, [isPlaying, isListening, stopListening])
@@ -260,7 +237,6 @@ export default function GoalChat({
   useEffect(() => {
     const lastMessage = messages[messages.length - 1]
     if (isAudioMode && lastMessage?.role === 'assistant' && lastMessage?.audio_url && !isPlaying && lastMessage.id !== lastPlayedMessageId) {
-      console.log('[Voice] Auto-playing audio for message:', lastMessage.id)
       // Stop any recording before playing
       if (isListening) {
         stopListening()
@@ -276,7 +252,6 @@ export default function GoalChat({
   // Stop recording when processing starts
   useEffect(() => {
     if (status && isListening) {
-      console.log('[Voice] Stopping recording - processing started')
       stopListening()
     }
   }, [status, isListening, stopListening])
@@ -299,7 +274,6 @@ export default function GoalChat({
     if (isAudioMode && !isPlaying && !isListening && isSpeechSupported && !hasPendingAudio && !isProcessing && !hasNoMessages && !audioJustEnded) {
       const timer = setTimeout(() => {
         if (!isPlaying) {
-          console.log('[Voice] Starting recording after audio finished')
           startListening()
         }
       }, 500)
@@ -311,7 +285,6 @@ export default function GoalChat({
       const remainingDelay = 1500 - timeSinceAudioEnd + 100
       const timer = setTimeout(() => {
         if (!isPlaying) {
-          console.log('[Voice] Starting recording after audio delay')
           startListening()
         }
       }, remainingDelay)
@@ -458,9 +431,9 @@ export default function GoalChat({
               className="generate-path-btn"
               onClick={handleGenerateLearningPath}
               disabled={!isConnected || isGeneratingPath}
-              title="Generate a structured learning path based on current conversation"
+              title="Generate a project path based on current conversation"
             >
-              {isGeneratingPath ? 'Generating...' : 'Generate Learning Path'}
+              {isGeneratingPath ? 'Generating...' : 'Generate Project Path'}
             </button>
             <div className="goal-chat-status">
               <AudioToggle isAudioMode={isAudioMode} onToggle={toggleAudioMode} />
@@ -533,7 +506,7 @@ export default function GoalChat({
                   {/* Display curriculum tasks if available */}
                   {msg.curriculum && msg.curriculum.tasks && msg.curriculum.tasks.length > 0 && (
                     <div className="curriculum-tasks-preview">
-                      <h4>Learning Path ({msg.curriculum.tasks.length} tasks)</h4>
+                      <h4>Project Path ({msg.curriculum.tasks.length} steps)</h4>
                       <ol className="curriculum-tasks-list">
                         {msg.curriculum.tasks.map((task: any, idx: number) => (
                           <li key={task.id || idx} className={`curriculum-task-item ${task.status || (idx === 0 ? 'available' : 'locked')}`}>
@@ -653,10 +626,11 @@ export default function GoalChat({
 
         {/* Profile Panel - Right Side */}
         {shouldShowSidePanels && (
-          <ProfilePanel 
-            sessionId={actualSessionId} 
-            isConnected={isConnected} 
+          <ProfilePanel
+            sessionId={actualSessionId}
+            isConnected={isConnected}
             initialSummary={profileSummary}
+            onSchemaUpdate={onSchemaUpdate}
             onTeachingCandidateClick={(candidate) => {
               // Convert to TeachingCandidate format and call handler
               onTeachingCandidateAccepted({

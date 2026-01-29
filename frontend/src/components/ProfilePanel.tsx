@@ -10,6 +10,7 @@ interface ProfilePanelProps {
   isTeachingSession?: boolean
   onGoalSelected?: (goalText: string) => void
   onTeachingCandidateClick?: (candidate: any) => void
+  onSchemaUpdate?: (listener: (schema: any) => void) => () => void
 }
 
 // Helper functions to convert numeric values to descriptive labels
@@ -68,7 +69,7 @@ const getMarkerLevelBadge = (level: string): { label: string; className: string 
   }
 }
 
-export default function ProfilePanel({ sessionId, isConnected, initialSummary, isTeachingSession = false, onGoalSelected, onTeachingCandidateClick }: ProfilePanelProps) {
+export default function ProfilePanel({ sessionId, isConnected, initialSummary, isTeachingSession = false, onGoalSelected, onTeachingCandidateClick, onSchemaUpdate }: ProfilePanelProps) {
   const [schema, setSchema] = useState<any>(null)
   const [teachingSchema, setTeachingSchema] = useState<TeachingSchema | null>(null)
   const [summary, setSummary] = useState<string>(initialSummary || '')
@@ -87,33 +88,49 @@ export default function ProfilePanel({ sessionId, isConnected, initialSummary, i
     }
   }, [initialSummary])
 
+  // Fetch schema once on mount, then listen for WebSocket-driven updates
   useEffect(() => {
     if (!sessionId || !isConnected) return
 
     const fetchSchema = async () => {
       try {
         if (isTeachingSession) {
-          // Fetch teaching state
           const data = await api.getTeachingState(sessionId)
           setTeachingSchema(data)
-          // Use narrative_summary from teaching schema
           if (data.narrative_summary) {
             setSummary(data.narrative_summary)
           }
         } else {
-          // Fetch discovery schema
           const data = await api.getDiscoverySchema(sessionId)
           setSchema(data)
         }
-      } catch (error) {
-        console.error('Failed to fetch schema:', error)
+      } catch (_) {
+        // Schema fetch failed, will retry on next update
       }
     }
 
+    // Initial fetch
     fetchSchema()
-    const interval = setInterval(fetchSchema, 3000)
+
+    // Subscribe to WebSocket-driven schema updates (no more polling)
+    if (onSchemaUpdate) {
+      const unsubscribe = onSchemaUpdate((updatedSchema) => {
+        if (isTeachingSession) {
+          setTeachingSchema(updatedSchema)
+          if (updatedSchema.narrative_summary) {
+            setSummary(updatedSchema.narrative_summary)
+          }
+        } else {
+          setSchema(updatedSchema)
+        }
+      })
+      return unsubscribe
+    }
+
+    // Fallback: poll every 10s if no WebSocket schema subscription available
+    const interval = setInterval(fetchSchema, 10000)
     return () => clearInterval(interval)
-  }, [sessionId, isConnected, isTeachingSession])
+  }, [sessionId, isConnected, isTeachingSession, onSchemaUpdate])
 
   const generateSummary = useCallback(async (forceRefresh = false) => {
     if (isTeachingSession) {
@@ -141,12 +158,12 @@ export default function ProfilePanel({ sessionId, isConnected, initialSummary, i
         setLastSummaryTurn(currentTurn)
         try {
           await api.saveProfileSummary(sessionId, data.summary)
-        } catch (saveErr) {
-          console.error('Failed to save summary:', saveErr)
+        } catch (_) {
+          // Summary save failed
         }
       }
-    } catch (err) {
-      console.error('Failed to generate summary:', err)
+    } catch (_) {
+      // Summary generation failed
     } finally {
       setIsGeneratingSummary(false)
     }
@@ -169,20 +186,12 @@ export default function ProfilePanel({ sessionId, isConnected, initialSummary, i
 
   // Generate AI reasoning / inner monologue
   const generateReasoning = useCallback(async () => {
-    if (isTeachingSession || !schema || !sessionId || isGeneratingReasoning) {
-      console.log('[Reasoning] Skipping - conditions not met:', { isTeachingSession, hasSchema: !!schema, sessionId, isGeneratingReasoning })
-      return
-    }
-    
+    if (isTeachingSession || !schema || !sessionId || isGeneratingReasoning) return
+
     const currentTurn = schema.interview_state?.turns_elapsed || 0
-    
+
     // Skip if we already have reasoning for this turn
-    if (aiReasoning && currentTurn === lastReasoningTurn) {
-      console.log('[Reasoning] Skipping - already have reasoning for turn', currentTurn)
-      return
-    }
-    
-    console.log('[Reasoning] Generating reasoning for turn', currentTurn)
+    if (aiReasoning && currentTurn === lastReasoningTurn) return
     setIsGeneratingReasoning(true)
     try {
       const apiUrl = getApiBaseUrl()
@@ -193,14 +202,11 @@ export default function ProfilePanel({ sessionId, isConnected, initialSummary, i
       })
       if (response.ok) {
         const data = await response.json()
-        console.log('[Reasoning] Received:', data.reasoning?.substring(0, 100))
         setAiReasoning(data.reasoning)
         setLastReasoningTurn(currentTurn)
-      } else {
-        console.error('[Reasoning] API error:', response.status)
       }
-    } catch (err) {
-      console.error('[Reasoning] Failed:', err)
+    } catch (_) {
+      // Reasoning generation failed
     } finally {
       setIsGeneratingReasoning(false)
     }
@@ -264,7 +270,7 @@ export default function ProfilePanel({ sessionId, isConnected, initialSummary, i
           {curriculum && curriculum.steps && curriculum.steps.length > 0 && (
             <div className="profile-card">
               <div className="card-header">
-                <span className="card-title">Learning Path</span>
+                <span className="card-title">Project Path</span>
                 <span className="item-count">
                   {curriculum.completed_step_ids?.length || 0}/{curriculum.steps.length}
                 </span>
@@ -383,7 +389,7 @@ export default function ProfilePanel({ sessionId, isConnected, initialSummary, i
     return (
       <div className="profile-panel">
         <div className="profile-panel-header">
-          <h2>Learner Profile</h2>
+          <h2>Profile</h2>
         </div>
         <div className="profile-panel-content">
           <div className="profile-card empty-state">
@@ -426,7 +432,7 @@ export default function ProfilePanel({ sessionId, isConnected, initialSummary, i
           <p className="summary-text">
             {isGeneratingSummary && !summary 
               ? 'Analyzing conversation...' 
-              : summary || 'Continue the conversation to build your learner profile.'}
+              : summary || 'Continue the conversation to build your project profile.'}
           </p>
         </div>
 

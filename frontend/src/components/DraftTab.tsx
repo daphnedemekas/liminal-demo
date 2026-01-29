@@ -31,6 +31,7 @@ export default function DraftTab({ goalId, userId, onSendToChat }: DraftTabProps
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const lastSavedContentRef = useRef<string>('')
+  const lastKnownVersionRef = useRef<number>(0)
 
   const loadDocuments = async () => {
     try {
@@ -47,13 +48,16 @@ export default function DraftTab({ goalId, userId, onSendToChat }: DraftTabProps
           // Reload the active document to get latest version
           const refreshed = await api.getDocument(activeDocument.id)
           setActiveDocument(refreshed)
+          lastKnownVersionRef.current = refreshed.version
+          lastSavedContentRef.current = refreshed.plain_text || ''
         } else {
           // Select first document
           setActiveDocument(activeItems[0])
+          lastKnownVersionRef.current = activeItems[0].version
+          lastSavedContentRef.current = activeItems[0].plain_text || ''
         }
       }
     } catch (err: any) {
-      console.error('[DraftTab] Failed to load documents:', err)
       setError(err.message || 'Failed to load documents')
     } finally {
       setIsLoading(false)
@@ -71,9 +75,7 @@ export default function DraftTab({ goalId, userId, onSendToChat }: DraftTabProps
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
         })
-        console.log('[DraftTab] Goal panels initialized')
       } catch (err) {
-        console.error('[DraftTab] Failed to initialize panels (may already exist):', err)
         // Not critical - panels may already exist
       }
     }
@@ -83,18 +85,22 @@ export default function DraftTab({ goalId, userId, onSendToChat }: DraftTabProps
   // Save function that can be called directly
   const saveDocument = useCallback(async (doc: DocumentItem | null, content?: string): Promise<boolean> => {
     if (!doc) return false
-    
+
     const contentToSave = content !== undefined ? content : doc.plain_text
     try {
       const updated = await api.updateDocument(doc.id, { plain_text: contentToSave })
+      // Version conflict detection: if server version jumped by more than 1,
+      // someone else edited the document concurrently
+      if (lastKnownVersionRef.current > 0 && updated.version > lastKnownVersionRef.current + 1) {
+        setError('Warning: This document was edited elsewhere. Your changes have been saved, but you may want to reload to see the latest version.')
+      }
+      lastKnownVersionRef.current = updated.version
       // Update local state with server response to ensure sync
       setActiveDocument(prev => prev?.id === doc.id ? updated : prev)
       // Track last saved content to avoid unnecessary saves
       lastSavedContentRef.current = contentToSave || ''
-      console.log('[DraftTab] Saved document', doc.id)
       return true
     } catch (err: any) {
-      console.error('[DraftTab] Failed to save:', err)
       setError(err.message || 'Failed to save document')
       return false
     }
@@ -115,17 +121,14 @@ export default function DraftTab({ goalId, userId, onSendToChat }: DraftTabProps
     const ws = new WebSocket(`${apiUrl}/ws/document/${activeDocument.id}`)
 
     ws.onopen = () => {
-      console.log('[DraftTab] Document WebSocket connected for document', activeDocument.id)
       setError(null)
     }
 
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data)
-        console.log('[DraftTab] WebSocket message received:', data.type, data)
         
         if (data.type === 'suggestions') {
-          console.log('[DraftTab] Received suggestions:', data.suggestions)
           const suggestionsList = Array.isArray(data.suggestions) ? data.suggestions : []
           setSuggestions(suggestionsList)
           setIsGeneratingSuggestions(false)
@@ -135,29 +138,23 @@ export default function DraftTab({ goalId, userId, onSendToChat }: DraftTabProps
             setError(null)
           }
         } else if (data.type === 'sync_ack') {
-          console.log('[DraftTab] Document synced, version:', data.version)
         } else if (data.type === 'error') {
-          console.error('[DraftTab] Server error:', data.message)
           setError(data.message || 'Error generating suggestions')
           setIsGeneratingSuggestions(false)
         } else {
-          console.log('[DraftTab] Received unknown message type:', data.type, data)
         }
       } catch (err) {
-        console.error('[DraftTab] Error parsing WebSocket message:', err, event.data)
         setError('Failed to parse server response')
         setIsGeneratingSuggestions(false)
       }
     }
 
     ws.onerror = (err) => {
-      console.error('[DraftTab] WebSocket error:', err)
       setError('Failed to connect to document service. Check backend logs.')
       setIsGeneratingSuggestions(false)
     }
 
     ws.onclose = (event) => {
-      console.log('[DraftTab] Document WebSocket closed', event.code, event.reason)
       if (event.code !== 1000) { // Not a normal closure
         setError('Connection closed unexpectedly')
       }
@@ -215,7 +212,6 @@ export default function DraftTab({ goalId, userId, onSendToChat }: DraftTabProps
     // Prevent multiple clicks - check if already expanding or this suggestion was already expanded
     const suggestionId = `${suggestion.suggestion_type}-${suggestion.text.substring(0, 50)}-${index}`
     if (isExpandingSuggestion || expandedSuggestionId === suggestionId) {
-      console.log('[DraftTab] Already expanding or suggestion already sent, ignoring click')
       return
     }
 
@@ -223,7 +219,6 @@ export default function DraftTab({ goalId, userId, onSendToChat }: DraftTabProps
       setIsExpandingSuggestion(true)
       setExpandedSuggestionId(suggestionId)
       setError(null)
-      console.log('[DraftTab] Expanding suggestion:', suggestion)
       
       // Call backend to expand the suggestion
       const apiUrl = getApiBaseUrl()
@@ -251,9 +246,7 @@ export default function DraftTab({ goalId, userId, onSendToChat }: DraftTabProps
       // Send the expanded message to chat (only once)
       onSendToChat(expandedMessage)
       
-      console.log('[DraftTab] Sent expanded suggestion to chat')
     } catch (err: any) {
-      console.error('[DraftTab] Failed to expand suggestion:', err)
       setError(err.message || 'Failed to expand suggestion')
       // Reset on error so user can retry
       setExpandedSuggestionId(null)
@@ -286,7 +279,6 @@ export default function DraftTab({ goalId, userId, onSendToChat }: DraftTabProps
       return
     }
     
-    console.log('[DraftTab] Requesting suggestions for document', activeDocument.id)
     setIsGeneratingSuggestions(true)
     setError(null)
     setSuggestions([]) // Clear old suggestions
@@ -312,7 +304,6 @@ export default function DraftTab({ goalId, userId, onSendToChat }: DraftTabProps
       // Note: This will be cleared when suggestions arrive in the WebSocket handler
       return () => clearTimeout(timeoutId)
     } catch (err) {
-      console.error('[DraftTab] Error sending suggestion request:', err)
       setError('Failed to send request. Please try again.')
       setIsGeneratingSuggestions(false)
     }
@@ -330,59 +321,31 @@ export default function DraftTab({ goalId, userId, onSendToChat }: DraftTabProps
     }
   }
 
-  // Save before page unload and on unmount
+  // Flush pending saves on page unload and component unmount
   useEffect(() => {
-    const handleBeforeUnload = async (_e: BeforeUnloadEvent) => {
-      if (activeDocument && activeDocument.plain_text) {
-        // Clear any pending debounced save
-        if (saveTimeoutRef.current) {
-          clearTimeout(saveTimeoutRef.current)
-          saveTimeoutRef.current = null
-        }
-        // Force immediate save (synchronous if possible)
-        // Note: We can't use async/await in beforeunload, so we'll use sendBeacon
-        // But sendBeacon doesn't support PUT, so we'll need to use a POST endpoint or
-        // just rely on the debounced save that should have already fired
-        // For now, we'll ensure the save happens in the cleanup function
+    const handleBeforeUnload = () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+        saveTimeoutRef.current = null
+      }
+      if (activeDocument) {
+        saveDocument(activeDocument)
       }
     }
 
     window.addEventListener('beforeunload', handleBeforeUnload)
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload)
-      // Save on component unmount - this is more reliable
-      if (activeDocument && activeDocument.plain_text) {
-        if (saveTimeoutRef.current) {
-          clearTimeout(saveTimeoutRef.current)
-          saveTimeoutRef.current = null
-        }
-        // Save immediately before unmounting
-        saveDocument(activeDocument).catch(err => {
-          console.error('[DraftTab] Failed to save on unmount:', err)
-        })
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+        saveTimeoutRef.current = null
+      }
+      if (activeDocument) {
+        saveDocument(activeDocument)
       }
     }
-  }, [activeDocument])
-
-  // Periodic auto-save every 30 seconds as backup (only if content changed)
-  useEffect(() => {
-    if (!activeDocument) return
-
-    // Initialize last saved content ref
-    lastSavedContentRef.current = activeDocument.plain_text || ''
-
-    const interval = setInterval(() => {
-      // Use ref to get current activeDocument state
-      const currentContent = activeDocument?.plain_text || ''
-      if (currentContent !== lastSavedContentRef.current && currentContent) {
-        saveDocument(activeDocument, currentContent).catch(err => {
-          console.error('[DraftTab] Failed periodic save:', err)
-        })
-      }
-    }, 30000) // Every 30 seconds
-
-    return () => clearInterval(interval)
   }, [activeDocument, saveDocument])
+
 
   const handleCreateDocument = async () => {
     if (!newDocTitle.trim() || isCreating) return
@@ -398,7 +361,6 @@ export default function DraftTab({ goalId, userId, onSendToChat }: DraftTabProps
       // Focus textarea after creation
       setTimeout(() => textareaRef.current?.focus(), 100)
     } catch (err: any) {
-      console.error('[DraftTab] Failed to create document:', err)
       setError(err.message || 'Failed to create document')
       setIsCreating(false)
     }
@@ -408,8 +370,8 @@ export default function DraftTab({ goalId, userId, onSendToChat }: DraftTabProps
     try {
       const doc = await api.getDocument(docId)
       setActiveDocument(doc)
+      lastKnownVersionRef.current = doc.version
     } catch (err: any) {
-      console.error('[DraftTab] Failed to load document:', err)
       setError(err.message || 'Failed to load document')
     }
   }
@@ -421,9 +383,7 @@ export default function DraftTab({ goalId, userId, onSendToChat }: DraftTabProps
       setIsSaving(true)
       setError(null)
       await api.updateDocument(activeDocument.id, { plain_text: activeDocument.plain_text })
-      console.log('[DraftTab] Manually saved document')
     } catch (err: any) {
-      console.error('[DraftTab] Failed to save:', err)
       setError(err.message || 'Failed to save document')
     } finally {
       setIsSaving(false)
@@ -523,7 +483,6 @@ export default function DraftTab({ goalId, userId, onSendToChat }: DraftTabProps
                       try {
                         await api.updateDocument(activeDocument.id, { title: activeDocument.title })
                       } catch (err) {
-                        console.error('[DraftTab] Failed to update title:', err)
                         setError('Failed to save title')
                       }
                     }

@@ -1,4 +1,12 @@
-"""AI observation layer for terminal activity."""
+"""AI observation layer for terminal activity.
+
+Observes terminal commands and output to:
+- Detect what the user is building/working on
+- Identify potential confusion or errors
+- Suggest learning opportunities based on the tools and patterns they use
+- Track whether the user understands what their code is doing
+- Balance curiosity/motivation with actual learning needs
+"""
 import sys
 import re
 from pathlib import Path
@@ -6,7 +14,6 @@ from typing import Optional, Dict, List, Any, Tuple
 from datetime import datetime
 from dataclasses import dataclass, field
 
-# Add parent directory to path to import from src
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
 
@@ -23,6 +30,8 @@ class CommandObservation:
     topics_detected: List[str] = field(default_factory=list)
     should_trigger_suggestion: bool = False
     suggestion_priority: int = 0  # 0-10, higher = more urgent
+    learning_opportunity: Optional[str] = None  # What the user might learn from this
+    understanding_signal: Optional[str] = None  # "confident", "exploring", "struggling", "copying"
 
 
 class TerminalObserver:
@@ -150,29 +159,83 @@ class TerminalObserver:
 
         return detected
 
+    def _detect_understanding_signal(self, command: str, output: str, is_error: bool, activity_type: str) -> Optional[str]:
+        """Detect the user's likely understanding level from their terminal behavior."""
+        cmd_lower = command.strip().lower()
+
+        # Rapid repeated commands with errors → struggling
+        recent_errors = sum(1 for obs in self.observation_buffer[-5:] if obs.is_error)
+        if recent_errors >= 3:
+            return "struggling"
+
+        # Claude Code usage → might be copying without understanding
+        if activity_type == "claude_code":
+            return "copying"
+
+        # Running tests after changes → confident workflow
+        if any(p in cmd_lower for p in ["pytest", "jest", "npm test", "cargo test", "go test"]):
+            return "confident"
+
+        # Exploratory commands (ls, cat, grep, find, help, man) → exploring
+        if any(p in cmd_lower for p in ["--help", "man ", "cat ", "less ", "grep ", "find "]):
+            return "exploring"
+
+        # Git workflow commands → likely understands what they're doing
+        if activity_type == "git" and any(p in cmd_lower for p in ["commit", "push", "merge"]):
+            return "confident"
+
+        return None
+
+    def _detect_learning_opportunity(self, command: str, output: str, is_error: bool, topics: List[str]) -> Optional[str]:
+        """Detect what the user might benefit from learning."""
+        cmd_lower = command.strip().lower()
+
+        if is_error:
+            # Error-specific learning opportunities
+            if "permission denied" in output.lower():
+                return "File permissions and access control"
+            if "module not found" in output.lower() or "no module named" in output.lower():
+                return "Package management and dependency resolution"
+            if "syntax error" in output.lower():
+                return "Language syntax patterns"
+            if "merge conflict" in output.lower():
+                return "Git merge conflict resolution strategies"
+            return f"Debugging {topics[0] if topics else 'this type of error'}"
+
+        # Tool-specific learning
+        if "docker" in cmd_lower and "build" in cmd_lower:
+            return "Docker image layering and build optimization"
+        if "git rebase" in cmd_lower:
+            return "Git history rewriting — when and why to use rebase vs merge"
+        if any(p in cmd_lower for p in ["kubectl", "k8s"]):
+            return "Kubernetes orchestration concepts"
+
+        return None
+
     def process_command(self, command: str, output: str, exit_code: int = 0) -> CommandObservation:
         """Process a command and create an observation."""
         activity_type = self.detect_activity_type(command)
         is_error, error_summary = self.is_error_output(output, exit_code)
         topics = self.detect_topics(command, output)
 
-        # Determine if this should trigger a suggestion
         should_trigger = self._should_trigger_suggestion(
             activity_type=activity_type,
             is_error=is_error,
             topics=topics
         )
 
-        # Calculate priority
         priority = self._calculate_suggestion_priority(
             activity_type=activity_type,
             is_error=is_error,
             topics=topics
         )
 
+        understanding_signal = self._detect_understanding_signal(command, output, is_error, activity_type)
+        learning_opportunity = self._detect_learning_opportunity(command, output, is_error, topics)
+
         observation = CommandObservation(
             command=command,
-            output=output[:5000],  # Limit output size
+            output=output[:5000],
             exit_code=exit_code,
             timestamp=datetime.utcnow().isoformat(),
             activity_type=activity_type,
@@ -180,7 +243,9 @@ class TerminalObserver:
             error_summary=error_summary,
             topics_detected=topics,
             should_trigger_suggestion=should_trigger,
-            suggestion_priority=priority
+            suggestion_priority=priority,
+            learning_opportunity=learning_opportunity,
+            understanding_signal=understanding_signal,
         )
 
         # Add to buffer
@@ -262,6 +327,10 @@ class TerminalObserver:
         errors = [obs for obs in recent if obs.is_error]
         error_summaries = [obs.error_summary for obs in errors if obs.error_summary]
 
+        # Detect overall understanding pattern
+        understanding_signals = [obs.understanding_signal for obs in recent if obs.understanding_signal]
+        learning_opportunities = [obs.learning_opportunity for obs in recent if obs.learning_opportunity]
+
         return {
             "has_activity": True,
             "command_count": len(recent),
@@ -278,6 +347,8 @@ class TerminalObserver:
             "topics_detected": topics,
             "has_errors": len(errors) > 0,
             "error_summaries": error_summaries[:5],
+            "understanding_signals": understanding_signals[-5:],
+            "learning_opportunities": list(set(learning_opportunities))[:5],
         }
 
     def should_trigger_suggestion_now(self) -> bool:
@@ -313,6 +384,8 @@ class TerminalObserver:
                 "is_error": trigger_observation.is_error if trigger_observation else False,
                 "error_summary": trigger_observation.error_summary if trigger_observation else None,
                 "topics": trigger_observation.topics_detected if trigger_observation else [],
+                "learning_opportunity": trigger_observation.learning_opportunity if trigger_observation else None,
+                "understanding_signal": trigger_observation.understanding_signal if trigger_observation else None,
             },
             "priority": max_priority,
         }

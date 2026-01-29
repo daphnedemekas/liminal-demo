@@ -60,7 +60,7 @@ export default function TrajectoryPanel({ userId }: TrajectoryPanelProps) {
         console.log('[Trajectory] Loaded with', d.goals?.length || 0, 'goals')
       }
     } catch (e: any) {
-      setError(e?.message || 'Failed to load trajectory')
+      setError(e?.message || 'Failed to load project history')
     } finally {
       setIsLoading(false)
     }
@@ -197,7 +197,7 @@ export default function TrajectoryPanel({ userId }: TrajectoryPanelProps) {
   if (isLoading) {
     return (
       <div className="trajectory-panel">
-        <div className="loading">Loading trajectory...</div>
+        <div className="loading">Loading project history...</div>
       </div>
     )
   }
@@ -222,7 +222,7 @@ export default function TrajectoryPanel({ userId }: TrajectoryPanelProps) {
           <div className="trajectory-graph">
             <div className="profile-card">
               <div className="card-header">
-                <span className="card-title">Learning Graph</span>
+                <span className="card-title">Project Graph</span>
                 <span className="item-count">{graphNodes.length}</span>
               </div>
               <div className="graph-tree">
@@ -727,7 +727,7 @@ function TeachingDetailView({ detailData, onBack }: any) {
       {curriculum_plan?.steps && curriculum_plan.steps.length > 0 && (
         <div className="profile-card">
           <div className="card-header">
-            <span className="card-title">Learning Path</span>
+            <span className="card-title">Project Path</span>
           </div>
           <div className="curriculum-steps">
             {curriculum_plan.steps.map((step: any, idx: number) => (

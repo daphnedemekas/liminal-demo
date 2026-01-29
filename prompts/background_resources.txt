@@ -76,3 +76,15 @@ Format: [CONCEPT_NAME]: definition
 [VALUE_TEST]: When unsure if topic has genuine value. Purpose: Check if topic is worth pursuing or if it's superficial. Ask: "Why does this matter to you?" or "What drew you to this in the first place?" If they can't articulate value, might be triggered situational interest only - tread lightly.
 
 [SCOPE_REDUCTION]: When topic is too broad. Purpose: Narrow to tractable 5-minute learning target. Ask: "If we could make just one thing click in the next 5 minutes, what would be most satisfying?" or "What's the smallest piece of this that would feel like progress?"
+
+## Teaching Angle Selection (RIASEC-based)
+
+When generating teaching content, select the primary teaching angle based on the user's RIASEC profile:
+
+[INVESTIGATIVE_TEACHING]: Start with mechanisms and principles. 'Here's HOW it works...' Lead with the system, the math, the logic. Good for users who ask 'why?' and 'how?'
+
+[ARTISTIC_TEACHING]: Start with intuition and visualization. 'Picture this...' Lead with analogies, visual metaphors, elegant insights. Good for users who respond to beauty and surprise.
+
+[REALISTIC_SOCIAL_TEACHING]: Start with applications and impact. 'Here's what this lets you DO...' Lead with use cases, practical examples, real-world impact. Good for users who ask 'so what?' and 'how do I use this?'
+
+Default to INVESTIGATIVE_TEACHING if RIASEC profile is not yet determined.

@@ -95,10 +95,10 @@ export default function Sidebar({
               className={`sidebar-exploration-btn ${isTrajectoryActive ? 'active' : ''}`}
               onClick={onSelectTrajectory}
               disabled={!onSelectTrajectory}
-              title={!onSelectTrajectory ? 'Trajectory unavailable' : 'View longitudinal learner trajectory'}
+              title={!onSelectTrajectory ? 'Project history unavailable' : 'View your project history'}
             >
               <span className="sidebar-exploration-icon"></span>
-              <span>Learner Trajectory</span>
+              <span>Project Journey</span>
             </button>
           </div>
 
@@ -122,7 +122,7 @@ export default function Sidebar({
                 <button
                   className="sidebar-add-btn"
                   onClick={onCreatePath}
-                  title="Create new learning path"
+                  title="Start a new project"
                 >
                   +
                 </button>
@@ -131,7 +131,7 @@ export default function Sidebar({
             <div className="sidebar-sessions">
               {goalSessions.length === 0 ? (
                 <div className="sidebar-empty">
-                  <p className="sidebar-hint">Goals will appear here as you explore.</p>
+                  <p className="sidebar-hint">Your projects will appear here as you explore.</p>
                 </div>
               ) : (
                 goalSessions.map((session) => (
@@ -165,7 +165,7 @@ export default function Sidebar({
                       )}
                     </div>
 
-                    {/* Teaching Candidates (sub-items) - Learning Tasks */}
+                    {/* Deep Dives (sub-items) - Project Steps */}
                     {expandedGoals.has(session.id) && session.teachingCandidates.length > 0 && (
                       <div className="sidebar-teaching-list">
                         {session.teachingCandidates.map((tc, idx) => {

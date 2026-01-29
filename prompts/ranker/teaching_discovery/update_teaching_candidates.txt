@@ -76,16 +76,23 @@ A teaching candidate MUST pass ALL of these tests:
 1. CONCRETENESS TEST:
    - Could you find a chapter or article specifically about this?
    - Is it a specific conceptual topic, not an abstract goal or preference?
+   - **Does it have a mechanism, principle, or structure that can be explained?**
+   - **Is it more than just a label or term?**
 
-   ✅ VALID: "how backpropagation calculates gradients"
-   ✅ VALID: "why TCP uses a three-way handshake"
-   ✅ VALID: "what eigenvalues represent geometrically"
-   ✅ VALID: "how CRISPR edits DNA sequences"
+   ✅ VALID: "how backpropagation calculates gradients" (has a mechanism)
+   ✅ VALID: "why TCP uses a three-way handshake" (has a principle)
+   ✅ VALID: "what eigenvalues represent geometrically" (has a structure)
+   ✅ VALID: "how CRISPR edits DNA sequences" (has a process)
+   ✅ VALID: "how REST APIs handle stateless communication" (has a mechanism)
 
    ❌ INVALID: "wants to feel less overwhelmed" (abstract goal → conversational theme)
    ❌ INVALID: "prefers visual explanations" (preference → conversational theme)
    ❌ INVALID: "neural networks" (too broad, no specific question)
    ❌ INVALID: "struggles with abstraction" (metacognitive pattern → conversational theme)
+   ❌ INVALID: "product-market fit" (just a business term, no mechanism to explain)
+   ❌ INVALID: "consumer incentives" (just a label, what's the actual concept?)
+   ❌ INVALID: "backend design" (too vague, no specific mechanism)
+   ❌ INVALID: "optimizing LLMs for verifiable metrics" (too abstract, what's the actual technique?)
 
 2. SCOPE TEST:
    - Can this be explained in 5-15 minutes?
@@ -135,18 +142,23 @@ For each topic mentioned in conversation:
 === EXTRACTION LOGIC ===
 
 IF user mentions a concrete topic with a specific gap:
-1. Extract the specific question they want answered
-2. Identify their current understanding (if shared)
-3. Identify the specific gap or confusion
-4. Validate concreteness: Could you find a chapter about this exact thing?
-5. Assess scope: 5min, 10min, 15min, or too_broad?
-6. Assess goal-relevance: Is this a stepping stone toward {user_goal}?
-7. If passes all tests → create teaching candidate with goal_relevance field
+1. **Understand what the actual concept is** - don't just extract the term verbatim
+   - If they say "product-market fit", ask: What's the actual concept? (e.g., "how to validate market demand for a product")
+   - If they say "consumer incentives", ask: What mechanism? (e.g., "how pricing affects consumer behavior")
+   - If they say "backend design", ask: What specific aspect? (e.g., "how REST APIs handle state")
+2. Extract the specific question they want answered (about the MECHANISM, not the term)
+3. Identify their current understanding (if shared) - what do they actually understand about the mechanism?
+4. Identify the specific gap or confusion - what about the mechanism is unclear?
+5. Validate concreteness: Could you find a chapter about this exact mechanism/principle?
+6. **Validate teachability**: Does this have a "how" or "why" that can be explained? (If no → not a teaching candidate)
+7. Assess scope: 5min, 10min, 15min, or too_broad?
+8. Assess goal-relevance: Is this a stepping stone toward {user_goal}?
+9. If passes all tests → create teaching candidate with goal_relevance field
 
-IF topic is too broad or abstract:
+IF topic is too broad or abstract, or just a label/term without mechanism:
 1. Do NOT create teaching candidate yet
 2. It will be tracked in conversational_themes
-3. Through probing, it may spawn a teaching candidate later
+3. Through probing, it may spawn a teaching candidate later (once we understand the actual concept)
 
 === RELATIONSHIP TO CONVERSATIONAL THEMES ===
 

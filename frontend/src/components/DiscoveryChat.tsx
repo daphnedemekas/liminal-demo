@@ -31,7 +31,7 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
   const initRef = useRef(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  const { messages, sendMessage, sendCommand, isConnected, status, addMessage, setMessages } = useWebSocket(actualSessionId || '', 'discovery')
+  const { messages, sendMessage, sendCommand, isConnected, status, addMessage, setMessages, onSchemaUpdate } = useWebSocket(actualSessionId || '', 'discovery')
   
   // These must be after useWebSocket since they depend on messages
   // Count assistant messages - need at least 2 (background prompt + response) before showing panels
@@ -62,9 +62,8 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
       if (userId) {
         try {
           await api.updateOnboarding(userId, messageText)
-          console.log('[DiscoveryChat] Saved background info to user profile')
-        } catch (err) {
-          console.error('[DiscoveryChat] Failed to save background info:', err)
+        } catch {
+          // failed silently
         }
       }
       
@@ -85,33 +84,22 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
   // Reset initRef when component unmounts to allow re-initialization on remount
   useEffect(() => {
     return () => {
-      console.log('[DiscoveryChat] Component unmounting, resetting init flag')
       initRef.current = false
     }
   }, [])
 
   // Initialize session and get opening message
   useEffect(() => {
-    console.log('[DiscoveryChat] Component mounted, initializing session...')
-
     // React 18 StrictMode runs effects twice in dev; guard so we don't double-create sessions / duplicate messages.
     // But allow retry if we have an error
     if (initRef.current && !sessionError) {
-      console.log('[DiscoveryChat] Already initialized, skipping')
       return
     }
     initRef.current = true
     setSessionError(null)
 
-    console.log('[DiscoveryChat] Starting discovery session with model config:', modelConfig, 'userId:', userId)
-
     // Pass userId for persistence (no goal for exploration)
     api.startDiscoverySession(modelConfig, undefined, userId).then((response) => {
-      console.log('[DiscoveryChat] Session response:', {
-        session_id: response.session_id,
-        is_resumed: response.is_resumed,
-        history_length: response.conversation_history?.length || 0
-      })
       setActualSessionId(response.session_id)
       setSessionError(null)
 
@@ -122,7 +110,6 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
       
       // If resuming, always restore conversation history and show options for how to continue
       if (response.is_resumed && response.conversation_history?.length > 0) {
-        console.log('[DiscoveryChat] Resuming with', response.conversation_history.length, 'messages')
         // Always restore messages first - they should never disappear
         const restoredMessages = response.conversation_history.map((msg: any, idx: number) => ({
           id: `restored-${idx}`,
@@ -145,28 +132,23 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
         setAwaitingBackground(true)
         setOnboardingSent(true)  // Don't trigger automatic onboarding send
         setQueuedOpening({ content: backgroundPrompt, audio_url: undefined })
-        console.log('[DiscoveryChat] No onboarding info, showing background prompt')
       } else if (response.opening_message && response.opening_message.trim()) {
         // New session with opening message
         setQueuedOpening({
           content: response.opening_message,
           audio_url: response.audio_url || undefined,
         })
-        console.log('[DiscoveryChat] Queued opening message:', response.opening_message.substring(0, 50) + '...')
       } else {
         // No opening message - just mark as ready to send onboarding
         setQueuedOpening({ content: '', audio_url: undefined })
-        console.log('[DiscoveryChat] No opening message, will go straight to contextual response')
       }
-    }).catch(err => {
-      console.error('[DiscoveryChat] Failed to start session:', err)
+    }).catch(() => {
       setSessionError('Failed to connect to the server. Please try again.')
       initRef.current = false  // Allow retry
     })
     
     // Reset initRef on unmount so restoration can happen again when component remounts
     return () => {
-      console.log('[DiscoveryChat] Component unmounting, resetting initRef')
       initRef.current = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -175,7 +157,6 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
   // Show background prompt when waiting for user to provide background
   useEffect(() => {
     if (isConnected && awaitingBackground && queuedOpening?.content && messages.length === 0) {
-      console.log('[DiscoveryChat] Showing background prompt to user')
       addMessage({
         id: 'background-prompt',
         role: 'assistant',
@@ -186,22 +167,11 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
 
   // Send onboarding info automatically once connected (when we have background info)
   useEffect(() => {
-    console.log('[DiscoveryChat] Onboarding effect check:', {
-      isConnected,
-      hasOnboardingInfo: !!onboardingInfo,
-      onboardingSent,
-      hasQueuedOpening: !!queuedOpening,
-      actualSessionId
-    })
-
     if (isConnected && onboardingInfo && !onboardingSent && queuedOpening) {
-      console.log('[DiscoveryChat] All conditions met, sending onboarding...')
       setOnboardingSent(true)
 
       // Small delay to ensure WebSocket is fully ready
       setTimeout(() => {
-        console.log('[DiscoveryChat] Sending onboarding message now (silently)')
-
         // Send the user's onboarding/background info silently (not shown in chat UI)
         // The AI will use this context and respond with a contextual opening
         sendCommand(onboardingInfo)
@@ -237,7 +207,6 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
   useEffect(() => {
     const lastMessage = messages[messages.length - 1]
     if (lastMessage?.type === 'create_goal_panel' && onGoalAccepted && actualSessionId && lastMessage.goalData) {
-      console.log('[DiscoveryChat] Creating goal panel:', lastMessage.goalData.goal)
       onGoalAccepted(lastMessage.goalData.goal, actualSessionId)
     }
   }, [messages, onGoalAccepted, actualSessionId])
@@ -250,7 +219,6 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
   // Stop recording IMMEDIATELY when audio is about to play
   useEffect(() => {
     if (isPlaying && isListening) {
-      console.log('[Voice] Stopping recording - audio playing')
       stopListening()
     }
   }, [isPlaying, isListening, stopListening])
@@ -266,7 +234,6 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
   useEffect(() => {
     const lastMessage = messages[messages.length - 1]
     if (isAudioMode && lastMessage?.role === 'assistant' && lastMessage?.audio_url && !isPlaying && lastMessage.id !== lastPlayedMessageId) {
-      console.log('[Voice] Auto-playing audio for message:', lastMessage.id)
       // Stop any recording before playing
       if (isListening) {
         stopListening()
@@ -282,7 +249,6 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
   // Stop recording when processing starts
   useEffect(() => {
     if (status && isListening) {
-      console.log('[Voice] Stopping recording - processing started')
       stopListening()
     }
   }, [status, isListening, stopListening])
@@ -304,7 +270,6 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
       const timer = setTimeout(() => {
         // Double-check we're still not playing
         if (!isPlaying) {
-          console.log('[Voice] Starting recording after audio finished')
           startListening()
         }
       }, 500)
@@ -316,7 +281,6 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
       const remainingDelay = 1500 - timeSinceAudioEnd + 100
       const timer = setTimeout(() => {
         if (!isPlaying) {
-          console.log('[Voice] Starting recording after audio delay')
           startListening()
         }
       }, remainingDelay)
@@ -570,10 +534,11 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
 
         {/* Profile Panel - show after first assistant message */}
         {onboardingInfo && shouldShowSidePanels && (
-          <ProfilePanel 
-            sessionId={actualSessionId} 
-            isConnected={isConnected} 
+          <ProfilePanel
+            sessionId={actualSessionId}
+            isConnected={isConnected}
             initialSummary={profileSummary}
+            onSchemaUpdate={onSchemaUpdate}
             onGoalSelected={onGoalAccepted ? (goalText) => {
               if (actualSessionId) {
                 onGoalAccepted(goalText, actualSessionId)

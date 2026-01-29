@@ -1,11 +1,18 @@
 import { useState, useEffect } from 'react'
 import { stripMarkdown } from '../utils/textUtils'
 
-/** Shorten text to a sidebar-friendly title (max ~40 chars). */
+/** Shorten text to a sidebar-friendly title (max ~40 chars).
+ *  Strips common verbose goal preambles so the subject comes first. */
 const toTitle = (text: string, max = 40): string => {
-  const clean = stripMarkdown(text).replace(/\s+/g, ' ').trim()
+  let clean = stripMarkdown(text).replace(/\s+/g, ' ').trim()
+  // Strip leading filler phrases so the actual subject is visible
+  clean = clean.replace(
+    /^(Build a comprehensive understanding of|Develop a deep understanding of|Master the principles of|Gain a thorough understanding of|Understand the fundamentals of|Learn about|Understand|Master|Explore|Develop|Build)\s+/i,
+    ''
+  )
+  // Capitalize first letter after stripping
+  clean = clean.charAt(0).toUpperCase() + clean.slice(1)
   if (clean.length <= max) return clean
-  // Try to cut at a word boundary
   const cut = clean.lastIndexOf(' ', max)
   return clean.slice(0, cut > 20 ? cut : max) + '…'
 }

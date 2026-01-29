@@ -1271,16 +1271,16 @@ body {
     position: fixed;
     top: 0;
     left: 0;
-    width: 80%;
-    max-width: 320px;
+    width: 100%;
+    max-width: 100%;
     min-width: 0;
     height: 100vh;
     max-height: 100vh;
     z-index: 1000;
     background: #ffffff;
-    border-right: 1px solid var(--border-hairline);
+    border-right: none;
     border-bottom: none;
-    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.15);
+    box-shadow: none;
     overflow-y: auto;
   }
 
@@ -1290,7 +1290,7 @@ body {
     position: fixed;
     inset: 0;
     background: rgba(0, 0, 0, 0.3);
-    z-index: -1;
+    z-index: 999;
   }
 
   .sidebar-sessions {

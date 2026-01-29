@@ -111,6 +111,18 @@ async def login(request: LoginRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.patch("/goal/{goal_id}")
+async def update_goal(goal_id: int, body: dict):
+    """Update goal text."""
+    try:
+        goal_text = body.get("goal_text")
+        if goal_text:
+            _db.update_goal_text(goal_id, goal_text)
+        return {"ok": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/user/{user_id}/data", response_model=UserDataResponse)
 async def get_user_data(user_id: str):
     """Get all user data including goals and exploration session."""

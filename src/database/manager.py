@@ -663,6 +663,17 @@ class DatabaseManager:
         finally:
             session.close()
 
+    def update_goal_text(self, goal_id: int, goal_text: str):
+        """Update goal text."""
+        session = self._get_session()
+        try:
+            goal = session.query(UserGoal).filter_by(id=goal_id).first()
+            if goal:
+                goal.goal_text = goal_text
+                session.commit()
+        finally:
+            session.close()
+
     def get_user_goals(self, user_id: str) -> list:
         """Get all goals for a user."""
         session = self._get_session()

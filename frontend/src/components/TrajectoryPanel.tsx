@@ -363,7 +363,10 @@ function ProfileEvolutionChart({ learnerModel }: { learnerModel: any }) {
   const profilePoints = stability?.confidence_in_profile || []
   const targetPoints = stability?.confidence_in_target || []
 
+  // Hide if not enough data or all values are zero
   if (profilePoints.length < 2 && targetPoints.length < 2) return null
+  const hasNonZero = [...profilePoints, ...targetPoints].some((v: number) => v > 0)
+  if (!hasNonZero) return null
 
   // Build chart data — assume arrays are time-ordered values
   const maxLen = Math.max(profilePoints.length, targetPoints.length)

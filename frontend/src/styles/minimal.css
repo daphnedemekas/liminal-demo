@@ -903,6 +903,11 @@ body {
   min-width: 60px;
 }
 
+/* Backdrop only visible on mobile via media query */
+.sidebar-backdrop {
+  display: none;
+}
+
 .sidebar-header {
   display: flex;
   align-items: center;
@@ -919,7 +924,16 @@ body {
   overflow: hidden;
 }
 
-.sidebar.collapsed .sidebar-title {
+.sidebar-title-short {
+  display: none;
+}
+
+.sidebar.collapsed .sidebar-title-full {
+  display: none;
+}
+
+.sidebar.collapsed .sidebar-title-short {
+  display: inline;
   font-size: 20px;
 }
 
@@ -1228,35 +1242,122 @@ body {
   border-top: 1px solid var(--border-hairline);
 }
 
-/* Mobile Responsive for Sidebar */
+/* Mobile Responsive for Sidebar — Coda-style overlay */
 @media (max-width: 768px) {
   .app-with-sidebar {
     flex-direction: column;
+    position: relative;
   }
-  
-  .sidebar {
-    width: 100%;
-    min-width: 100%;
-    height: auto;
-    max-height: 200px;
-    border-right: none;
-    border-bottom: 1px solid #e2e8f0;
-  }
-  
+
+  /* Collapsed: thin top bar with hamburger */
   .sidebar.collapsed {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
     width: 100%;
     min-width: 100%;
-    height: 50px;
-    max-height: 50px;
+    height: 48px;
+    max-height: 48px;
+    z-index: 100;
+    border-right: none;
+    border-bottom: 1px solid var(--border-hairline);
+    background: #ffffff;
+    overflow: hidden;
   }
-  
+
+  /* Expanded: full-screen overlay */
+  .sidebar:not(.collapsed) {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 80%;
+    max-width: 320px;
+    min-width: 0;
+    height: 100vh;
+    max-height: 100vh;
+    z-index: 1000;
+    background: #ffffff;
+    border-right: 1px solid var(--border-hairline);
+    border-bottom: none;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.15);
+    overflow-y: auto;
+  }
+
+  /* Backdrop behind open sidebar */
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.3);
+    z-index: -1;
+  }
+
   .sidebar-sessions {
-    max-height: 100px;
+    max-height: none;
   }
-  
+
+  /* Main content gets top padding to clear the fixed header */
   .main-content {
     flex: 1;
     min-height: 0;
+    padding-top: 48px;
+  }
+
+  /* Collapsed header: hamburger on left, compact */
+  .sidebar.collapsed .sidebar-header {
+    padding: 10px 12px;
+    flex-direction: row-reverse;
+    justify-content: flex-end;
+    gap: 12px;
+  }
+
+  .sidebar.collapsed .sidebar-title-full {
+    display: inline;
+  }
+
+  .sidebar.collapsed .sidebar-title-short {
+    display: none;
+  }
+
+  .sidebar.collapsed .sidebar-title {
+    font-size: 16px;
+    font-weight: 700;
+  }
+
+  .sidebar.collapsed .sidebar-toggle {
+    border: none;
+    background: transparent;
+    font-size: 20px;
+    width: 32px;
+    height: 32px;
+  }
+
+  /* Expanded overlay header */
+  .sidebar:not(.collapsed) .sidebar-header {
+    padding: 16px;
+    position: sticky;
+    top: 0;
+    background: #ffffff;
+    z-index: 1;
+    border-bottom: 1px solid var(--border-hairline);
+  }
+
+  .sidebar:not(.collapsed) .sidebar-toggle {
+    font-size: 16px;
+  }
+
+  /* Hide model selector on mobile */
+  .sidebar-model-selector {
+    display: none;
+  }
+
+  /* Hide the Audio toggle button position — move into mobile header */
+  .goal-chat-header .audio-mode-toggle,
+  .discovery-chat-header .audio-mode-toggle {
+    position: relative;
+    top: auto;
+    right: auto;
   }
 }
 
@@ -7457,23 +7558,10 @@ body {
     padding: 12px;
   }
 
-  /* --- Sidebar --- */
-  .sidebar {
-    max-height: none;
-    height: auto;
-    overflow: visible;
-  }
-
-  /* When expanded on mobile, show as a dropdown overlay */
+  /* --- Sidebar (480px overrides) --- */
   .sidebar:not(.collapsed) {
-    position: relative;
-    max-height: 50vh;
-    overflow-y: auto;
-  }
-
-  .sidebar.collapsed {
-    height: 48px;
-    max-height: 48px;
+    width: 85%;
+    max-width: 300px;
   }
 
   .sidebar-toggle {

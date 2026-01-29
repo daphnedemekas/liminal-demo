@@ -42,6 +42,25 @@ class AudioService:
         self.voice_id = voice_id or "c4NIULtANlpduSDihsKJ"  # Custom voice
         self.model = "eleven_turbo_v2"  # Fast model for real-time feel
 
+    @staticmethod
+    def _strip_markdown(text: str) -> str:
+        """Remove markdown formatting so TTS doesn't read asterisks, hashes, etc."""
+        import re
+        # Bold/italic: **text**, *text*, __text__, _text_
+        text = re.sub(r'\*{1,3}(.+?)\*{1,3}', r'\1', text)
+        text = re.sub(r'_{1,3}(.+?)_{1,3}', r'\1', text)
+        # Headers: ## text
+        text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)
+        # Links: [text](url) -> text
+        text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
+        # Inline code: `code`
+        text = re.sub(r'`([^`]+)`', r'\1', text)
+        # Bullet points
+        text = re.sub(r'^[\s]*[-*+]\s+', '', text, flags=re.MULTILINE)
+        # Numbered lists: 1. text -> text
+        text = re.sub(r'^[\s]*\d+\.\s+', '', text, flags=re.MULTILINE)
+        return text.strip()
+
     def text_to_speech(self, text: str) -> Path:
         """
         Convert text to speech and save to a temporary file.
@@ -54,6 +73,8 @@ class AudioService:
         """
         if not self.client:
             raise ValueError("Audio service not available (ELEVENLABS_API_KEY not set)")
+        # Strip markdown so TTS doesn't read formatting characters
+        text = self._strip_markdown(text)
         print(f"[Audio] TTS called with {len(text)} chars: {text[:50]}...")
         try:
             # Generate audio using the new SDK API

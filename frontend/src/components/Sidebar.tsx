@@ -56,8 +56,12 @@ export default function Sidebar({
   currentModel = 'openai:gpt-4o',
   onModelChange
 }: SidebarProps) {
-  const [isCollapsed, setIsCollapsed] = useState(() => window.innerWidth <= 480)
+  const [isCollapsed, setIsCollapsed] = useState(() => window.innerWidth <= 768)
   const [expandedGoals, setExpandedGoals] = useState<Set<string>>(new Set())
+
+  // Auto-close sidebar on mobile after navigation
+  const isMobile = () => window.innerWidth <= 768
+  const autoClose = () => { if (isMobile()) setIsCollapsed(true) }
 
   const toggleGoalExpanded = (goalId: string) => {
     setExpandedGoals(prev => {
@@ -73,16 +77,21 @@ export default function Sidebar({
 
   return (
     <div className={`sidebar ${isCollapsed ? 'collapsed' : ''}`}>
+      {/* Mobile overlay backdrop */}
+      {!isCollapsed && (
+        <div className="sidebar-backdrop" onClick={() => setIsCollapsed(true)} />
+      )}
       <div className="sidebar-header">
         <h2 className="sidebar-title">
-          {isCollapsed ? 'L' : 'Liminal'}
+          <span className="sidebar-title-full">Liminal</span>
+          <span className="sidebar-title-short">L</span>
         </h2>
-        <button 
+        <button
           className="sidebar-toggle"
           onClick={() => setIsCollapsed(!isCollapsed)}
           title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
-          {isCollapsed ? '→' : '←'}
+          {isCollapsed ? '☰' : '←'}
         </button>
       </div>
 
@@ -93,7 +102,7 @@ export default function Sidebar({
             <div className="sidebar-section-label">Trajectory</div>
             <button
               className={`sidebar-exploration-btn ${isTrajectoryActive ? 'active' : ''}`}
-              onClick={onSelectTrajectory}
+              onClick={() => { onSelectTrajectory?.(); autoClose() }}
               disabled={!onSelectTrajectory}
               title={!onSelectTrajectory ? 'Project history unavailable' : 'View your project history'}
             >
@@ -107,7 +116,7 @@ export default function Sidebar({
             <div className="sidebar-section-label">Exploration</div>
             <button 
               className={`sidebar-exploration-btn ${isExplorationActive ? 'active' : ''}`}
-              onClick={onNewExploration}
+              onClick={() => { onNewExploration(); autoClose() }}
             >
               <span className="sidebar-exploration-icon"></span>
               <span>Current Exploration</span>
@@ -142,7 +151,7 @@ export default function Sidebar({
                     >
                       <button
                         className="sidebar-session-main"
-                        onClick={() => onSelectSession(session.id)}
+                        onClick={() => { onSelectSession(session.id); autoClose() }}
                       >
                         <span className="sidebar-session-icon"></span>
                         <div className="sidebar-session-info">
@@ -177,7 +186,7 @@ export default function Sidebar({
                             <button
                               key={tc.id}
                               className={`sidebar-teaching-item ${activeTeachingId === tc.id ? 'active' : ''} ${isLocked ? 'locked' : ''} ${isCompleted ? 'completed' : ''} ${isInProgress ? 'in-progress' : ''}`}
-                              onClick={() => !isLocked && onSelectTeaching(session.id, tc.id)}
+                              onClick={() => { if (!isLocked) { onSelectTeaching(session.id, tc.id); autoClose() } }}
                               disabled={isLocked}
                               title={isLocked ? 'Complete previous tasks to unlock' : stripMarkdown(tc.topic)}
                             >

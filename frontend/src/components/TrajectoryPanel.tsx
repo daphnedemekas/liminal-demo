@@ -1,40 +1,29 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { api, LearnerTrajectoryDashboard, UserData } from '../services/api'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
+  AreaChart, Area,
+} from 'recharts'
 
 interface TrajectoryPanelProps {
   userId: string
 }
 
-type GraphNode = {
-  id: string
-  label: string
-  type: 'root' | 'goal' | 'task'
-  goalId?: number
-  sessionId?: string
-  status?: string
-}
-
-type ViewLevel = 'goals' | 'teachings' | 'detail'
-
 export default function TrajectoryPanel({ userId }: TrajectoryPanelProps) {
-  // Core data
   const [data, setData] = useState<LearnerTrajectoryDashboard | null>(null)
   const [userData, setUserData] = useState<UserData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // Navigation state
-  const [viewLevel, setViewLevel] = useState<ViewLevel>('goals')
-  const [selectedNodeId, setSelectedNodeId] = useState<string>('root')
-  const [selectedGoalId, setSelectedGoalId] = useState<number | null>(null)
-  const [selectedTeachingId, setSelectedTeachingId] = useState<string | null>(null)
-
-  // Level-specific data
+  // Modal state for goal drill-down
+  const [modalGoalId, setModalGoalId] = useState<number | null>(null)
   const [goalProgressData, setGoalProgressData] = useState<any>(null)
   const [teachingDetailData, setTeachingDetailData] = useState<any>(null)
+  const [modalView, setModalView] = useState<'teachings' | 'detail'>('teachings')
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_selectedTeachingId, setSelectedTeachingId] = useState<string | null>(null)
 
-  // Load trajectory dashboard
   const load = useCallback(async () => {
     setIsLoading(true)
     setError(null)
@@ -46,21 +35,16 @@ export default function TrajectoryPanel({ userId }: TrajectoryPanelProps) {
       setData(d)
       setUserData(u)
 
-      // Auto-refresh if empty
       if (d && (!d.goals || d.goals.length === 0)) {
-        console.log('[Trajectory] No goals found, triggering auto-refresh...')
         try {
           const refreshed = await api.refreshTrajectory(userId)
-          console.log('[Trajectory] Auto-refresh successful, goals:', refreshed.goals?.length || 0)
           setData(refreshed)
         } catch (refreshError) {
           console.error('[Trajectory] Auto-refresh failed:', refreshError)
         }
-      } else {
-        console.log('[Trajectory] Loaded with', d.goals?.length || 0, 'goals')
       }
     } catch (e: any) {
-      setError(e?.message || 'Failed to load project history')
+      setError(e?.message || 'Failed to load dashboard')
     } finally {
       setIsLoading(false)
     }
@@ -78,110 +62,41 @@ export default function TrajectoryPanel({ userId }: TrajectoryPanelProps) {
     }
   }, [userId])
 
-  // Fetch goal progress when selected
-  const fetchGoalProgress = useCallback(async (goalId: number) => {
+  useEffect(() => { load() }, [load])
+
+  // Modal: fetch goal progress when opening
+  const openGoalModal = useCallback(async (goalId: number) => {
+    setModalGoalId(goalId)
+    setModalView('teachings')
+    setSelectedTeachingId(null)
+    setTeachingDetailData(null)
     try {
       const response = await fetch(`/api/goal/${goalId}/progress?user_id=${userId}`)
-      const data = await response.json()
-      setGoalProgressData(data)
+      const d = await response.json()
+      setGoalProgressData(d)
     } catch (e) {
       console.error('Failed to fetch goal progress:', e)
     }
   }, [userId])
 
-  // Fetch curriculum for each goal to show progress
-  // @ts-ignore - unused for now, may be needed later
-  const _fetchGoalCurriculums = useCallback(async (goalIds: number[]) => {
-    const curriculums: Record<number, any> = {}
-    await Promise.all(
-      goalIds.map(async (goalId) => {
-        try {
-          const response = await fetch(`/api/goal/${goalId}/progress?user_id=${userId}`)
-          const data = await response.json()
-          if (data.curriculum) {
-            curriculums[goalId] = data.curriculum
-          }
-        } catch (e) {
-          console.error(`Failed to fetch curriculum for goal ${goalId}:`, e)
-        }
-      })
-    )
-    return curriculums
-  }, [userId])
-
-  // Fetch teaching detail when selected
-  const fetchTeachingDetail = useCallback(async (sessionId: string) => {
+  const openTeachingDetail = useCallback(async (sessionId: string) => {
+    setSelectedTeachingId(sessionId)
+    setModalView('detail')
     try {
       const response = await fetch(`/api/teaching/${sessionId}/detail?user_id=${userId}`)
-      const data = await response.json()
-      setTeachingDetailData(data)
+      const d = await response.json()
+      setTeachingDetailData(d)
     } catch (e) {
       console.error('Failed to fetch teaching detail:', e)
     }
   }, [userId])
 
-  // Effect to load data on level changes
-  useEffect(() => {
-    if (viewLevel === 'teachings' && selectedGoalId) {
-      fetchGoalProgress(selectedGoalId)
-    }
-  }, [viewLevel, selectedGoalId, fetchGoalProgress])
-
-  useEffect(() => {
-    if (viewLevel === 'detail' && selectedTeachingId) {
-      fetchTeachingDetail(selectedTeachingId)
-    }
-  }, [viewLevel, selectedTeachingId, fetchTeachingDetail])
-
-  useEffect(() => {
-    load()
-  }, [load])
-
-  // Build graph nodes
-  const graphNodes = useMemo<GraphNode[]>(() => {
-    const nodes: GraphNode[] = []
-    nodes.push({
-      id: 'root',
-      label: 'Dashboard',
-      type: 'root',
-    })
-
-    const goals = userData?.goals || []
-    goals.forEach((goal) => {
-      nodes.push({
-        id: `goal-${goal.id}`,
-        label: goal.goal_text,
-        type: 'goal',
-        goalId: goal.id,
-        status: goal.status,
-      })
-
-      // For teachings, we'd need session data - skipping for now in graph
-      // Can be populated when we have session info
-    })
-
-    return nodes
-  }, [userData])
-
-  // Handle node click
-  const handleNodeClick = (node: GraphNode) => {
-    setSelectedNodeId(node.id)
-
-    if (node.type === 'root') {
-      setViewLevel('goals')
-      setSelectedGoalId(null)
-      setSelectedTeachingId(null)
-    } else if (node.type === 'goal') {
-      setViewLevel('teachings')
-      setSelectedGoalId(node.goalId || null)
-      setSelectedTeachingId(null)
-    } else if (node.type === 'task') {
-      setViewLevel('detail')
-      setSelectedTeachingId(node.sessionId || null)
-    }
+  const closeModal = () => {
+    setModalGoalId(null)
+    setGoalProgressData(null)
+    setTeachingDetailData(null)
+    setSelectedTeachingId(null)
   }
-
-  const updated_at = data?.updated_at
 
   if (error) {
     return (
@@ -197,194 +112,214 @@ export default function TrajectoryPanel({ userId }: TrajectoryPanelProps) {
   if (isLoading) {
     return (
       <div className="trajectory-panel">
-        <div className="loading">Loading project history...</div>
+        <div className="loading">Loading dashboard...</div>
       </div>
     )
   }
 
+  const updated_at = data?.updated_at
+
   return (
     <div className="trajectory-panel">
       <div className="trajectory-panel-header">
-        <h1 className="panel-title">Dashboard</h1>
+        <h1 className="panel-title">Your Project Mind</h1>
         {updated_at && (
           <span className="last-updated-badge">
             Updated {new Date(updated_at).toLocaleString()}
           </span>
         )}
-        <button onClick={refresh} className="refresh-button">
-          Refresh
-        </button>
+        <button onClick={refresh} className="refresh-button">Refresh</button>
       </div>
 
       <div className="trajectory-panel-content">
-        <div className="trajectory-grid">
-          {/* Left Column: Graph */}
-          <div className="trajectory-graph">
-            <div className="profile-card">
-              <div className="card-header">
-                <span className="card-title">Project Graph</span>
-                <span className="item-count">{graphNodes.length}</span>
-              </div>
-              <div className="graph-tree">
-                {graphNodes.map(node => (
-                  <button
-                    key={node.id}
-                    className={`graph-node ${node.type} ${selectedNodeId === node.id ? 'active' : ''}`}
-                    onClick={() => handleNodeClick(node)}
-                  >
-                    <span className="graph-node-label">{node.label}</span>
-                    {node.status && (
-                      <span className={`graph-node-status ${node.status}`}>
-                        {node.status}
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
+        <div className="trajectory-dashboard">
+          <InsightsBanner data={data} />
+
+          <div className="trajectory-two-col">
+            <ProjectIdentityCard userData={userData} learnerModel={data?.learner_model} />
+            <GoalsMomentumPanel goals={data?.goals || []} onGoalClick={openGoalModal} />
           </div>
 
-          {/* Right Column: Dynamic View Based on Level */}
-          <div className="trajectory-details">
-            {viewLevel === 'goals' && (
-              <GoalsCardView
-                goals={data?.goals || []}
-                userData={userData}
-                userId={userId}
-                onGoalClick={(goalId: number) => {
-                  setSelectedGoalId(goalId)
-                  setViewLevel('teachings')
-                }}
-              />
-            )}
+          {data?.highlights && data.highlights.length > 0 && (
+            <HighlightsTimeline highlights={data.highlights} />
+          )}
 
-            {viewLevel === 'teachings' && (
-              <TeachingsCardView
-                goalData={goalProgressData}
-                onTeachingClick={(sessionId: string) => {
-                  setSelectedTeachingId(sessionId)
-                  setViewLevel('detail')
-                }}
-                onBack={() => setViewLevel('goals')}
-              />
-            )}
-
-            {viewLevel === 'detail' && (
-              <TeachingDetailView
-                detailData={teachingDetailData}
-                onBack={() => setViewLevel('teachings')}
-              />
-            )}
-          </div>
+          <ProfileEvolutionChart learnerModel={data?.learner_model} />
         </div>
       </div>
+
+      {/* Goal drill-down modal */}
+      {modalGoalId !== null && (
+        <GoalDrillDownModal
+          goalProgressData={goalProgressData}
+          teachingDetailData={teachingDetailData}
+          modalView={modalView}
+          onTeachingClick={openTeachingDetail}
+          onBackToTeachings={() => { setModalView('teachings'); setTeachingDetailData(null); setSelectedTeachingId(null) }}
+          onClose={closeModal}
+        />
+      )}
     </div>
   )
 }
 
 // ============================================
-// Level 1: Goals Card View
+// Insights Banner
 // ============================================
 
-function GoalsCardView({ goals, userData, userId, onGoalClick }: any) {
-  const [curriculums, setCurriculums] = useState<Record<number, any>>({})
-  // @ts-ignore - unused for now, may be needed later
-  const [_loadingCurriculums, setLoadingCurriculums] = useState(false)
+function InsightsBanner({ data }: { data: LearnerTrajectoryDashboard | null }) {
+  const insights = data?.insights
+  const sessionsPerWeek = data?.engagement?.sessions_per_week || []
 
-  useEffect(() => {
-    if (goals && goals.length > 0) {
-      setLoadingCurriculums(true)
-      Promise.all(
-        goals.map(async (goal: any) => {
-          try {
-            const response = await fetch(`/api/goal/${goal.goal_id}/progress?user_id=${userId}`)
-            const data = await response.json()
-            if (data.curriculum && data.curriculum.length > 0) {
-              return { goalId: goal.goal_id, curriculum: data.curriculum }
-            }
-          } catch (e) {
-            console.error(`Failed to fetch curriculum for goal ${goal.goal_id}:`, e)
-          }
-          return null
-        })
-      ).then(results => {
-        const curriculumsMap: Record<number, any> = {}
-        results.forEach(result => {
-          if (result) {
-            curriculumsMap[result.goalId] = result.curriculum
-          }
-        })
-        setCurriculums(curriculumsMap)
-        setLoadingCurriculums(false)
-      })
-    }
-  }, [goals, userId])
+  const sparklineData = sessionsPerWeek.map((v: number, i: number) => ({ week: i + 1, sessions: v }))
 
+  return (
+    <div className="trajectory-hero">
+      <div className="hero-text">
+        <h3>Insights</h3>
+        <p>{insights && insights.trim() ? insights : 'Keep exploring — patterns will emerge as you make progress.'}</p>
+      </div>
+      {sparklineData.length > 1 && (
+        <div className="hero-sparkline">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={sparklineData}>
+              <Area type="monotone" dataKey="sessions" stroke="#6366f1" fill="#c7d2fe" strokeWidth={2} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ============================================
+// Project Identity Card (radar + traits)
+// ============================================
+
+function ProjectIdentityCard({ userData, learnerModel }: { userData: UserData | null; learnerModel: any }) {
+  const entryMode = learnerModel?.entry_mode || (userData as any)?.entry_mode
+  const curiosityType = (userData as any)?.curiosity_type
+  const motivationProfile = (userData as any)?.motivation_profile
+  const pacingPref = (userData as any)?.pacing_preference
+  const uncertaintyTol = (userData as any)?.uncertainty_tolerance
+
+  const hasData = entryMode || curiosityType || motivationProfile
+
+  // Build radar data from entry_mode dimensions
+  const radarData: { dimension: string; value: number }[] = []
+  if (entryMode && typeof entryMode === 'object') {
+    Object.entries(entryMode).forEach(([key, val]) => {
+      if (typeof val === 'number') {
+        radarData.push({ dimension: key.replace(/_/g, ' '), value: val })
+      } else if (val && typeof val === 'object' && (val as any).value !== undefined) {
+        radarData.push({ dimension: key.replace(/_/g, ' '), value: Number((val as any).value) || 0 })
+      }
+    })
+  }
+
+  // Motivation micro-bars
+  const motivationBars: { label: string; value: number }[] = []
+  if (motivationProfile && typeof motivationProfile === 'object') {
+    Object.entries(motivationProfile).forEach(([key, val]) => {
+      if (typeof val === 'number') {
+        motivationBars.push({ label: key.replace(/_/g, ' '), value: val })
+      } else if (val && typeof val === 'object' && (val as any).value !== undefined) {
+        motivationBars.push({ label: key.replace(/_/g, ' '), value: Number((val as any).value) || 0 })
+      }
+    })
+  }
+
+  const traits: string[] = []
+  if (curiosityType) {
+    const cv = typeof curiosityType === 'object' ? curiosityType.value : curiosityType
+    if (cv) traits.push(String(cv))
+  }
+  if (pacingPref) {
+    const pv = typeof pacingPref === 'object' ? pacingPref.value : pacingPref
+    if (pv) traits.push(String(pv))
+  }
+  if (uncertaintyTol) {
+    const uv = typeof uncertaintyTol === 'object' ? uncertaintyTol.value : uncertaintyTol
+    if (uv) traits.push(String(uv))
+  }
+
+  return (
+    <div className="trajectory-identity-card">
+      <h3>Your Working Style</h3>
+      {!hasData ? (
+        <div className="identity-placeholder">
+          Start a conversation to discover your working style.
+        </div>
+      ) : (
+        <>
+          {radarData.length >= 3 && (
+            <ResponsiveContainer width="100%" height={200}>
+              <RadarChart data={radarData}>
+                <PolarGrid stroke="#e2e8f0" />
+                <PolarAngleAxis dataKey="dimension" tick={{ fontSize: 11, fill: '#64748b' }} />
+                <PolarRadiusAxis domain={[0, 1]} tick={false} axisLine={false} />
+                <Radar dataKey="value" stroke="#6366f1" fill="#c7d2fe" fillOpacity={0.5} />
+              </RadarChart>
+            </ResponsiveContainer>
+          )}
+          {traits.length > 0 && (
+            <div className="identity-traits">
+              {traits.map((t, i) => <span key={i} className="identity-trait">{t}</span>)}
+            </div>
+          )}
+          {motivationBars.length > 0 && (
+            <div className="micro-bars-group">
+              {motivationBars.map((m, i) => (
+                <div key={i} className="micro-bar-row">
+                  <span className="micro-bar-label">{m.label}</span>
+                  <div className="micro-bar">
+                    <div className="micro-bar-fill" style={{ width: `${Math.round(m.value * 100)}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+// ============================================
+// Goals Momentum Panel
+// ============================================
+
+function GoalsMomentumPanel({ goals, onGoalClick }: { goals: any[]; onGoalClick: (id: number) => void }) {
   if (!goals || goals.length === 0) {
     return (
-      <div className="profile-card empty-state">
-        <p>No learning goals yet. Start a conversation to create your first goal!</p>
+      <div className="trajectory-goals-panel">
+        <h3>Goals</h3>
+        <div className="identity-placeholder">
+          Start a conversation to set your first project goal.
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="goals-grid">
+    <div className="trajectory-goals-panel">
+      <h3>Goals</h3>
       {goals.map((goal: any) => {
-        const narrative = generateGoalNarrative(goal, userData)
-        const curriculum = curriculums[goal.goal_id] || []
-        const curriculumProgress = curriculum.length > 0 ? {
-          total: curriculum.length,
-          completed: curriculum.filter((t: any) => t.status === 'completed' || t.status === 'available').length
-        } : null
-
+        const momentum = goal.momentum || 'active'
+        const dotClass = momentum === 'moving' ? 'moving' : momentum === 'stuck' ? 'stuck' : momentum === 'inactive' ? 'inactive' : ''
         return (
           <div
             key={goal.goal_id}
-            className="goal-card profile-card clickable"
+            className="goal-momentum-card"
             onClick={() => onGoalClick(goal.goal_id)}
           >
-            <div className="card-header">
-              <span className="card-title">{goal.goal_text}</span>
-              <span className={`readiness-badge ${goal.momentum || 'active'}`}>
-                {goal.momentum || 'active'}
-              </span>
+            <div className={`momentum-dot ${dotClass}`} />
+            <div className="goal-momentum-info">
+              <p className="goal-title">{goal.goal_text}</p>
+              <p className="goal-summary">
+                {goal.learning_summary || goal.next_suggested_move || 'Ready to dive in'}
+              </p>
             </div>
-
-            {/* Visual Progress Indicator */}
-            {curriculumProgress && (
-              <div className="goal-progress-visual">
-                <div className="progress-bar-container">
-                  <div 
-                    className="progress-bar-fill" 
-                    style={{ width: `${(curriculumProgress.completed / curriculumProgress.total) * 100}%` }}
-                  />
-                </div>
-                <div className="progress-label">
-                  <span>{curriculumProgress.completed} of {curriculumProgress.total} topics</span>
-                </div>
-              </div>
-            )}
-
-            <div className="goal-narrative">
-              <p className="summary-text">{narrative}</p>
-            </div>
-
-            <div className="goal-current-state">
-              <h4>Your Path</h4>
-              <p>{goal.next_suggested_move || 'Ready to dive in!'}</p>
-            </div>
-
-            {goal.last_activity_at && (
-              <div className="goal-metrics">
-                <div className="metric-row">
-                  <span className="metric-label">Last Activity</span>
-                  <span className="metric-value">
-                    {formatRelativeTime(goal.last_activity_at)}
-                  </span>
-                </div>
-              </div>
-            )}
           </div>
         )
       })}
@@ -392,63 +327,120 @@ function GoalsCardView({ goals, userData, userId, onGoalClick }: any) {
   )
 }
 
-function generateGoalNarrative(goal: any, userData: any): string {
-  // Use the learning_summary if it's available and meaningful
-  // The backend now generates insightful descriptions based on conversation history
-  if (goal.learning_summary && goal.learning_summary.trim()) {
-    return goal.learning_summary
-  }
-  
-  // Fallback to generic description only if learning_summary is missing
-  const curiosityType = userData?.curiosity_type?.value || 'interest'
-  const curiosityText = curiosityType === 'interest'
-    ? "You're drawn to this because it genuinely fascinates you."
-    : "You want to fill a knowledge gap that's been nagging you."
+// ============================================
+// Highlights Timeline
+// ============================================
 
-  return `${curiosityText} We're building a path that matches your learning style.`
-}
-
-function formatRelativeTime(isoString: string): string {
-  const date = new Date(isoString)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-
-  // Handle edge cases: same day, future dates, or invalid dates
-  if (isNaN(diffDays) || diffDays < 0) return 'Recently'
-  if (diffDays === 0) return 'Today'
-  if (diffDays === 1) return 'Yesterday'
-  if (diffDays < 7) return `${diffDays} days ago`
-  if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`
-  return `${Math.floor(diffDays / 30)} months ago`
+function HighlightsTimeline({ highlights }: { highlights: any[] }) {
+  return (
+    <div>
+      <h3 style={{ fontSize: 14, fontWeight: 600, color: '#334155', margin: '0 0 12px 0' }}>Highlights</h3>
+      <div className="trajectory-highlights-timeline">
+        {highlights.map((h: any, i: number) => {
+          const kindClass = h.kind ? `kind-${h.kind}` : ''
+          return (
+            <div key={h.id || i} className={`highlight-card ${kindClass}`}>
+              <p className="highlight-kind">{(h.kind || 'note').replace(/_/g, ' ')}</p>
+              <p className="highlight-summary">{h.summary}</p>
+              {h.evidence_quote && <p className="highlight-quote">"{h.evidence_quote}"</p>}
+              <div className="highlight-confidence">
+                Confidence: {Math.round((h.confidence || 0) * 100)}%
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
 }
 
 // ============================================
-// Level 2: Teachings Card View
+// Profile Evolution Chart
 // ============================================
 
-function TeachingsCardView({ goalData, onTeachingClick, onBack }: any) {
+function ProfileEvolutionChart({ learnerModel }: { learnerModel: any }) {
+  const stability = learnerModel?.stability
+  const profilePoints = stability?.confidence_in_profile || []
+  const targetPoints = stability?.confidence_in_target || []
+
+  if (profilePoints.length < 2 && targetPoints.length < 2) return null
+
+  // Build chart data — assume arrays are time-ordered values
+  const maxLen = Math.max(profilePoints.length, targetPoints.length)
+  const chartData = Array.from({ length: maxLen }, (_, i) => ({
+    point: i + 1,
+    profile: profilePoints[i] !== undefined ? Math.round(profilePoints[i] * 100) : null,
+    target: targetPoints[i] !== undefined ? Math.round(targetPoints[i] * 100) : null,
+  }))
+
+  return (
+    <div className="trajectory-evolution-chart">
+      <h3>Profile Evolution</h3>
+      <ResponsiveContainer width="100%" height={200}>
+        <AreaChart data={chartData}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+          <XAxis dataKey="point" tick={{ fontSize: 11 }} />
+          <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
+          <Tooltip />
+          <Legend />
+          <Area type="monotone" dataKey="profile" name="Profile Confidence" stroke="#6366f1" fill="#c7d2fe" fillOpacity={0.4} connectNulls />
+          <Area type="monotone" dataKey="target" name="Target Confidence" stroke="#10b981" fill="#a7f3d0" fillOpacity={0.4} connectNulls />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
+
+// ============================================
+// Goal Drill-Down Modal
+// ============================================
+
+function GoalDrillDownModal({
+  goalProgressData, teachingDetailData, modalView,
+  onTeachingClick, onBackToTeachings, onClose,
+}: {
+  goalProgressData: any
+  teachingDetailData: any
+  modalView: 'teachings' | 'detail'
+  onTeachingClick: (id: string) => void
+  onBackToTeachings: () => void
+  onClose: () => void
+}) {
+  return (
+    <div className="trajectory-modal-overlay" onClick={onClose}>
+      <div className="trajectory-modal-content" onClick={e => e.stopPropagation()}>
+        <button className="modal-close" onClick={onClose}>&times;</button>
+        {modalView === 'teachings' ? (
+          <TeachingsCardView
+            goalData={goalProgressData}
+            onTeachingClick={onTeachingClick}
+          />
+        ) : (
+          <TeachingDetailView
+            detailData={teachingDetailData}
+            onBack={onBackToTeachings}
+          />
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ============================================
+// Teachings Card View (preserved from original)
+// ============================================
+
+function TeachingsCardView({ goalData, onTeachingClick }: any) {
   if (!goalData) {
     return <div className="loading">Loading teachings...</div>
   }
 
   const { goal, sessions, curriculum, temporal_data } = goalData
 
-  // Debug: log what we received
-  console.log('[TeachingsCardView] Data received:', { 
-    hasGoal: !!goal,
-    sessionsCount: sessions?.length || 0, 
-    curriculumCount: curriculum?.length || 0,
-    curriculumType: Array.isArray(curriculum) ? 'array' : typeof curriculum,
-    curriculumSample: curriculum ? (Array.isArray(curriculum) ? curriculum[0] : curriculum) : null
-  })
-
-  // Show curriculum if available, even if no teaching sessions yet
   if ((!sessions || sessions.length === 0) && (!curriculum || (Array.isArray(curriculum) && curriculum.length === 0))) {
     return (
       <div className="teachings-view">
         <div className="view-header">
-          <button className="back-button" onClick={onBack}>← Back to Goals</button>
           <h2 className="view-title">{goal?.goal_text || 'Goal'}</h2>
         </div>
         <div className="profile-card empty-state">
@@ -458,65 +450,45 @@ function TeachingsCardView({ goalData, onTeachingClick, onBack }: any) {
     )
   }
 
-  // Debug: log what we received
-  console.log('[TeachingsCardView] Data:', { 
-    sessions: sessions?.length || 0, 
-    curriculum: curriculum?.length || 0,
-    curriculumSample: curriculum?.[0] // Show first task structure
-  })
-
-  // Always prioritize curriculum tasks if available (they have proper names, descriptions, status)
-  // Only fall back to sessions if no curriculum exists
   let displayItems: any[] = []
   const isShowingCurriculum = curriculum && curriculum.length > 0
-  
+
   if (isShowingCurriculum) {
-    // Sort curriculum tasks by id to maintain original proposal order
     displayItems = [...curriculum].sort((a: any, b: any) => {
-      // Sort by id if available, otherwise by original index
-      const aId = a.id !== undefined ? a.id : (a.index !== undefined ? a.index : 0)
-      const bId = b.id !== undefined ? b.id : (b.index !== undefined ? b.index : 0)
+      const aId = a.id !== undefined ? a.id : 0
+      const bId = b.id !== undefined ? b.id : 0
       return aId - bId
     })
   } else if (sessions && sessions.length > 0) {
-    // Fallback to sessions if no curriculum
     displayItems = sessions
   }
 
   return (
     <div className="teachings-view">
       <div className="view-header">
-        <button className="back-button" onClick={onBack}>← Back to Goals</button>
         <h2 className="view-title">{goal?.goal_text || 'Goal'}</h2>
       </div>
 
       <div className="teachings-grid">
         {displayItems.map((item: any, idx: number) => {
-          // For curriculum tasks (always show these if available)
           if (isShowingCurriculum) {
             const task = item
-            // Determine status: check if there's a matching session for this task
             let status = task.status
             if (!status) {
-              // Check if there's a session for this task topic
-              const matchingSession = sessions?.find((s: any) => 
-                s.schema_state?.topic === task.topic || 
+              const matchingSession = sessions?.find((s: any) =>
+                s.schema_state?.topic === task.topic ||
                 s.schema_state?.teaching_candidate?.topic === task.topic
               )
               if (matchingSession) {
                 status = matchingSession.status || 'in-progress'
               } else {
-                // Default: first task available, rest locked
                 status = idx === 0 ? 'available' : 'locked'
               }
             }
-            
+
             const isLocked = status === 'locked'
             const isCompleted = status === 'completed'
             const isInProgress = status === 'in_progress' || status === 'in-progress'
-            const isAvailable = status === 'available'
-
-            // Get description from task data
             const description = task.justification || task.identified_gap || task.focus_question || 'Ready to explore this topic'
 
             return (
@@ -526,22 +498,12 @@ function TeachingsCardView({ goalData, onTeachingClick, onBack }: any) {
                 onClick={() => !isLocked && onTeachingClick(task.id || idx)}
               >
                 <div className="card-header">
-                  <span className="card-title">
-                    {task.topic || task.title || `Topic ${idx + 1}`}
-                  </span>
+                  <span className="card-title">{task.topic || task.title || `Topic ${idx + 1}`}</span>
                   <span className={`readiness-badge ${status}`}>
-                    {isLocked ? '🔒 Locked' : 
-                     isCompleted ? '✓ Completed' : 
-                     isInProgress ? '▶ In Progress' : 
-                     isAvailable ? `${idx + 1}` : 
-                     status || 'available'}
+                    {isLocked ? 'Locked' : isCompleted ? 'Completed' : isInProgress ? 'In Progress' : status || 'available'}
                   </span>
                 </div>
-
-                <div className="teaching-summary">
-                  <p>{description}</p>
-                </div>
-
+                <div className="teaching-summary"><p>{description}</p></div>
                 {isInProgress && (
                   <div className="teaching-progress-indicator">
                     <div className="progress-dot"></div>
@@ -552,11 +514,8 @@ function TeachingsCardView({ goalData, onTeachingClick, onBack }: any) {
             )
           }
 
-          // For teaching sessions
           const session = item
-          const sessionCheckpoints = temporal_data?.filter(
-            (d: any) => d.session_id === session.session_id
-          ) || []
+          const sessionCheckpoints = temporal_data?.filter((d: any) => d.session_id === session.session_id) || []
           const latestCheckpoint = sessionCheckpoints[sessionCheckpoints.length - 1]
 
           return (
@@ -567,46 +526,34 @@ function TeachingsCardView({ goalData, onTeachingClick, onBack }: any) {
             >
               <div className="card-header">
                 <span className="card-title">
-                  {session.schema_state?.topic || session.schema_state?.teaching_candidate?.topic || 'Teaching Session'}
+                  {session.schema_state?.topic || session.schema_state?.teaching_candidate?.topic || 'Session'}
                 </span>
                 <span className={`readiness-badge ${session.status || 'active'}`}>
                   {session.status || 'in-progress'}
                 </span>
               </div>
-
               <div className="teaching-summary">
-                <p>{session.schema_state?.teaching_candidate?.identified_gap || session.schema_state?.teaching_candidate?.focus_question || 'Exploring concepts in depth'}</p>
+                <p>{session.schema_state?.teaching_candidate?.identified_gap || session.schema_state?.teaching_candidate?.focus_question || 'Exploring concepts'}</p>
               </div>
-
               {latestCheckpoint && (
                 <>
                   <div className="teaching-progress-metrics">
                     <div className="mini-metric">
                       <span className="mini-label">Foundation</span>
-                      <span className="mini-value">
-                        {Math.round(latestCheckpoint.foundational_understanding * 100)}%
-                      </span>
+                      <span className="mini-value">{Math.round(latestCheckpoint.foundational_understanding * 100)}%</span>
                     </div>
                     <div className="mini-metric">
                       <span className="mini-label">Applied</span>
-                      <span className="mini-value">
-                        {Math.round(latestCheckpoint.applied_mastery * 100)}%
-                      </span>
+                      <span className="mini-value">{Math.round(latestCheckpoint.applied_mastery * 100)}%</span>
                     </div>
                     <div className="mini-metric">
                       <span className="mini-label">Awareness</span>
-                      <span className="mini-value">
-                        {Math.round(latestCheckpoint.metacognitive_awareness * 100)}%
-                      </span>
+                      <span className="mini-value">{Math.round(latestCheckpoint.metacognitive_awareness * 100)}%</span>
                     </div>
                   </div>
-
                   <div className="teaching-steps-progress">
                     <span className="steps-label">Steps</span>
-                    <span className="steps-value">
-                      {latestCheckpoint.teaching_steps_completed || 0} /{' '}
-                      {latestCheckpoint.teaching_steps_total || 0}
-                    </span>
+                    <span className="steps-value">{latestCheckpoint.teaching_steps_completed || 0} / {latestCheckpoint.teaching_steps_total || 0}</span>
                   </div>
                 </>
               )}
@@ -619,7 +566,7 @@ function TeachingsCardView({ goalData, onTeachingClick, onBack }: any) {
 }
 
 // ============================================
-// Level 3: Teaching Detail View
+// Teaching Detail View (preserved from original)
 // ============================================
 
 function TeachingDetailView({ detailData, onBack }: any) {
@@ -629,118 +576,69 @@ function TeachingDetailView({ detailData, onBack }: any) {
 
   const { session, understanding_timeline, current_aggregates, curriculum_plan } = detailData
 
-  // Format timeline data for Recharts
   const chartData = understanding_timeline?.map((point: any) => ({
     turn: point.turn,
     Foundation: Math.round(point.foundational_understanding * 100),
     Applied: Math.round(point.applied_mastery * 100),
-    Awareness: Math.round(point.metacognitive_awareness * 100)
+    Awareness: Math.round(point.metacognitive_awareness * 100),
   })) || []
 
   return (
     <div className="teaching-detail-view">
       <div className="view-header">
-        <button className="back-button" onClick={onBack}>← Back to Teachings</button>
-        <h2 className="view-title">
-          {session?.schema_state?.topic || 'Teaching Session'}
-        </h2>
+        <button className="back-button" onClick={onBack}>← Back</button>
+        <h2 className="view-title">{session?.schema_state?.topic || 'Session'}</h2>
       </div>
 
-      {/* Current State Summary */}
       <div className="profile-card">
-        <div className="card-header">
-          <span className="card-title">Current Understanding</span>
-        </div>
+        <div className="card-header"><span className="card-title">Summary</span></div>
         <div className="current-metrics-grid">
           <div className="metric-box">
             <div className="metric-label">Foundational Understanding</div>
-            <div className="metric-value-large">
-              {Math.round((current_aggregates?.foundational_understanding || 0) * 100)}%
-            </div>
-            <div className="metric-description">Do I understand the basics?</div>
+            <div className="metric-value-large">{Math.round((current_aggregates?.foundational_understanding || 0) * 100)}%</div>
           </div>
           <div className="metric-box">
             <div className="metric-label">Applied Mastery</div>
-            <div className="metric-value-large">
-              {Math.round((current_aggregates?.applied_mastery || 0) * 100)}%
-            </div>
-            <div className="metric-description">Can I actually use this?</div>
+            <div className="metric-value-large">{Math.round((current_aggregates?.applied_mastery || 0) * 100)}%</div>
           </div>
           <div className="metric-box">
             <div className="metric-label">Metacognitive Awareness</div>
-            <div className="metric-value-large">
-              {Math.round((current_aggregates?.metacognitive_awareness || 0) * 100)}%
-            </div>
-            <div className="metric-description">Do I know what I know?</div>
+            <div className="metric-value-large">{Math.round((current_aggregates?.metacognitive_awareness || 0) * 100)}%</div>
           </div>
         </div>
       </div>
 
-      {/* Progress Over Time Chart */}
       {chartData.length > 0 && (
         <div className="profile-card">
-          <div className="card-header">
-            <span className="card-title">Understanding Development</span>
-          </div>
+          <div className="card-header"><span className="card-title">Understanding Development</span></div>
           <div className="chart-section">
             <ResponsiveContainer width="100%" height={300}>
               <LineChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis
-                  dataKey="turn"
-                  label={{ value: 'Conversation Turn', position: 'insideBottom', offset: -5 }}
-                />
-                <YAxis
-                  label={{ value: 'Understanding (%)', angle: -90, position: 'insideLeft' }}
-                  domain={[0, 100]}
-                />
+                <XAxis dataKey="turn" label={{ value: 'Turn', position: 'insideBottom', offset: -5 }} />
+                <YAxis label={{ value: 'Understanding (%)', angle: -90, position: 'insideLeft' }} domain={[0, 100]} />
                 <Tooltip />
                 <Legend />
-                <Line
-                  type="monotone"
-                  dataKey="Foundation"
-                  stroke="#3b82f6"
-                  strokeWidth={2}
-                  dot={{ r: 4 }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="Applied"
-                  stroke="#10b981"
-                  strokeWidth={2}
-                  dot={{ r: 4 }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="Awareness"
-                  stroke="#f59e0b"
-                  strokeWidth={2}
-                  dot={{ r: 4 }}
-                />
+                <Line type="monotone" dataKey="Foundation" stroke="#3b82f6" strokeWidth={2} dot={{ r: 4 }} />
+                <Line type="monotone" dataKey="Applied" stroke="#10b981" strokeWidth={2} dot={{ r: 4 }} />
+                <Line type="monotone" dataKey="Awareness" stroke="#f59e0b" strokeWidth={2} dot={{ r: 4 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
         </div>
       )}
 
-      {/* Curriculum Steps */}
       {curriculum_plan?.steps && curriculum_plan.steps.length > 0 && (
         <div className="profile-card">
-          <div className="card-header">
-            <span className="card-title">Project Path</span>
-          </div>
+          <div className="card-header"><span className="card-title">Project Path</span></div>
           <div className="curriculum-steps">
             {curriculum_plan.steps.map((step: any, idx: number) => (
               <div key={idx} className={`curriculum-step ${step.status || ''}`}>
                 <div className="step-number">{idx + 1}</div>
                 <div className="step-content">
                   <div className="step-objective">{step.objective}</div>
-                  {step.status === 'completed' && (
-                    <div className="step-meta">✓ Completed</div>
-                  )}
-                  {step.status === 'in_progress' && (
-                    <div className="step-meta">→ Currently working on this</div>
-                  )}
+                  {step.status === 'completed' && <div className="step-meta">Completed</div>}
+                  {step.status === 'in_progress' && <div className="step-meta">Currently working on this</div>}
                 </div>
               </div>
             ))}

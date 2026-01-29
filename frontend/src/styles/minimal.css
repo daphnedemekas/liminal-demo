@@ -3253,6 +3253,15 @@ body {
   color: var(--text-muted);
   font-style: italic;
   line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-word;
+  min-width: 0;
+}
+
+.feed-source-text a {
+  overflow-wrap: break-word;
+  word-break: break-all;
 }
 
 .feed-item-relevance {
@@ -5490,6 +5499,7 @@ body {
 .draft-editor-textarea {
   flex: 1;
   width: 100%;
+  min-height: 200px;
   padding: 20px;
   border: none;
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
@@ -6749,6 +6759,7 @@ body {
 .draft-editor-textarea {
   flex: 1;
   width: 100%;
+  min-height: 200px;
   padding: 20px;
   border: none;
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
@@ -6976,4 +6987,357 @@ body {
 
 .terminal-suggestion-dismiss:hover {
   color: #d4d4d4;
+}
+
+/* ============================================
+   Trajectory Dashboard — "Oura Ring of the Mind"
+   ============================================ */
+
+.trajectory-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+}
+
+.trajectory-two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+@media (max-width: 768px) {
+  .trajectory-two-col {
+    grid-template-columns: 1fr;
+  }
+}
+
+.trajectory-hero {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 24px;
+  min-height: 120px;
+  background: linear-gradient(135deg, #f0f9ff 0%, #ede9fe 100%);
+  border: 1px solid #c7d2fe;
+  border-radius: 12px;
+  padding: 20px 24px;
+}
+
+.trajectory-hero .hero-text {
+  flex: 1;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #334155;
+}
+
+.trajectory-hero .hero-text h3 {
+  margin: 0 0 8px 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.trajectory-hero .hero-sparkline {
+  flex-shrink: 0;
+  width: 180px;
+  height: 60px;
+}
+
+.trajectory-identity-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 20px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+
+.trajectory-identity-card h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.identity-traits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.identity-trait {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.identity-placeholder {
+  font-size: 13px;
+  color: #94a3b8;
+  text-align: center;
+  padding: 16px;
+}
+
+.trajectory-goals-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 400px;
+  overflow-y: auto;
+  padding: 16px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+
+.trajectory-goals-panel h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.goal-momentum-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  background: #fafafa;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.goal-momentum-card:hover {
+  border-color: #a5b4fc;
+  box-shadow: 0 1px 4px rgba(99, 102, 241, 0.1);
+}
+
+.momentum-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-top: 5px;
+  flex-shrink: 0;
+  background: #94a3b8;
+}
+
+.momentum-dot.moving {
+  background: #22c55e;
+  animation: pulse-green 2s infinite;
+}
+
+.momentum-dot.stuck {
+  background: #f59e0b;
+}
+
+.momentum-dot.inactive {
+  background: #cbd5e1;
+}
+
+@keyframes pulse-green {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); }
+  50% { box-shadow: 0 0 0 6px rgba(34, 197, 94, 0); }
+}
+
+.goal-momentum-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.goal-momentum-info .goal-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0 0 4px 0;
+  line-height: 1.3;
+}
+
+.goal-momentum-info .goal-summary {
+  font-size: 12px;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.trajectory-highlights-timeline {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding: 4px 0 12px 0;
+}
+
+.trajectory-highlights-timeline::-webkit-scrollbar {
+  height: 6px;
+}
+
+.trajectory-highlights-timeline::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+.highlight-card {
+  flex: 0 0 280px;
+  scroll-snap-align: start;
+  padding: 14px;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  border-left: 4px solid #94a3b8;
+  background: #ffffff;
+}
+
+.highlight-card.kind-breakthrough {
+  border-left-color: #22c55e;
+}
+
+.highlight-card.kind-misconception_cleared {
+  border-left-color: #f59e0b;
+}
+
+.highlight-card.kind-curiosity_spark {
+  border-left-color: #8b5cf6;
+}
+
+.highlight-card.kind-connection {
+  border-left-color: #3b82f6;
+}
+
+.highlight-card.kind-struggle {
+  border-left-color: #ef4444;
+}
+
+.highlight-card .highlight-kind {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+  color: #64748b;
+  margin: 0 0 6px 0;
+}
+
+.highlight-card .highlight-summary {
+  font-size: 13px;
+  color: #1e293b;
+  margin: 0 0 8px 0;
+  line-height: 1.4;
+}
+
+.highlight-card .highlight-quote {
+  font-size: 12px;
+  color: #64748b;
+  font-style: italic;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.highlight-card .highlight-confidence {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.trajectory-evolution-chart {
+  padding: 20px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+
+.trajectory-evolution-chart h3 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.trajectory-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.trajectory-modal-content {
+  background: #ffffff;
+  border-radius: 14px;
+  max-width: 800px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  padding: 24px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.trajectory-modal-content .modal-close {
+  float: right;
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: #64748b;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.trajectory-modal-content .modal-close:hover {
+  background: #f1f5f9;
+  color: #1e293b;
+}
+
+.micro-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+
+.micro-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: #6366f1;
+  transition: width 0.3s ease;
+}
+
+.micro-bars-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.micro-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.micro-bar-label {
+  font-size: 11px;
+  color: #64748b;
+  width: 80px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.micro-bar {
+  flex: 1;
 }

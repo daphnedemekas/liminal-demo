@@ -22,36 +22,46 @@ export default function ResizableSplitPane({
   const startHeightRef = useRef<number>(initialTopHeight)
 
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
+    const handleMove = (clientY: number) => {
       if (!isDragging || !containerRef.current) return
 
       const container = containerRef.current
       const containerHeight = container.clientHeight
-      const deltaY = e.clientY - startYRef.current
+      const deltaY = clientY - startYRef.current
       const deltaPercent = (deltaY / containerHeight) * 100
-      
+
       let newHeight = startHeightRef.current + deltaPercent
-      
+
       // Clamp to min/max
       newHeight = Math.max(minTopHeight, Math.min(maxTopHeight, newHeight))
-      
+
       setTopHeight(newHeight)
     }
 
-    const handleMouseUp = () => {
+    const handleMouseMove = (e: MouseEvent) => handleMove(e.clientY)
+    const handleTouchMove = (e: TouchEvent) => {
+      e.preventDefault()
+      handleMove(e.touches[0].clientY)
+    }
+
+    const handleEnd = () => {
       setIsDragging(false)
     }
 
     if (isDragging) {
       document.addEventListener('mousemove', handleMouseMove)
-      document.addEventListener('mouseup', handleMouseUp)
+      document.addEventListener('mouseup', handleEnd)
+      document.addEventListener('touchmove', handleTouchMove, { passive: false })
+      document.addEventListener('touchend', handleEnd)
       document.body.style.cursor = 'row-resize'
       document.body.style.userSelect = 'none'
     }
 
     return () => {
       document.removeEventListener('mousemove', handleMouseMove)
-      document.removeEventListener('mouseup', handleMouseUp)
+      document.removeEventListener('mouseup', handleEnd)
+      document.removeEventListener('touchmove', handleTouchMove)
+      document.removeEventListener('touchend', handleEnd)
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
     }
@@ -61,6 +71,13 @@ export default function ResizableSplitPane({
     e.preventDefault()
     setIsDragging(true)
     startYRef.current = e.clientY
+    startHeightRef.current = topHeight
+  }
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+    startYRef.current = e.touches[0].clientY
     startHeightRef.current = topHeight
   }
 
@@ -92,6 +109,7 @@ export default function ResizableSplitPane({
       {/* Resizer */}
       <div
         onMouseDown={handleMouseDown}
+        onTouchStart={handleTouchStart}
         className="resizable-split-pane-divider"
         style={{
           height: '4px',

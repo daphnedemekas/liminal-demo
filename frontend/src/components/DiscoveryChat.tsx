@@ -8,6 +8,7 @@ import AudioToggle from './AudioToggle'
 import BreathingCircle from './BreathingCircle'
 import ProfilePanel from './ProfilePanel'
 import FeedPanel from './FeedPanel'
+import MobileViewSwitcher from './MobileViewSwitcher'
 import { ModelConfig } from './ModelSelector'
 
 interface DiscoveryChatProps {
@@ -28,8 +29,16 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
   const [sessionError, setSessionError] = useState<string | null>(null)
   const [retryCount, setRetryCount] = useState(0)
   const [awaitingBackground, setAwaitingBackground] = useState(false)  // True when we're waiting for user's background info
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768)
+  const [mobileView, setMobileView] = useState<string>('chat')
   const initRef = useRef(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   const { messages, sendMessage, sendCommand, isConnected, status, addMessage, setMessages, onSchemaUpdate } = useWebSocket(actualSessionId || '', 'discovery')
   
@@ -381,202 +390,153 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
     }
   }
 
-  return (
-    <div className="discovery-with-feed">
-      {/* Feed Panel - show after first assistant message */}
-      {userId && onboardingInfo && shouldShowSidePanels && (
-        <FeedPanel
-          userId={userId}
-          contextType="exploration"
-          userBackground={onboardingInfo}
-          goalsSummary={
-            messages
-              .filter(m => m.type === 'goal_proposed' || m.type === 'create_goal_panel')
-              .map(m => m.proposedGoal || m.goalData?.goal)
-              .filter(Boolean)
-              .join(', ') || undefined
+  const chatContent = (
+    <div className="chat-container" style={{ position: 'relative', height: '100%' }}>
+      <BreathingCircle
+        isVisible={isAudioMode}
+        isAISpeaking={isPlaying}
+        isUserRecording={isListening && !status}
+        isProcessing={!!status}
+        onTap={() => {
+          if (status) return
+          if (isListening) {
+            const currentTranscript = getTranscript()
+            stopListening()
+            if (currentTranscript && currentTranscript.trim()) {
+              handleSend(currentTranscript)
+              resetTranscript()
+            }
+          } else if (!isPlaying) {
+            startListening()
           }
-        />
-      )}
+        }}
+        onExit={toggleAudioMode}
+        statusText={isListening ? transcript : undefined}
+      />
 
-      <div className="discovery-layout">
-        {/* Chat Area */}
-        <div className="chat-container" style={{ position: 'relative' }}>
-
-          {/* Voice Mode Overlay - covers the chat panel */}
-          <BreathingCircle 
-            isVisible={isAudioMode} 
-            isAISpeaking={isPlaying}
-            isUserRecording={isListening && !status}
-            isProcessing={!!status}
-            onTap={() => {
-              if (status) {
-                // Don't do anything while processing
-                return
-              }
-              if (isListening) {
-                const currentTranscript = getTranscript()
-                stopListening()
-                if (currentTranscript && currentTranscript.trim()) {
-                  handleSend(currentTranscript)
-                  resetTranscript()
-                }
-              } else if (!isPlaying) {
-                startListening()
-              }
-            }}
-            onExit={toggleAudioMode}
-            statusText={isListening ? transcript : undefined}
-          />
-
-        <div className="messages" style={{ position: 'relative' }}>
-
-          {/* All messages in unified array */}
-          {messages.map((msg, index) => {
-            const isLastResumeOptions = msg.id === 'welcome-back' && index === messages.length - 1
-            return (
-              <div key={msg.id}>
-                <MessageBubble
-                  role={msg.role}
-                  content={msg.content}
-                  audioUrl={msg.audio_url}
-                  isAudioMode={isAudioMode}
-                  isUserRecording={isListening}
-                  onAudioPlay={() => msg.audio_url && playAudio(msg.audio_url)}
-                />
-                {/* Show resume options buttons for welcome back message */}
-                {isLastResumeOptions && (
-                  <div className="resume-options">
-                    <div className="resume-options-buttons">
-                      <button
-                        className="resume-option-btn"
-                        onClick={() => {
-                          // Continue on this thread - let AI continue the conversation
-                          // Remove the resume options message and send continuation message
-                          setMessages(prev => prev.filter(m => m.id !== 'welcome-back'))
-                          sendMessage("Let's continue from where we left off", isAudioMode)
-                        }}
-                        disabled={!isConnected}
-                      >
-                        Continue on this thread
-                      </button>
-                      <button
-                        className="resume-option-btn"
-                        onClick={() => {
-                          // Suggest a new direction - send message asking for new direction
-                          setMessages(prev => prev.filter(m => m.id !== 'welcome-back'))
-                          sendMessage("I'd like to explore a new direction", isAudioMode)
-                        }}
-                        disabled={!isConnected}
-                      >
-                        Suggest a new direction
-                      </button>
-                      <button
-                        className="resume-option-btn"
-                        onClick={() => {
-                          // AI suggests something - ask AI to suggest what to explore next
-                          setMessages(prev => prev.filter(m => m.id !== 'welcome-back'))
-                          sendMessage("What should we explore next?", isAudioMode)
-                        }}
-                        disabled={!isConnected}
-                      >
-                        AI suggests something
-                      </button>
-                    </div>
-                  </div>
-                )}
-                {/* Show goal confirmation buttons for pending goal proposals */}
-                {msg.type === 'goal_proposed' && 
-                 msg.proposedGoal && 
-                 index === lastGoalProposedIndex && 
-                 hasPendingGoal && (
-                  <div className="goal-confirmation">
-                    <div className="goal-confirmation-buttons">
-                      <button 
-                        className="goal-accept-btn"
-                        onClick={handleAcceptGoal}
-                        disabled={!isConnected}
-                      >
-                        Yes, let's explore this
-                      </button>
-                      <button 
-                        className="goal-reject-btn"
-                        onClick={handleRejectGoal}
-                        disabled={!isConnected}
-                      >
-                        Not quite — keep exploring
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )
-          })}
-
-          {/* Status indicator */}
-          {status && (
-            <div className="status-indicator">
-              <div className="status-spinner"></div>
-              <span>{status}</span>
-            </div>
-          )}
-
-          <div ref={messagesEndRef} />
-        </div>
-
-        {/* Error display with retry button */}
-        {sessionError && (
-          <div className="session-error">
-            <p>{sessionError}</p>
-            <button 
-              className="retry-button"
-              onClick={() => setRetryCount(c => c + 1)}
-            >
-              Retry Connection
-            </button>
-          </div>
-        )}
-
-        {/* Input area - hidden in voice mode since overlay handles it */}
-        {!isAudioMode && !sessionError && (
-          <div className="input-area">
-            <div className="text-input-container">
-              <input
-                type="text"
-                className="text-input"
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                onKeyPress={handleKeyPress}
-                placeholder="Type your message..."
-                disabled={!isConnected}
+      <div className="messages" style={{ position: 'relative' }}>
+        {messages.map((msg, index) => {
+          const isLastResumeOptions = msg.id === 'welcome-back' && index === messages.length - 1
+          return (
+            <div key={msg.id}>
+              <MessageBubble
+                role={msg.role}
+                content={msg.content}
+                audioUrl={msg.audio_url}
+                isAudioMode={isAudioMode}
+                isUserRecording={isListening}
+                onAudioPlay={() => msg.audio_url && playAudio(msg.audio_url)}
               />
-              <AudioToggle isAudioMode={isAudioMode} onToggle={toggleAudioMode} />
-              <button
-                className="send-button"
-                onClick={() => handleSend()}
-                disabled={!inputText.trim() || !isConnected}
-              >
-                Send
-              </button>
+              {isLastResumeOptions && (
+                <div className="resume-options">
+                  <div className="resume-options-buttons">
+                    <button className="resume-option-btn" onClick={() => { setMessages(prev => prev.filter(m => m.id !== 'welcome-back')); sendMessage("Let's continue from where we left off", isAudioMode) }} disabled={!isConnected}>Continue on this thread</button>
+                    <button className="resume-option-btn" onClick={() => { setMessages(prev => prev.filter(m => m.id !== 'welcome-back')); sendMessage("I'd like to explore a new direction", isAudioMode) }} disabled={!isConnected}>Suggest a new direction</button>
+                    <button className="resume-option-btn" onClick={() => { setMessages(prev => prev.filter(m => m.id !== 'welcome-back')); sendMessage("What should we explore next?", isAudioMode) }} disabled={!isConnected}>AI suggests something</button>
+                  </div>
+                </div>
+              )}
+              {msg.type === 'goal_proposed' && msg.proposedGoal && index === lastGoalProposedIndex && hasPendingGoal && (
+                <div className="goal-confirmation">
+                  <div className="goal-confirmation-buttons">
+                    <button className="goal-accept-btn" onClick={handleAcceptGoal} disabled={!isConnected}>Yes, let's explore this</button>
+                    <button className="goal-reject-btn" onClick={handleRejectGoal} disabled={!isConnected}>Not quite — keep exploring</button>
+                  </div>
+                </div>
+              )}
             </div>
+          )
+        })}
+
+        {status && (
+          <div className="status-indicator">
+            <div className="status-spinner"></div>
+            <span>{status}</span>
           </div>
         )}
+
+        <div ref={messagesEndRef} />
       </div>
 
-        {/* Profile Panel - show after first assistant message */}
-        {onboardingInfo && shouldShowSidePanels && (
-          <ProfilePanel
-            sessionId={actualSessionId}
-            isConnected={isConnected}
-            initialSummary={profileSummary}
-            onSchemaUpdate={onSchemaUpdate}
-            onGoalSelected={onGoalAccepted ? (goalText) => {
-              if (actualSessionId) {
-                onGoalAccepted(goalText, actualSessionId)
-              }
-            } : undefined}
-          />
-        )}
+      {sessionError && (
+        <div className="session-error">
+          <p>{sessionError}</p>
+          <button className="retry-button" onClick={() => setRetryCount(c => c + 1)}>Retry Connection</button>
+        </div>
+      )}
+
+      {!isAudioMode && !sessionError && (
+        <div className="input-area">
+          <div className="text-input-container">
+            <input type="text" className="text-input" value={inputText} onChange={(e) => setInputText(e.target.value)} onKeyPress={handleKeyPress} placeholder="Type your message..." disabled={!isConnected} />
+            <AudioToggle isAudioMode={isAudioMode} onToggle={toggleAudioMode} />
+            <button className="send-button" onClick={() => handleSend()} disabled={!inputText.trim() || !isConnected}>Send</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+
+  const feedContent = userId && onboardingInfo && shouldShowSidePanels && (
+    <FeedPanel
+      userId={userId}
+      contextType="exploration"
+      userBackground={onboardingInfo}
+      goalsSummary={
+        messages
+          .filter(m => m.type === 'goal_proposed' || m.type === 'create_goal_panel')
+          .map(m => m.proposedGoal || m.goalData?.goal)
+          .filter(Boolean)
+          .join(', ') || undefined
+      }
+    />
+  )
+
+  const profileContent = onboardingInfo && shouldShowSidePanels && (
+    <ProfilePanel
+      sessionId={actualSessionId}
+      isConnected={isConnected}
+      initialSummary={profileSummary}
+      onSchemaUpdate={onSchemaUpdate}
+      onGoalSelected={onGoalAccepted ? (goalText: string) => {
+        if (actualSessionId) {
+          onGoalAccepted(goalText, actualSessionId)
+        }
+      } : undefined}
+    />
+  )
+
+  if (isMobile) {
+    return (
+      <div className="mobile-fullscreen-container">
+        <div className="mobile-fullscreen-view">
+          {mobileView === 'chat' && chatContent}
+          {mobileView === 'insights' && (
+            <div className="mobile-insights-view">
+              {profileContent}
+              {feedContent}
+            </div>
+          )}
+        </div>
+        <MobileViewSwitcher
+          activeView={mobileView}
+          views={[
+            { key: 'chat', label: 'Chat' },
+            { key: 'insights', label: 'Insights' },
+          ]}
+          onViewChange={setMobileView}
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div className="discovery-with-feed">
+      {feedContent}
+
+      <div className="discovery-layout">
+        {chatContent}
+        {profileContent}
       </div>
     </div>
   )

@@ -3,6 +3,7 @@ import { useAudio } from '../hooks/useAudio'
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition'
 import MessageBubble from './MessageBubble'
 import ResizableSplitPane from './ResizableSplitPane'
+import MobileViewSwitcher from './MobileViewSwitcher'
 import ProfilePanel from './ProfilePanel'
 import FeedPanel from './FeedPanel'
 import AudioToggle from './AudioToggle'
@@ -72,10 +73,20 @@ export default function TeachingChat({
   const [curriculumProgress, setCurriculumProgress] = useState<CurriculumProgress | null>(null)
   const [narrativeSummary, setNarrativeSummary] = useState<string>('')
   const [status, setStatus] = useState<string | null>(null)
-  
+  const [feedCollapsed, setFeedCollapsed] = useState(false)
+  const [profileCollapsed, setProfileCollapsed] = useState(false)
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768)
+  const [mobileView, setMobileView] = useState<string>('chat')
+
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const initRef = useRef(false)
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   const { isAudioMode, isPlaying, toggleAudioMode, playAudio } = useAudio()
   const {
@@ -417,206 +428,159 @@ export default function TeachingChat({
     }
   }
 
-  return (
-    <div className="discovery-with-feed">
-      {/* Feed Panel - Left side */}
-      <FeedPanel
-        userId={userId}
-        contextType="teaching_candidate"
-        goalId={goalId}
-        goalText={goalText}
-        teachingCandidateId={String(candidate.id)}
-        teachingTopic={candidate.topic}
-        userBackground={onboardingInfo}
+  const chatContent = (
+    <div className="goal-chat" style={{ position: 'relative', height: '100%' }}>
+      <BreathingCircle
+        isVisible={isAudioMode}
+        isAISpeaking={isPlaying}
+        isUserRecording={isListening && !isLoading}
+        isProcessing={isLoading || messages.length === 0}
+        onTap={() => {
+          if (isLoading || messages.length === 0) return
+          if (isListening) {
+            const currentTranscript = getTranscript()
+            stopListening()
+            if (currentTranscript && currentTranscript.trim()) {
+              handleSend(currentTranscript)
+              resetTranscript()
+            }
+          } else if (!isPlaying) {
+            startListening()
+          }
+        }}
+        onExit={toggleAudioMode}
+        statusText={isListening && !isLoading ? transcript : undefined}
       />
+      <div className="goal-chat-header">
+        <div className="goal-chat-title">
+          {onBackToGoal && (
+            <button className="back-to-goal-btn" onClick={onBackToGoal} title="Back to goal chat"
+              style={{ marginRight: '12px', padding: '6px 12px', border: '1px solid var(--border-hairline)', borderRadius: '8px', background: 'var(--bg-elevated)', cursor: 'pointer', fontSize: '13px', color: 'var(--text-secondary)' }}>
+              ← Back to Goal
+            </button>
+          )}
+          <span className="goal-icon">📚</span>
+          <h2>{stripMarkdown(candidate.topic)}</h2>
+          {isResumed && <span className="resumed-badge">Resumed</span>}
+        </div>
+        <div className="goal-chat-status">
+          {curriculumProgress && curriculumProgress.total_steps > 0 && (
+            <span className="curriculum-progress">
+              Step {curriculumProgress.current_step + 1}/{curriculumProgress.total_steps}
+              {curriculumProgress.completed_steps > 0 && ` (${curriculumProgress.completed_steps} done)`}
+            </span>
+          )}
+          <span className="goal-context-badge">Goal: {stripMarkdown(goalText)}</span>
+          <span className={`connection-status ${isConnected ? 'connected' : 'disconnected'}`}>
+            {isConnected ? '●' : '○'}
+          </span>
+        </div>
+      </div>
+      {narrativeSummary && (
+        <div className="narrative-summary-banner"><strong>Progress:</strong> {narrativeSummary}</div>
+      )}
+      <div className="goal-chat-messages" style={{ position: 'relative' }}>
+        {messages.map((msg) => (
+          <div key={msg.id}><MessageBubble role={msg.role} content={msg.content} /></div>
+        ))}
+        {(isLoading || status) && (
+          <div className="status-indicator"><div className="status-spinner"></div><span>{status || 'Thinking...'}</span></div>
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+      {!isAudioMode && (
+        <div className="goal-chat-input">
+          <div className="text-input-container">
+            <input type="text" className="text-input" value={inputText} onChange={(e) => setInputText(e.target.value)} onKeyPress={handleKeyPress} placeholder="Ask a question or share what you're thinking..." disabled={isLoading || !isConnected} />
+            <AudioToggle isAudioMode={isAudioMode} onToggle={toggleAudioMode} />
+            <button className="send-button" onClick={() => handleSend()} disabled={!inputText.trim() || isLoading || !isConnected}>Send</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+
+  const tabsContent = (
+    <div className="goal-tabs-area" style={{ height: '100%' }}>
+      <div className="goal-tabs-nav">
+        <button className={`goal-tab-btn ${activeTab === 'context' ? 'active' : ''}`} onClick={() => setActiveTab('context')}>Context</button>
+        <button className={`goal-tab-btn ${activeTab === 'draft' ? 'active' : ''}`} onClick={() => setActiveTab('draft')}>Documents</button>
+        <button className={`goal-tab-btn ${activeTab === 'terminal' ? 'active' : ''}`} onClick={() => setActiveTab('terminal')}>Terminal</button>
+      </div>
+      <div className="goal-tab-content">
+        {activeTab === 'context' && <ContextTab goalId={goalId} userId={userId} />}
+        {activeTab === 'draft' && <DraftTab goalId={goalId} userId={userId} onSendToChat={handleSend} />}
+        {activeTab === 'terminal' && <TerminalTab goalId={goalId} userId={userId} />}
+      </div>
+    </div>
+  )
+
+  const feedPanelContent = !feedCollapsed && (
+    <FeedPanel userId={userId} contextType="teaching_candidate" goalId={goalId} goalText={goalText} teachingCandidateId={String(candidate.id)} teachingTopic={candidate.topic} userBackground={onboardingInfo} />
+  )
+
+  const profilePanelContent = !profileCollapsed && (
+    <ProfilePanel sessionId={sessionId} isConnected={isConnected} isTeachingSession={true} />
+  )
+
+  if (isMobile) {
+    return (
+      <div className="mobile-fullscreen-container">
+        <div className="mobile-fullscreen-view">
+          {mobileView === 'chat' && chatContent}
+          {mobileView === 'workspace' && tabsContent}
+          {mobileView === 'insights' && (
+            <div className="mobile-insights-view">
+              {profilePanelContent}
+              {feedPanelContent}
+            </div>
+          )}
+        </div>
+        <MobileViewSwitcher
+          activeView={mobileView}
+          views={[
+            { key: 'chat', label: 'Chat' },
+            { key: 'workspace', label: 'Workspace' },
+            { key: 'insights', label: 'Insights' },
+          ]}
+          onViewChange={setMobileView}
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div className={`discovery-with-feed ${feedCollapsed ? 'feed-collapsed' : ''} ${profileCollapsed ? 'profile-collapsed' : ''}`}>
+      {feedPanelContent}
 
       <div className="goal-chat-layout">
-        {/* Left Side: Chat + Tabs */}
         <div className="goal-chat-main-area">
           <ResizableSplitPane
             initialTopHeight={50}
             minTopHeight={20}
             maxTopHeight={80}
-            top={
-              /* Chat Area - Top Half */
-              <div className="goal-chat" style={{ position: 'relative' }}>
-                {/* Voice Mode Overlay - covers the chat panel */}
-                <BreathingCircle 
-                  isVisible={isAudioMode} 
-                  isAISpeaking={isPlaying}
-                  isUserRecording={isListening && !isLoading}
-                  isProcessing={isLoading || messages.length === 0}
-                  onTap={() => {
-                    if (isLoading || messages.length === 0) {
-                      // Don't do anything while processing or waiting for opening
-                      return
-                    }
-                    if (isListening) {
-                      const currentTranscript = getTranscript()
-                      stopListening()
-                      if (currentTranscript && currentTranscript.trim()) {
-                        handleSend(currentTranscript)
-                        resetTranscript()
-                      }
-                    } else if (!isPlaying) {
-                      startListening()
-                    }
-                  }}
-                  onExit={toggleAudioMode}
-                  statusText={isListening && !isLoading ? transcript : undefined}
-                />
-
-                {/* Header */}
-                <div className="goal-chat-header">
-                  <div className="goal-chat-title">
-                    {onBackToGoal && (
-                      <button
-                        className="back-to-goal-btn"
-                        onClick={onBackToGoal}
-                        title="Back to goal chat"
-                        style={{
-                          marginRight: '12px',
-                          padding: '6px 12px',
-                          border: '1px solid var(--border-hairline)',
-                          borderRadius: '8px',
-                          background: 'var(--bg-elevated)',
-                          cursor: 'pointer',
-                          fontSize: '13px',
-                          color: 'var(--text-secondary)'
-                        }}
-                      >
-                        ← Back to Goal
-                      </button>
-                    )}
-                    <span className="goal-icon">📚</span>
-                    <h2>{stripMarkdown(candidate.topic)}</h2>
-                    {isResumed && <span className="resumed-badge">Resumed</span>}
-                  </div>
-                  <div className="goal-chat-status">
-
-                    {/* Curriculum Progress */}
-                    {curriculumProgress && curriculumProgress.total_steps > 0 && (
-                      <span className="curriculum-progress">
-                        Step {curriculumProgress.current_step + 1}/{curriculumProgress.total_steps}
-                        {curriculumProgress.completed_steps > 0 && 
-                          ` (${curriculumProgress.completed_steps} done)`}
-                      </span>
-                    )}
-                    
-                    <span className="goal-context-badge">Goal: {stripMarkdown(goalText)}</span>
-                    
-                    {/* Connection status */}
-                    <span className={`connection-status ${isConnected ? 'connected' : 'disconnected'}`}>
-                      {isConnected ? '●' : '○'}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Narrative Summary Banner (when available) */}
-                {narrativeSummary && (
-                  <div className="narrative-summary-banner">
-                    <strong>Progress:</strong> {narrativeSummary}
-                  </div>
-                )}
-
-                {/* Messages */}
-                <div className="goal-chat-messages" style={{ position: 'relative' }}>
-                  {messages.map((msg) => (
-                    <div key={msg.id}>
-                      <MessageBubble
-                        role={msg.role}
-                        content={msg.content}
-                      />
-                    </div>
-                  ))}
-                  {(isLoading || status) && (
-                    <div className="status-indicator">
-                      <div className="status-spinner"></div>
-                      <span>{status || 'Thinking...'}</span>
-                    </div>
-                  )}
-                  <div ref={messagesEndRef} />
-                </div>
-
-                {/* Input - hidden in voice mode since overlay handles it */}
-                {!isAudioMode && (
-                  <div className="goal-chat-input">
-                    <div className="text-input-container">
-                      <input
-                        type="text"
-                        className="text-input"
-                        value={inputText}
-                        onChange={(e) => setInputText(e.target.value)}
-                        onKeyPress={handleKeyPress}
-                        placeholder="Ask a question or share what you're thinking..."
-                        disabled={isLoading || !isConnected}
-                      />
-                      <AudioToggle isAudioMode={isAudioMode} onToggle={toggleAudioMode} />
-                      <button
-                        className="send-button"
-                        onClick={() => handleSend()}
-                        disabled={!inputText.trim() || isLoading || !isConnected}
-                      >
-                        Send
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            }
-            bottom={
-              /* Tabs Area - Bottom Half */
-              <div className="goal-tabs-area">
-        {/* Tab Navigation */}
-        <div className="goal-tabs-nav">
-          <button
-            className={`goal-tab-btn ${activeTab === 'context' ? 'active' : ''}`}
-            onClick={() => setActiveTab('context')}
-          >
-            Context
-          </button>
-          <button
-            className={`goal-tab-btn ${activeTab === 'draft' ? 'active' : ''}`}
-            onClick={() => setActiveTab('draft')}
-          >
-            Documents
-          </button>
-          <button
-            className={`goal-tab-btn ${activeTab === 'terminal' ? 'active' : ''}`}
-            onClick={() => setActiveTab('terminal')}
-          >
-            Terminal
-          </button>
-        </div>
-
-        {/* Tab Content */}
-        <div className="goal-tab-content">
-          {activeTab === 'context' && (
-            <ContextTab goalId={goalId} userId={userId} />
-          )}
-          {activeTab === 'draft' && (
-            <DraftTab 
-              goalId={goalId} 
-              userId={userId}
-              onSendToChat={handleSend}
-            />
-          )}
-          {activeTab === 'terminal' && (
-            <TerminalTab goalId={goalId} userId={userId} />
-          )}
-        </div>
-      </div>
-            }
+            top={chatContent}
+            bottom={tabsContent}
           />
         </div>
 
-        {/* Profile Panel - Right side (for teaching state) */}
-        <ProfilePanel 
-          sessionId={sessionId} 
-          isConnected={isConnected}
-          isTeachingSession={true}
-        />
+        {profilePanelContent}
       </div>
+
+      <button
+        className={`panel-toggle panel-toggle-left ${feedCollapsed ? 'collapsed' : ''}`}
+        onClick={() => setFeedCollapsed(c => !c)}
+        title={feedCollapsed ? 'Show feed' : 'Hide feed'}
+      >
+        {feedCollapsed ? '▶' : '◀'}
+      </button>
+      <button
+        className={`panel-toggle panel-toggle-right ${profileCollapsed ? 'collapsed' : ''}`}
+        onClick={() => setProfileCollapsed(c => !c)}
+        title={profileCollapsed ? 'Show progress' : 'Hide progress'}
+      >
+        {profileCollapsed ? '◀' : '▶'}
+      </button>
     </div>
   )
 }

@@ -328,7 +328,7 @@ def get_discovery_websocket_handler():
 
                         elif etype == "goal_proposed":
                             proposed_goal = event["goal"]
-                            goal_message = f"I think I've identified a learning goal for you: {proposed_goal}. Does this sound right? Say yes to explore this, or no to keep looking."
+                            goal_message = f"Based on our conversation, here's a learning goal that might resonate: **{proposed_goal}**"
                             audio_url = None
                             if wants_audio and _audio_service:
                                 try:

@@ -319,10 +319,11 @@ class DiscoveryOrchestrator:
             return
 
         if is_first_message and has_existing_opening and skip_history:
+            # Yield immediately so the UI loads, then run ranker in background
+            yield {"type": "empty"}
             ranker = self._get_ranker()
             self.schema = ranker.update_schema(self.schema, self.conversation_history, user_message)
             self.db.save_session_state(self.session_id, self.schema.model_dump())
-            yield {"type": "empty"}
             return
 
         # --- Phase-specific handling with streaming ---

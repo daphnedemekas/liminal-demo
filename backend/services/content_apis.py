@@ -343,10 +343,13 @@ async def fetch_reddit_results(query: str, count: int = 2) -> List[Dict[str, Any
             if subreddit_name not in ALLOWED_SUBREDDITS:
                 continue
 
-            # Basic relevance filter: at least one query keyword must appear in title or content
+            # Relevance filter: require at least 2 query keywords in title/content
             query_words = [w.lower() for w in query.split() if len(w) > 3]
             post_text = (post.get("title", "") + " " + post.get("selftext", "")).lower()
-            if query_words and not any(w in post_text for w in query_words):
+            matching_words = sum(1 for w in query_words if w in post_text)
+            if len(query_words) >= 2 and matching_words < 2:
+                continue
+            if len(query_words) == 1 and matching_words < 1:
                 continue
 
             subreddit = post.get("subreddit_name_prefixed", "Reddit")

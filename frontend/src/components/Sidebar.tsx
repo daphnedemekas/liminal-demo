@@ -56,7 +56,7 @@ export default function Sidebar({
   currentModel = 'openai:gpt-4o',
   onModelChange
 }: SidebarProps) {
-  const [isCollapsed, setIsCollapsed] = useState(false)
+  const [isCollapsed, setIsCollapsed] = useState(() => window.innerWidth <= 480)
   const [expandedGoals, setExpandedGoals] = useState<Set<string>>(new Set())
 
   const toggleGoalExpanded = (goalId: string) => {

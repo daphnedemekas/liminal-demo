@@ -1162,6 +1162,24 @@ class DatabaseManager:
         finally:
             session.close()
 
+    def clear_feed_items(self, user_id: str, context_type: str = None,
+                         goal_id: int = None, teaching_candidate_id: str = None):
+        """Delete cached feed items. If context_type is None, clears all for user."""
+        session = self._get_session()
+        try:
+            query = session.query(FeedItem).filter_by(user_id=user_id)
+            if context_type:
+                query = query.filter_by(context_type=context_type)
+            if goal_id:
+                query = query.filter_by(goal_id=goal_id)
+            if teaching_candidate_id:
+                query = query.filter_by(teaching_candidate_id=teaching_candidate_id)
+            count = query.delete()
+            session.commit()
+            return count
+        finally:
+            session.close()
+
     def has_feed_items(self, user_id: str, context_type: str, goal_id: int = None,
                        teaching_candidate_id: str = None) -> bool:
         """Check if feed items exist for a context."""

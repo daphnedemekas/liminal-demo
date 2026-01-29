@@ -112,7 +112,7 @@ export default function FeedPanel({
   const abortRef = useRef<AbortController | null>(null)
   const scrollSentinelRef = useRef<HTMLDivElement>(null)
 
-  const fetchFeedStream = useCallback(async (loadPage = 0, append = false) => {
+  const fetchFeedStream = useCallback(async (loadPage = 0, append = false, refresh = false) => {
     // Abort any in-flight request
     abortRef.current?.abort()
     const controller = new AbortController()
@@ -141,6 +141,7 @@ export default function FeedPanel({
           user_background: userBackground,
           goals_summary: goalsSummary,
           page: loadPage,
+          refresh,
         }),
         signal: controller.signal,
       })
@@ -214,6 +215,10 @@ export default function FeedPanel({
 
   const handleGenerate = () => {
     fetchFeedStream(0, false)
+  }
+
+  const handleRefresh = () => {
+    fetchFeedStream(0, false, true)
   }
 
   const handleLoadMore = useCallback(() => {
@@ -322,7 +327,7 @@ export default function FeedPanel({
             <span className="feed-new-badge">New</span>
           )}
           <button
-            onClick={handleGenerate}
+            onClick={handleRefresh}
             className="feed-refresh-btn"
             disabled={loading}
             title="Refresh feed"

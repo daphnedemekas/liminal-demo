@@ -28,6 +28,7 @@ class FeedRequest(BaseModel):
     teaching_candidate_id: Optional[str] = None
     teaching_topic: Optional[str] = None
     user_background: Optional[str] = None
+    refresh: bool = False  # If true, clear cached feed and re-fetch
     goals_summary: Optional[str] = None
     page: int = 0  # For pagination / load-more
 
@@ -51,9 +52,16 @@ class FeedResponse(BaseModel):
 
 
 def _interleave_by_type(items: List[dict]) -> List[dict]:
-    """Reorder items so no two consecutive items share the same source_type."""
+    """Reorder items so no two consecutive items share the same source_type.
+    Prioritizes articles/videos/papers over discussions/tweets."""
     if len(items) <= 1:
         return items
+
+    # Priority order: higher = picked first when buckets have equal size
+    TYPE_PRIORITY = {
+        "article": 6, "paper": 5, "video": 4, "course": 4, "blog": 3,
+        "discussion": 2, "tweet": 1, "general": 0,
+    }
 
     # Group by source_type
     from collections import defaultdict, deque
@@ -66,13 +74,15 @@ def _interleave_by_type(items: List[dict]) -> List[dict]:
     remaining = sum(len(b) for b in buckets.values())
 
     while remaining > 0:
-        # Pick the fullest bucket that isn't the same type as last
+        # Pick the best bucket: different type from last, then by priority, then by fullness
         best_type = None
-        best_len = -1
+        best_score = (-1, -1)
         for t, b in buckets.items():
-            if len(b) > 0 and t != last_type and len(b) > best_len:
-                best_type = t
-                best_len = len(b)
+            if len(b) > 0 and t != last_type:
+                score = (TYPE_PRIORITY.get(t, 0), len(b))
+                if score > best_score:
+                    best_type = t
+                    best_score = score
 
         # If all remaining are the same type, just take from whatever's left
         if best_type is None:
@@ -96,9 +106,9 @@ def _build_context_description(request: FeedRequest) -> str:
     if request.context_type == "exploration":
         return f"User is exploring learning directions. Interests/goals: {request.goals_summary or 'Still discovering'}. Background: {request.user_background or 'Not provided'}"
     elif request.context_type == "goal":
-        return f"Learning goal: {request.goal_text}"
+        return f"Learning goal: {request.goal_text}. ONLY find content directly about this goal topic."
     elif request.context_type == "teaching_candidate":
-        return f"Learning goal: {request.goal_text}. Specific topic: {request.teaching_topic}"
+        return f"Learning goal: {request.goal_text}. Specific topic: {request.teaching_topic}. ONLY find content directly about this specific topic."
     return request.goals_summary or request.goal_text or "general learning"
 
 
@@ -118,7 +128,12 @@ Return ONLY a JSON array like: ["query about interest 1", "query about interest 
     else:
         prompt = f"""Given this learning context, generate 2-3 short search queries (each 3-8 words) that would find relevant articles, videos, and academic papers. Return as a JSON array of strings.
 
-IMPORTANT: Queries must target EDUCATIONAL and INTELLECTUAL content only — essays, lectures, book analyses, research papers, technical discussions. Avoid anything related to dating, relationships, lifestyle, or clickbait.
+CRITICAL RULES:
+- Every query MUST be specifically and directly about the learning goal/topic described below.
+- Do NOT generate queries about the user's general background, career, or other interests.
+- Do NOT generate generic self-improvement, productivity, or startup queries unless the goal is specifically about those topics.
+- Target EDUCATIONAL and INTELLECTUAL content: essays, lectures, research papers, technical discussions, book analyses.
+- Avoid anything related to dating, relationships, lifestyle, or clickbait.
 
 Context: {context}
 
@@ -190,7 +205,20 @@ async def stream_feed(request: FeedRequest):
     async def event_generator():
         t0 = time.time()
 
-        # Phase 0: Check cache
+        # Phase 0: Clear cache if refresh requested
+        if request.refresh:
+            try:
+                cleared = _db.clear_feed_items(
+                    user_id=request.user_id,
+                    context_type=request.context_type,
+                    goal_id=request.goal_id,
+                    teaching_candidate_id=request.teaching_candidate_id
+                )
+                print(f"[Feed] Cleared {cleared} cached items for refresh")
+            except Exception as e:
+                print(f"[Feed] Cache clear error: {e}")
+
+        # Phase 0b: Check cache
         has_feed = _db.has_feed_items(
             user_id=request.user_id,
             context_type=request.context_type,
@@ -308,6 +336,14 @@ async def stream_feed(request: FeedRequest):
 async def get_or_generate_feed(request: FeedRequest):
     """Get feed items for a context, generating if needed."""
     try:
+        if request.refresh:
+            _db.clear_feed_items(
+                user_id=request.user_id,
+                context_type=request.context_type,
+                goal_id=request.goal_id,
+                teaching_candidate_id=request.teaching_candidate_id
+            )
+
         has_feed = _db.has_feed_items(
             user_id=request.user_id,
             context_type=request.context_type,
@@ -375,6 +411,21 @@ async def get_or_generate_feed(request: FeedRequest):
 async def clear_feed(user_id: str, context_type: str, goal_id: Optional[int] = None):
     """Clear feed items to force regeneration."""
     try:
-        return {"success": True, "message": "Feed will be regenerated on next request"}
+        cleared = _db.clear_feed_items(
+            user_id=user_id,
+            context_type=context_type,
+            goal_id=goal_id
+        )
+        return {"success": True, "cleared": cleared, "message": "Feed will be regenerated on next request"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/feed/{user_id}")
+async def clear_all_feeds(user_id: str):
+    """Clear ALL cached feed items for a user."""
+    try:
+        cleared = _db.clear_feed_items(user_id=user_id)
+        return {"success": True, "cleared": cleared, "message": "All feeds cleared"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

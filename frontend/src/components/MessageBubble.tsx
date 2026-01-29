@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef } from 'react'
 import ReactMarkdown from 'react-markdown'
+import remarkMath from 'remark-math'
+import rehypeKatex from 'rehype-katex'
+import 'katex/dist/katex.min.css'
 
 interface MessageBubbleProps {
   role: 'user' | 'assistant'
@@ -62,25 +65,27 @@ export default function MessageBubble({
     }
   }, [isAudioMode, isUserRecording, audioUrl, role, onAudioPlay])
 
-  // Strip quotes and JSON markers from assistant messages
+  // Strip quotes and JSON markers from assistant messages, normalize LaTeX delimiters
   const displayContent = useMemo(() => {
+    let text = content
     if (role === 'assistant') {
-      let cleaned = stripQuotes(content)
+      text = stripQuotes(text)
       // Remove any JSON marker strings that might have slipped through
-      if (cleaned.includes('__TASK_CURRICULUM_PROPOSED__:')) {
-        // Extract just the text before the marker, or use a default message
-        const parts = cleaned.split('__TASK_CURRICULUM_PROPOSED__:')
-        cleaned = parts[0].trim() || "Here's the project path I've designed for you."
+      if (text.includes('__TASK_CURRICULUM_PROPOSED__:')) {
+        const parts = text.split('__TASK_CURRICULUM_PROPOSED__:')
+        text = parts[0].trim() || "Here's the project path I've designed for you."
       }
-      return cleaned
     }
-    return content
+    // Normalize LaTeX delimiters: \(...\) → $...$, \[...\] → $$...$$
+    text = text.replace(/\\\((.+?)\\\)/g, '$$$1$$')
+    text = text.replace(/\\\[(.+?)\\\]/gs, '$$$$$1$$$$')
+    return text
   }, [role, content])
 
   return (
     <div className={`message-bubble ${role}`}>
       <div className="message-content">
-        <ReactMarkdown>{displayContent}</ReactMarkdown>
+        <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{displayContent}</ReactMarkdown>
       </div>
     </div>
   )

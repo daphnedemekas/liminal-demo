@@ -164,6 +164,7 @@ FORMAT:
 - 2-3 paragraphs typical
 - Use markdown for emphasis (**bold** for key terms)
 - Blank line between paragraphs
+- For math equations, use LaTeX with $ delimiters: inline $E = mc^2$ and display $$\int_0^\infty e^{-x} dx = 1$$. Do NOT use parenthetical notation like (E = mc^2).
 - End with something substantive to respond to — a specific claim they can evaluate, a prediction to verify, or a concrete next question. Never end with "does this resonate?" or "what do you think?" without a specific referent.
 
 OUTPUT: Return ONLY your response text. No JSON, no meta-commentary.

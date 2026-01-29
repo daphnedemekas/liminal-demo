@@ -388,8 +388,12 @@ function App() {
                     flexDirection: 'column'
                   }}
                 >
-                  {/* Show goal chat if no teaching sub-panel is active, or show both in split view */}
-                  {!activeTeachingForGoal && (
+                  {/* Goal chat - kept mounted, hidden when teaching is active */}
+                  <div style={{
+                    display: activeTeachingForGoal ? 'none' : 'flex',
+                    width: '100%',
+                    height: '100%',
+                  }}>
                     <GoalChat
                       goalId={session.goalId}
                       goal={session.goal}
@@ -401,8 +405,8 @@ function App() {
                       }
                       onCurriculumAccepted={handleCurriculumAccepted}
                     />
-                  )}
-                  
+                  </div>
+
                   {/* Teaching sub-panel - nested within goal view */}
                   {activeTeachingForGoal && (
                     <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>

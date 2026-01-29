@@ -231,7 +231,7 @@ async def generate_ai_reasoning(request: ProfileSummaryRequest):
         scope_line = (
             f"Scope: Current learning path is '{scope_goal}'. Focus on this path and its conversation context."
             if scope_goal
-            else "Scope: Exploration session. Focus on the learner broadly across interests (not any single path)."
+            else "Scope: Exploration session. Focus on them broadly across interests (not any single path)."
         )
 
         context_parts = []
@@ -253,10 +253,10 @@ async def generate_ai_reasoning(request: ProfileSummaryRequest):
                 context_parts.append(f"Topics of interest: {', '.join(theme_names)}")
 
         if not context_parts:
-            return {"reasoning": "Getting to know this learner..."}
+            return {"reasoning": "Getting to know them..."}
 
         llm = LLMClient()
-        prompt = f"""You are an AI tutor. Write your INNER MONOLOGUE - your private thoughts about advancing this learner's learning goal. Write in first person, as if thinking to yourself.
+        prompt = f"""You are an AI tutor. Write your INNER MONOLOGUE - your private thoughts about advancing this person's learning goal. Write in first person, as if thinking to yourself.
 
 {chr(10).join(context_parts)}
 
@@ -301,9 +301,9 @@ async def generate_profile_summary(request: ProfileSummaryRequest):
         interview_state = schema.get("interview_state", {})
         scope_goal = interview_state.get("user_goal")
         scope_line = (
-            f"Scope: This is the learner's current understanding on their path to '{scope_goal}'."
+            f"Scope: This is their current understanding on their path to '{scope_goal}'."
             if scope_goal
-            else "Scope: This is the learner's current understanding across exploration topics (not tied to a single path)."
+            else "Scope: This is their current understanding across exploration topics (not tied to a single path)."
         )
 
         context_parts = []
@@ -352,7 +352,7 @@ async def generate_profile_summary(request: ProfileSummaryRequest):
                     context_parts.append(f"Topics: {', '.join(theme_seeds)}")
 
         if not context_parts:
-            return {"summary": "Continue the conversation to build your learner profile."}
+            return {"summary": "Continue the conversation to build your profile."}
 
         llm = LLMClient()
 
@@ -360,7 +360,7 @@ async def generate_profile_summary(request: ProfileSummaryRequest):
         if scope_goal:
             goal_focus_instruction = f"\nCRITICAL: Focus ONLY on traits and understanding relevant to the learning goal '{scope_goal}'. Do NOT mention general interests, skills, or topics that are not directly related to this specific goal."
 
-        prompt = f"""Write a VERY SHORT summary (2-3 sentences max, under 80 words total) of this learner's style.
+        prompt = f"""Write a VERY SHORT summary (2-3 sentences max, under 80 words total) of their style.
 
 Profile data:
 {chr(10).join(f"- {p}" for p in context_parts)}

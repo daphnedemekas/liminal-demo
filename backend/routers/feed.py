@@ -179,12 +179,12 @@ async def _fetch_all_apis(queries: List[str]) -> List[dict]:
     secondary_query = queries[1] if len(queries) > 1 else queries[0]
 
     tasks = [
-        fetch_brave_results(primary_query, count=2),
-        fetch_youtube_results(secondary_query, count=2),
-        fetch_twitter_results(primary_query, count=2),
-        fetch_reddit_results(secondary_query, count=1),
-        fetch_hackernews_results(primary_query, count=1),
-        fetch_semantic_scholar(primary_query, count=1),
+        fetch_brave_results(primary_query, count=4),
+        fetch_youtube_results(secondary_query, count=4),
+        fetch_twitter_results(primary_query, count=3),
+        fetch_reddit_results(secondary_query, count=2),
+        fetch_hackernews_results(primary_query, count=2),
+        fetch_semantic_scholar(primary_query, count=2),
     ]
 
     all_items = []
@@ -238,12 +238,30 @@ async def stream_feed(request: FeedRequest):
             page_size = 7
             start = request.page * page_size
             page_items = items[start:start + page_size]
-            has_more = (start + page_size) < len(items)
-            for item in page_items:
-                yield f"data: {json.dumps(item)}\n\n"
-            yield f"data: {json.dumps({'done': True, 'cached': True, 'count': len(page_items), 'has_more': has_more})}\n\n"
-            print(f"[Feed] Streamed {len(page_items)} cached items (page {request.page}) in {time.time()-t0:.1f}s")
-            return
+            has_more_cached = (start + page_size) < len(items)
+
+            if page_items:
+                for item in page_items:
+                    yield f"data: {json.dumps(item)}\n\n"
+                # Always say has_more so frontend keeps the sentinel alive;
+                # next page will trigger a fresh fetch if cache is exhausted
+                yield f"data: {json.dumps({'done': True, 'cached': True, 'count': len(page_items), 'has_more': True})}\n\n"
+                print(f"[Feed] Streamed {len(page_items)} cached items (page {request.page}, more_cached={has_more_cached}) in {time.time()-t0:.1f}s")
+                return
+
+            # Cache exhausted — fall through to generate a fresh batch
+            print(f"[Feed] Cache exhausted at page {request.page}, fetching more...")
+
+        # Collect existing URLs to deduplicate
+        existing_urls = set()
+        if has_feed:
+            existing_items = _db.get_feed_items(
+                user_id=request.user_id,
+                context_type=request.context_type,
+                goal_id=request.goal_id,
+                teaching_candidate_id=request.teaching_candidate_id
+            )
+            existing_urls = {it.get("source_url") for it in existing_items if it.get("source_url")}
 
         # Phase 1: Generate search queries
         yield f"data: {json.dumps({'status': 'generating_queries'})}\n\n"
@@ -268,22 +286,23 @@ async def stream_feed(request: FeedRequest):
         # For exploration, use different queries for each API to maximize diversity
         if request.context_type == "exploration":
             tasks = {
-                asyncio.create_task(fetch_brave_results(primary_query, count=2)): "brave1",
-                asyncio.create_task(fetch_brave_results(tertiary_query, count=2)): "brave2",
-                asyncio.create_task(fetch_youtube_results(secondary_query, count=2)): "youtube",
-                asyncio.create_task(fetch_twitter_results(primary_query, count=2)): "twitter",
-                asyncio.create_task(fetch_reddit_results(secondary_query, count=2)): "reddit",
-                asyncio.create_task(fetch_hackernews_results(tertiary_query, count=2)): "hn",
-                asyncio.create_task(fetch_semantic_scholar(primary_query, count=1)): "scholar",
+                asyncio.create_task(fetch_brave_results(primary_query, count=4)): "brave1",
+                asyncio.create_task(fetch_brave_results(tertiary_query, count=4)): "brave2",
+                asyncio.create_task(fetch_youtube_results(secondary_query, count=4)): "youtube",
+                asyncio.create_task(fetch_twitter_results(primary_query, count=3)): "twitter",
+                asyncio.create_task(fetch_reddit_results(secondary_query, count=3)): "reddit",
+                asyncio.create_task(fetch_hackernews_results(tertiary_query, count=3)): "hn",
+                asyncio.create_task(fetch_semantic_scholar(primary_query, count=2)): "scholar",
             }
         else:
             tasks = {
-                asyncio.create_task(fetch_brave_results(primary_query, count=2)): "brave",
-                asyncio.create_task(fetch_youtube_results(secondary_query, count=2)): "youtube",
-                asyncio.create_task(fetch_twitter_results(primary_query, count=2)): "twitter",
-                asyncio.create_task(fetch_reddit_results(secondary_query, count=1)): "reddit",
-                asyncio.create_task(fetch_hackernews_results(primary_query, count=1)): "hn",
-                asyncio.create_task(fetch_semantic_scholar(primary_query, count=1)): "scholar",
+                asyncio.create_task(fetch_brave_results(primary_query, count=4)): "brave1",
+                asyncio.create_task(fetch_brave_results(secondary_query, count=3)): "brave2",
+                asyncio.create_task(fetch_youtube_results(secondary_query, count=4)): "youtube",
+                asyncio.create_task(fetch_twitter_results(primary_query, count=3)): "twitter",
+                asyncio.create_task(fetch_reddit_results(secondary_query, count=2)): "reddit",
+                asyncio.create_task(fetch_hackernews_results(primary_query, count=2)): "hn",
+                asyncio.create_task(fetch_semantic_scholar(primary_query, count=2)): "scholar",
             }
 
         all_items = []
@@ -294,6 +313,12 @@ async def stream_feed(request: FeedRequest):
             try:
                 items = await task
                 for item in items:
+                    # Deduplicate against existing cache
+                    url = item.get("source_url")
+                    if url and url in existing_urls:
+                        continue
+                    if url:
+                        existing_urls.add(url)
                     item["id"] = item_id_counter
                     item_id_counter += 1
                     all_items.append(item)
@@ -303,16 +328,15 @@ async def stream_feed(request: FeedRequest):
         # Interleave so no two consecutive items have the same type
         all_items = _interleave_by_type(all_items)
 
-        # Paginate fresh results too (consistent with cached path)
+        # Stream all new items (these append to what the frontend already has)
         page_size = 7
-        start = request.page * page_size
-        page_items = all_items[start:start + page_size]
-        has_more = (start + page_size) < len(all_items)
+        page_items = all_items[:page_size]
+        has_more = len(all_items) > page_size or len(page_items) > 0
 
         for item in page_items:
             yield f"data: {json.dumps(item)}\n\n"
 
-        # Phase 3: Save to DB (save all items, not just the page)
+        # Save ALL new items to DB (appends to existing cache)
         if all_items:
             try:
                 _db.save_feed_items(
@@ -326,7 +350,7 @@ async def stream_feed(request: FeedRequest):
                 print(f"[Feed] DB save error: {e}")
 
         yield f"data: {json.dumps({'done': True, 'cached': False, 'count': len(page_items), 'has_more': has_more})}\n\n"
-        print(f"[Feed] Streamed {len(all_items)} new items in {time.time()-t0:.1f}s")
+        print(f"[Feed] Streamed {len(page_items)} new items ({len(all_items)} total fetched, {len(existing_urls)} existing) in {time.time()-t0:.1f}s")
 
     return StreamingResponse(
         event_generator(),

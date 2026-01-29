@@ -232,14 +232,16 @@ export default function FeedPanel({
   // Infinite scroll: observe sentinel element at bottom
   useEffect(() => {
     if (!scrollSentinelRef.current || !hasMore) return
-    const root = scrollContainerRef.current || null
+    const container = scrollContainerRef.current
+    // Skip if container is hidden (display:none parent)
+    if (container && container.offsetParent === null) return
     const observer = new IntersectionObserver(
       ([entry]) => { if (entry.isIntersecting) handleLoadMore() },
-      { root, rootMargin: '200px' }
+      { root: container || null, rootMargin: '200px' }
     )
     observer.observe(scrollSentinelRef.current)
     return () => observer.disconnect()
-  }, [hasMore, handleLoadMore])
+  }, [hasMore, handleLoadMore, items.length])
 
   // Auto-load feed on mount with delay
   useEffect(() => {
@@ -249,9 +251,18 @@ export default function FeedPanel({
     }
   }, [hasEverLoaded, loading, fetchFeedStream])
 
-  // Auto-refresh when context changes
+  // Auto-refresh when context changes (only if context actually changed to something new)
+  const prevContextRef = useRef({ goalId, goalText, teachingTopic, teachingCandidateId })
   useEffect(() => {
-    if (hasEverLoaded && !loading) {
+    const prev = prevContextRef.current
+    const changed = prev.goalId !== goalId || prev.goalText !== goalText ||
+      prev.teachingTopic !== teachingTopic || prev.teachingCandidateId !== teachingCandidateId
+    prevContextRef.current = { goalId, goalText, teachingTopic, teachingCandidateId }
+    if (changed && hasEverLoaded && !loading) {
+      setItems([])
+      setHasEverLoaded(false)
+      setPage(0)
+      setHasMore(false)
       const timer = setTimeout(() => { fetchFeedStream(0, false) }, 2000)
       return () => clearTimeout(timer)
     }

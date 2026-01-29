@@ -123,8 +123,9 @@ async def start_discovery(request: SessionCreateRequest = SessionCreateRequest()
                 conversation_history = exploration.get("conversation_history", [])
                 schema_state = exploration.get("schema_state")
                 profile_summary = exploration.get("profile_summary")
-                is_resumed = True
-                print(f"[Discovery] Resuming exploration session: {session_id[:8]}... ({len(conversation_history)} messages)")
+                # Consider resumed if there's history OR schema state (onboarding skips history)
+                is_resumed = len(conversation_history) > 0 or schema_state is not None
+                print(f"[Discovery] {'Resuming' if is_resumed else 'Re-creating'} exploration session: {session_id[:8]}... ({len(conversation_history)} messages, schema={'yes' if schema_state else 'no'})")
 
         # Generate new session if not resuming
         if not is_resumed:

@@ -6,7 +6,7 @@ export interface Message {
   role: 'user' | 'assistant'
   content: string
   audio_url?: string
-  type?: 'message' | 'topic_found' | 'learning_message' | 'goal_proposed' | 'goal_accepted' | 'teaching_accepted' | 'create_goal_panel' | 'create_teaching_panel' | 'task_curriculum_proposed' | 'task_curriculum_accepted'
+  type?: 'message' | 'topic_found' | 'learning_message' | 'goal_proposed' | 'goal_accepted' | 'teaching_accepted' | 'create_goal_panel' | 'create_teaching_panel' | 'task_curriculum_proposed' | 'task_curriculum_accepted' | 'resume_options'
   topic?: any
   proposedGoal?: string  // For goal_proposed type
   goalData?: {  // For create_goal_panel type

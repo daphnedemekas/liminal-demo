@@ -43,6 +43,7 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
   const {
     isListening,
     transcript,
+    getTranscript,
     startListening,
     stopListening,
     isSupported: isSpeechSupported,
@@ -156,6 +157,18 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
         setMessages([...restoredMessages, welcomeMessage])
         setOnboardingSent(true)  // Don't re-send onboarding for resumed sessions
         setQueuedOpening({ content: '', audio_url: undefined })  // No need for opening
+      } else if (response.is_resumed && response.conversation_history?.length === 0) {
+        // Resumed session but no history (e.g., onboarding was skip_history)
+        // Don't re-ask for background, just show welcome back
+        const welcomeMessage = {
+          id: 'welcome-back',
+          role: 'assistant' as const,
+          content: 'Welcome back! What would you like to explore?',
+          type: 'resume_options' as const,
+        }
+        setMessages([welcomeMessage])
+        setOnboardingSent(true)
+        setQueuedOpening({ content: '', audio_url: undefined })
       } else if (!onboardingInfo) {
         // No onboarding info yet - show prompt asking for background
         const backgroundPrompt = "What are you interested in these days? Do you have any hobbies, projects, or goals you're thinking about — or are you just exploring what might be interesting?"
@@ -329,11 +342,11 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
 
       if (e.code === 'Space' && isListening && isAudioMode) {
         e.preventDefault()
+        const currentTranscript = getTranscript()
         stopListening()
 
-        // Send the transcript after stopping
-        if (transcript && transcript.trim()) {
-          handleSend(transcript)
+        if (currentTranscript && currentTranscript.trim()) {
+          handleSend(currentTranscript)
           resetTranscript()
         }
       }
@@ -341,7 +354,7 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isListening, isAudioMode, stopListening, transcript, handleSend, resetTranscript])
+  }, [isListening, isAudioMode, stopListening, getTranscript, handleSend, resetTranscript])
 
   // Handle goal accept/reject
   const handleAcceptGoal = () => {
@@ -403,9 +416,10 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
                 return
               }
               if (isListening) {
+                const currentTranscript = getTranscript()
                 stopListening()
-                if (transcript && transcript.trim()) {
-                  handleSend(transcript)
+                if (currentTranscript && currentTranscript.trim()) {
+                  handleSend(currentTranscript)
                   resetTranscript()
                 }
               } else if (!isPlaying) {

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { stripMarkdown } from '../utils/textUtils'
 
 export type TaskStatus = 'locked' | 'available' | 'in_progress' | 'completed'
@@ -57,11 +57,26 @@ export default function Sidebar({
   onModelChange
 }: SidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(() => window.innerWidth <= 768)
-  const [expandedGoals, setExpandedGoals] = useState<Set<string>>(new Set())
+  const [expandedGoals, setExpandedGoals] = useState<Set<string>>(() => {
+    // Auto-expand goals that have teaching candidates
+    return new Set(goalSessions.filter(s => s.teachingCandidates.length > 0).map(s => s.id))
+  })
 
   // Auto-close sidebar on mobile after navigation
   const isMobile = () => window.innerWidth <= 768
   const autoClose = () => { if (isMobile()) setIsCollapsed(true) }
+
+  // Auto-expand goals when they get new teaching candidates
+  useEffect(() => {
+    const withCandidates = goalSessions.filter(s => s.teachingCandidates.length > 0).map(s => s.id)
+    if (withCandidates.length > 0) {
+      setExpandedGoals(prev => {
+        const next = new Set(prev)
+        withCandidates.forEach(id => next.add(id))
+        return next
+      })
+    }
+  }, [goalSessions])
 
   const toggleGoalExpanded = (goalId: string) => {
     setExpandedGoals(prev => {

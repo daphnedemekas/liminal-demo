@@ -425,6 +425,7 @@ export default function TeachingChat({
         contextType="teaching_candidate"
         goalId={goalId}
         goalText={goalText}
+        teachingCandidateId={String(candidate.id)}
         teachingTopic={candidate.topic}
         userBackground={onboardingInfo}
       />

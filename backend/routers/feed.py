@@ -108,7 +108,7 @@ def _build_context_description(request: FeedRequest) -> str:
     elif request.context_type == "goal":
         return f"Learning goal: {request.goal_text}. ONLY find content directly about this goal topic."
     elif request.context_type == "teaching_candidate":
-        return f"Learning goal: {request.goal_text}. Specific topic: {request.teaching_topic}. ONLY find content directly about this specific topic."
+        return f"Specific deep-dive topic: {request.teaching_topic}. (Part of broader goal: {request.goal_text}). ONLY find content directly about the specific topic '{request.teaching_topic}' — NOT the broader goal or sibling topics."
     return request.goals_summary or request.goal_text or "general learning"
 
 
@@ -125,6 +125,22 @@ IMPORTANT: Generate queries focused on EDUCATIONAL, INTELLECTUAL, and CREATIVE c
 User context: {context}
 
 Return ONLY a JSON array like: ["query about interest 1", "query about interest 2", "query about interest 3"]"""
+    elif request.context_type == "teaching_candidate":
+        prompt = f"""Given this learning context, generate 3 short search queries (each 3-8 words) that would find relevant articles, videos, books, and academic papers. Return as a JSON array of strings.
+
+CRITICAL RULES:
+- Every query MUST be specifically about the deep-dive topic described below — NOT the broader goal.
+- Generate queries at DIFFERENT angles of the SAME specific topic:
+  1. One query using the exact topic terms
+  2. One query approaching the topic from a different angle (e.g., mechanisms, applications, examples)
+  3. One query targeting explanatory content (tutorials, explainers, talks) on this specific topic
+- All 3 queries must be clearly about THIS topic and would NOT also match a different subtopic under the same goal.
+- Do NOT generate queries about the parent goal, the user's background, or related-but-different topics.
+- Target EDUCATIONAL and INTELLECTUAL content: essays, lectures, research papers, technical discussions, books.
+
+Context: {context}
+
+Return ONLY a JSON array like: ["exact topic query", "different angle on same topic", "explainer or tutorial query"]"""
     else:
         prompt = f"""Given this learning context, generate 3 short search queries (each 3-8 words) that would find relevant articles, videos, books, and academic papers. Return as a JSON array of strings.
 

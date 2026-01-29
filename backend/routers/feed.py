@@ -59,7 +59,7 @@ def _interleave_by_type(items: List[dict]) -> List[dict]:
 
     # Priority order: higher = picked first when buckets have equal size
     TYPE_PRIORITY = {
-        "article": 6, "paper": 5, "video": 4, "course": 4, "blog": 3,
+        "article": 6, "paper": 5, "book": 5, "video": 4, "course": 4, "blog": 3,
         "discussion": 2, "tweet": 1, "general": 0,
     }
 
@@ -126,18 +126,22 @@ User context: {context}
 
 Return ONLY a JSON array like: ["query about interest 1", "query about interest 2", "query about interest 3"]"""
     else:
-        prompt = f"""Given this learning context, generate 2-3 short search queries (each 3-8 words) that would find relevant articles, videos, and academic papers. Return as a JSON array of strings.
+        prompt = f"""Given this learning context, generate 3 short search queries (each 3-8 words) that would find relevant articles, videos, books, and academic papers. Return as a JSON array of strings.
 
 CRITICAL RULES:
-- Every query MUST be specifically and directly about the learning goal/topic described below.
+- Every query MUST be about the learning goal/topic described below.
+- Generate queries at DIFFERENT levels of specificity:
+  1. One specific query using the exact topic terms
+  2. One broader query about the parent field or related concepts
+  3. One query targeting books, reviews, or introductory material on the topic
+- This is important because niche topics may not have exact matches — broader related queries ensure we always find content.
 - Do NOT generate queries about the user's general background, career, or other interests.
-- Do NOT generate generic self-improvement, productivity, or startup queries unless the goal is specifically about those topics.
-- Target EDUCATIONAL and INTELLECTUAL content: essays, lectures, research papers, technical discussions, book analyses.
+- Target EDUCATIONAL and INTELLECTUAL content: essays, lectures, research papers, technical discussions, books.
 - Avoid anything related to dating, relationships, lifestyle, or clickbait.
 
 Context: {context}
 
-Return ONLY a JSON array like: ["query one", "query two", "query three"]"""
+Return ONLY a JSON array like: ["exact topic query", "broader related query", "books or intro material query"]"""
 
     llm = LLMClient()
     try:
@@ -173,6 +177,7 @@ async def _fetch_all_apis(queries: List[str]) -> List[dict]:
         fetch_twitter_results,
         fetch_reddit_results,
         fetch_hackernews_results,
+        fetch_google_books,
     )
 
     primary_query = queries[0]
@@ -184,7 +189,8 @@ async def _fetch_all_apis(queries: List[str]) -> List[dict]:
         fetch_twitter_results(primary_query, count=3),
         fetch_reddit_results(secondary_query, count=2),
         fetch_hackernews_results(primary_query, count=2),
-        fetch_semantic_scholar(primary_query, count=2),
+        fetch_semantic_scholar(primary_query, count=3),
+        fetch_google_books(secondary_query, count=3),
     ]
 
     all_items = []
@@ -277,6 +283,7 @@ async def stream_feed(request: FeedRequest):
             fetch_twitter_results,
             fetch_reddit_results,
             fetch_hackernews_results,
+            fetch_google_books,
         )
 
         primary_query = queries[0]
@@ -293,6 +300,7 @@ async def stream_feed(request: FeedRequest):
                 asyncio.create_task(fetch_reddit_results(secondary_query, count=3)): "reddit",
                 asyncio.create_task(fetch_hackernews_results(tertiary_query, count=3)): "hn",
                 asyncio.create_task(fetch_semantic_scholar(primary_query, count=2)): "scholar",
+                asyncio.create_task(fetch_google_books(primary_query, count=2)): "books",
             }
         else:
             tasks = {
@@ -302,7 +310,8 @@ async def stream_feed(request: FeedRequest):
                 asyncio.create_task(fetch_twitter_results(primary_query, count=3)): "twitter",
                 asyncio.create_task(fetch_reddit_results(secondary_query, count=2)): "reddit",
                 asyncio.create_task(fetch_hackernews_results(primary_query, count=2)): "hn",
-                asyncio.create_task(fetch_semantic_scholar(primary_query, count=2)): "scholar",
+                asyncio.create_task(fetch_semantic_scholar(primary_query, count=3)): "scholar",
+                asyncio.create_task(fetch_google_books(secondary_query, count=3)): "books",
             }
 
         all_items = []

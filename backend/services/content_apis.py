@@ -12,7 +12,7 @@ YOUTUBE_VIDEOS_URL = "https://www.googleapis.com/youtube/v3/videos"
 SEMANTIC_SCHOLAR_URL = "https://api.semanticscholar.org/graph/v1/paper/search"
 HN_SEARCH_URL = "https://hn.algolia.com/api/v1/search"
 
-TIMEOUT = 5.0
+TIMEOUT = 10.0
 
 
 async def fetch_brave_results(query: str, count: int = 3) -> List[Dict[str, Any]]:
@@ -343,13 +343,11 @@ async def fetch_reddit_results(query: str, count: int = 2) -> List[Dict[str, Any
             if subreddit_name not in ALLOWED_SUBREDDITS:
                 continue
 
-            # Relevance filter: require at least 2 query keywords in title/content
+            # Relevance filter: require at least 1 query keyword in title/content
             query_words = [w.lower() for w in query.split() if len(w) > 3]
             post_text = (post.get("title", "") + " " + post.get("selftext", "")).lower()
             matching_words = sum(1 for w in query_words if w in post_text)
-            if len(query_words) >= 2 and matching_words < 2:
-                continue
-            if len(query_words) == 1 and matching_words < 1:
+            if matching_words < 1:
                 continue
 
             subreddit = post.get("subreddit_name_prefixed", "Reddit")
@@ -390,7 +388,7 @@ async def fetch_hackernews_results(query: str, count: int = 2) -> List[Dict[str,
                     "query": query,
                     "tags": "story",
                     "hitsPerPage": count + 3,
-                    "numericFilters": "points>50",  # Only popular posts
+                    "numericFilters": "points>10",  # Filter low-engagement posts
                 },
             )
             resp.raise_for_status()
@@ -419,4 +417,49 @@ async def fetch_hackernews_results(query: str, count: int = 2) -> List[Dict[str,
         return results
     except Exception as e:
         print(f"[ContentAPIs] HN search error: {e}")
+        return []
+
+
+async def fetch_google_books(query: str, count: int = 3) -> List[Dict[str, Any]]:
+    """Fetch books from Google Books API (free, no key needed)."""
+    try:
+        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+            resp = await client.get(
+                "https://www.googleapis.com/books/v1/volumes",
+                params={
+                    "q": query,
+                    "maxResults": count + 2,
+                    "orderBy": "relevance",
+                    "printType": "books",
+                    "langRestrict": "en",
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+        results = []
+        for item in data.get("items", [])[:count]:
+            info = item.get("volumeInfo", {})
+            authors = info.get("authors", [])
+            author_str = ", ".join(authors[:2])
+            if len(authors) > 2:
+                author_str += " et al."
+            year = (info.get("publishedDate") or "")[:4]
+            citation = f"{author_str} ({year})" if author_str and year else author_str or year
+
+            description = info.get("description") or info.get("subtitle") or ""
+            thumbnail = (info.get("imageLinks") or {}).get("thumbnail")
+
+            results.append({
+                "title": info.get("title", ""),
+                "content": description[:300],
+                "source_citation": citation,
+                "source_url": info.get("infoLink") or info.get("canonicalVolumeLink") or "",
+                "source_type": "book",
+                "thumbnail_url": thumbnail,
+            })
+        print(f"[ContentAPIs] Google Books returned {len(results)} books for: {query}")
+        return results
+    except Exception as e:
+        print(f"[ContentAPIs] Google Books error: {e}")
         return []

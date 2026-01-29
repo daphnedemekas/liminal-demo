@@ -288,6 +288,9 @@ export default function DraftTab({ goalId, userId, onSendToChat }: DraftTabProps
     // If WebSocket isn't open, reconnect and send once connected
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       if (wsRef.current) {
+        // Suppress error from intentional close
+        wsRef.current.onclose = null
+        wsRef.current.onerror = null
         wsRef.current.close()
       }
       const apiUrl = getApiBaseUrl().replace(/^http/, 'ws')

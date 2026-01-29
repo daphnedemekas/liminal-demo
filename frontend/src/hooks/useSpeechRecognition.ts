@@ -46,7 +46,7 @@ declare global {
   }
 }
 
-interface UseSpeechRecognitionReturn {
+export interface UseSpeechRecognitionReturn {
   isListening: boolean
   transcript: string
   getTranscript: () => string

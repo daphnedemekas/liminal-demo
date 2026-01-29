@@ -389,6 +389,13 @@ def get_discovery_websocket_handler():
                     # Wait for the thread to finish
                     await fut
 
+                    # Push updated schema to frontend for real-time profile/teaching candidate updates
+                    try:
+                        schema = session_data.discovery_session.get_schema()
+                        await safe_send({"type": "schema_update", "schema": schema})
+                    except Exception as schema_err:
+                        print(f"[WS] Schema push error: {schema_err}")
+
                 except Exception as e:
                     print(f"[WS ERROR] Command processing failed: {e}")
                     import traceback

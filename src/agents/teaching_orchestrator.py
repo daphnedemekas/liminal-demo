@@ -207,19 +207,17 @@ CONTEXT:
 - Focus Question: {candidate.focus_question}
 - User Background: {self.user_background}
 
-TASK: Generate an opening message that:
-1. Acknowledges what we're about to learn together
-2. Asks a probing question to understand what they ALREADY know about this specific topic
-3. The question should reveal their mental model, not just yes/no understanding
-4. Keep it warm and conversational
+TASK: Ask a single probing question to understand what they ALREADY know about this specific topic. The question should reveal their mental model, not just yes/no understanding.
 
-IMPORTANT: Don't ask "what do you know about X?" directly. Instead:
-- Ask them to explain a related concept
-- Present a scenario and ask how they'd think about it
-- Ask about their intuition or mental model
-- Reference something from the goal conversation to build on
+IMPORTANT:
+- Do NOT include any welcome message, greeting, or preamble. Jump straight to the question.
+- Don't ask "what do you know about X?" directly. Instead:
+  - Ask them to explain a related concept
+  - Present a scenario and ask how they'd think about it
+  - Ask about their intuition or mental model
+  - Reference something from the goal conversation to build on
 
-Keep your response under 100 words. Be direct and engaging.
+Keep your response under 60 words. Just the question, nothing else.
 
 Return just the message text, no JSON."""
 

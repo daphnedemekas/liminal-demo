@@ -81,6 +81,7 @@ export default function TeachingChat({
   const {
     isListening,
     transcript,
+    getTranscript,
     startListening,
     stopListening,
     isSupported: isSpeechSupported,
@@ -94,7 +95,7 @@ export default function TeachingChat({
 
     const initializeTeaching = async () => {
       setIsLoading(true)
-      setStatus('Initializing teaching session...')
+      setStatus('Initializing deep dive...')
       
       try {
         const response = await fetch(`${getApiUrl()}/api/teaching/start`, {
@@ -427,11 +428,11 @@ export default function TeachingChat({
 
       if (e.code === 'Space' && isListening && isAudioMode) {
         e.preventDefault()
+        const currentTranscript = getTranscript()
         stopListening()
 
-        // Send the transcript after stopping
-        if (transcript && transcript.trim()) {
-          handleSend(transcript)
+        if (currentTranscript && currentTranscript.trim()) {
+          handleSend(currentTranscript)
           resetTranscript()
         }
       }
@@ -439,7 +440,7 @@ export default function TeachingChat({
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isListening, isAudioMode, stopListening, transcript, handleSend, resetTranscript])
+  }, [isListening, isAudioMode, stopListening, getTranscript, handleSend, resetTranscript])
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -503,9 +504,10 @@ export default function TeachingChat({
                       return
                     }
                     if (isListening) {
+                      const currentTranscript = getTranscript()
                       stopListening()
-                      if (transcript && transcript.trim()) {
-                        handleSend(transcript)
+                      if (currentTranscript && currentTranscript.trim()) {
+                        handleSend(currentTranscript)
                         resetTranscript()
                       }
                     } else if (!isPlaying) {

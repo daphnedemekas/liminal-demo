@@ -117,6 +117,11 @@ export function useWebSocket(sessionId: string, phase: 'discovery' | 'learning')
         // Handle error messages
         if (data.type === 'error') {
           console.error('[WebSocket] Error from server:', data.message)
+          // Clean up any in-progress streaming message
+          if (streamingMessageIdRef.current) {
+            setMessages(prev => prev.filter(msg => msg.id !== streamingMessageIdRef.current))
+            streamingMessageIdRef.current = null
+          }
           // Show error as a system message
           const errorMessage: Message = {
             id: crypto.randomUUID(),
@@ -316,6 +321,16 @@ export function useWebSocket(sessionId: string, phase: 'discovery' | 'learning')
 
       ws.onclose = () => {
         setIsConnected(false)
+        setStatus(null)
+        // Clean up any in-progress streaming message
+        if (streamingMessageIdRef.current) {
+          setMessages(prev => prev.map(msg =>
+            msg.id === streamingMessageIdRef.current
+              ? { ...msg, isStreaming: false }
+              : msg
+          ))
+          streamingMessageIdRef.current = null
+        }
       }
     }
 

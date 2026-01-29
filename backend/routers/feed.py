@@ -302,10 +302,17 @@ async def stream_feed(request: FeedRequest):
 
         # Interleave so no two consecutive items have the same type
         all_items = _interleave_by_type(all_items)
-        for item in all_items:
+
+        # Paginate fresh results too (consistent with cached path)
+        page_size = 7
+        start = request.page * page_size
+        page_items = all_items[start:start + page_size]
+        has_more = (start + page_size) < len(all_items)
+
+        for item in page_items:
             yield f"data: {json.dumps(item)}\n\n"
 
-        # Phase 3: Save to DB
+        # Phase 3: Save to DB (save all items, not just the page)
         if all_items:
             try:
                 _db.save_feed_items(
@@ -318,7 +325,7 @@ async def stream_feed(request: FeedRequest):
             except Exception as e:
                 print(f"[Feed] DB save error: {e}")
 
-        yield f"data: {json.dumps({'done': True, 'cached': False, 'count': len(all_items), 'has_more': False})}\n\n"
+        yield f"data: {json.dumps({'done': True, 'cached': False, 'count': len(page_items), 'has_more': has_more})}\n\n"
         print(f"[Feed] Streamed {len(all_items)} new items in {time.time()-t0:.1f}s")
 
     return StreamingResponse(

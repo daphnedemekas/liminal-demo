@@ -62,6 +62,7 @@ export default function GoalChat({
   const {
     isListening,
     transcript,
+    getTranscript,
     startListening,
     stopListening,
     isSupported: isSpeechSupported,
@@ -303,11 +304,13 @@ export default function GoalChat({
 
       if (e.code === 'Space' && isListening && isAudioMode) {
         e.preventDefault()
+        // Capture transcript from ref BEFORE stopping (avoids stale closure)
+        const currentTranscript = getTranscript()
         stopListening()
 
         // Send the transcript after stopping
-        if (transcript && transcript.trim()) {
-          handleSend(transcript)
+        if (currentTranscript && currentTranscript.trim()) {
+          handleSend(currentTranscript)
           resetTranscript()
         }
       }
@@ -315,7 +318,7 @@ export default function GoalChat({
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isListening, isAudioMode, stopListening, transcript, handleSend, resetTranscript])
+  }, [isListening, isAudioMode, stopListening, getTranscript, handleSend, resetTranscript])
 
   // Check for task curriculum proposed (new batch proposal flow)
   const lastCurriculumProposedIndex = messages.map((m, i) => m.type === 'task_curriculum_proposed' ? i : -1).filter(i => i >= 0).pop() ?? -1
@@ -387,9 +390,11 @@ export default function GoalChat({
                 return
               }
               if (isListening) {
+                // Capture transcript from ref BEFORE stopping (avoids stale closure)
+                const currentTranscript = getTranscript()
                 stopListening()
-                if (transcript && transcript.trim()) {
-                  handleSend(transcript)
+                if (currentTranscript && currentTranscript.trim()) {
+                  handleSend(currentTranscript)
                   resetTranscript()
                 }
               } else if (!isPlaying) {
@@ -407,14 +412,6 @@ export default function GoalChat({
             <h2>{goal}</h2>
           </div>
           <div className="goal-chat-header-actions">
-            <button
-              className="generate-path-btn"
-              onClick={handleGenerateLearningPath}
-              disabled={!isConnected || isGeneratingPath}
-              title="Generate a project path based on current conversation"
-            >
-              {isGeneratingPath ? 'Generating...' : 'Generate Project Path'}
-            </button>
             <div className="goal-chat-status">
               <AudioToggle isAudioMode={isAudioMode} onToggle={toggleAudioMode} />
               {isResumed && <span className="resumed-badge" title="Session resumed">Resumed</span>}
@@ -579,7 +576,10 @@ export default function GoalChat({
             isConnected={isConnected}
             initialSummary={profileSummary}
             onSchemaUpdate={onSchemaUpdate}
+            onGeneratePath={handleGenerateLearningPath}
+            isGeneratingPath={isGeneratingPath}
             onTeachingCandidateClick={(candidate) => {
+              console.log('[GoalChat] Deep dive clicked:', candidate.id, candidate.topic)
               // Convert to TeachingCandidate format and call handler
               onTeachingCandidateAccepted({
                 id: candidate.id,

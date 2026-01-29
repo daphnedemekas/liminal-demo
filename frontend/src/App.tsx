@@ -218,6 +218,7 @@ function App() {
 
   // Handle when teaching candidate is accepted - ADD to goal's teaching list (with deduplication)
   const handleTeachingCandidateAccepted = useCallback((candidate: any, goalSessionId: string) => {
+    console.log('[App] handleTeachingCandidateAccepted:', candidate?.id, candidate?.topic, 'goalSessionId:', goalSessionId)
     // Convert to Sidebar's TeachingCandidate format
     const sidebarCandidate: TeachingCandidate = {
       id: candidate.id,
@@ -244,6 +245,7 @@ function App() {
 
     // Automatically switch to the new teaching candidate view
     setActiveTeachingId(sidebarCandidate.id)
+    setActiveMainView('teaching')
   }, [])
 
   // Handle when curriculum is accepted - ADD all tasks to goal's teaching list

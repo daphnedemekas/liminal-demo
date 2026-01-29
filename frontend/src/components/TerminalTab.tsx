@@ -21,7 +21,14 @@ interface TerminalSuggestion {
 }
 
 export default function TerminalTab({ goalId, userId }: TerminalTabProps) {
-  const [session, setSession] = useState<TerminalSession | null>(null)
+  const storageKey = `terminal_session_${goalId}`
+  const [session, setSession] = useState<TerminalSession | null>(() => {
+    const saved = sessionStorage.getItem(storageKey)
+    if (saved) {
+      try { return JSON.parse(saved) } catch { /* ignore */ }
+    }
+    return null
+  })
   const [isConnecting, setIsConnecting] = useState(false)
   const [isConnected, setIsConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -146,6 +153,7 @@ export default function TerminalTab({ goalId, userId }: TerminalTabProps) {
       setError(null)
       const newSession = await api.startTerminal(goalId, userId, '~')
       setSession(newSession)
+      sessionStorage.setItem(storageKey, JSON.stringify(newSession))
     } catch (err: any) {
       console.error('[TerminalTab] Failed to start terminal:', err)
       setError(err.message || 'Failed to start terminal')
@@ -226,6 +234,9 @@ export default function TerminalTab({ goalId, userId }: TerminalTabProps) {
       console.log('[TerminalTab] WebSocket closed')
       setIsConnected(false)
       xtermRef.current?.write('\r\n[Terminal disconnected]\r\n')
+      // Clear saved session so user can start fresh
+      sessionStorage.removeItem(storageKey)
+      setSession(null)
     }
 
     wsRef.current = ws

@@ -49,6 +49,7 @@ declare global {
 interface UseSpeechRecognitionReturn {
   isListening: boolean
   transcript: string
+  getTranscript: () => string
   startListening: () => void
   stopListening: () => void
   isSupported: boolean
@@ -58,6 +59,7 @@ interface UseSpeechRecognitionReturn {
 export function useSpeechRecognition(): UseSpeechRecognitionReturn {
   const [isListening, setIsListening] = useState(false)
   const [transcript, setTranscript] = useState('')
+  const transcriptRef = useRef('')
   const recognitionRef = useRef<SpeechRecognition | null>(null)
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -80,6 +82,7 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
       for (let i = 0; i < event.results.length; i++) {
         fullTranscript += event.results[i][0].transcript
       }
+      transcriptRef.current = fullTranscript
       setTranscript(fullTranscript)
     }
 
@@ -116,6 +119,7 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
 
   const startListening = useCallback(() => {
     if (recognitionRef.current && !isListening) {
+      transcriptRef.current = ''
       setTranscript('')
       recognitionRef.current.start()
       setIsListening(true)
@@ -132,12 +136,16 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
   }, [isListening])
 
   const resetTranscript = useCallback(() => {
+    transcriptRef.current = ''
     setTranscript('')
   }, [])
+
+  const getTranscript = useCallback(() => transcriptRef.current, [])
 
   return {
     isListening,
     transcript,
+    getTranscript,
     startListening,
     stopListening,
     isSupported,

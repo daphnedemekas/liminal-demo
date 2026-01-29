@@ -35,7 +35,7 @@ def get_discovery_websocket_handler():
                 return
             try:
                 await websocket.send_json(data)
-            except RuntimeError:
+            except Exception:
                 _ws_closed = True
 
         session_data = await _session_manager.get_session(session_id)

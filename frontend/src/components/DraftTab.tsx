@@ -264,44 +264,84 @@ export default function DraftTab({ goalId, userId, onSendToChat }: DraftTabProps
       return
     }
     
-    if (!wsRef.current) {
-      setError('Not connected to document service. Please wait a moment and try again.')
-      return
+    const sendRequest = () => {
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+        setError('Connection failed. Please try again.')
+        setIsGeneratingSuggestions(false)
+        return
+      }
+      try {
+        wsRef.current.send(JSON.stringify({
+          type: 'request_suggestion',
+          selection: '' // Empty means analyze entire document
+        }))
+      } catch {
+        setError('Failed to send request. Please try again.')
+        setIsGeneratingSuggestions(false)
+      }
     }
-    
-    if (wsRef.current.readyState !== WebSocket.OPEN) {
-      setError('Connection not ready. Please wait a moment and try again.')
-      return
-    }
-    
+
     setIsGeneratingSuggestions(true)
     setError(null)
     setSuggestions([]) // Clear old suggestions
-    
-    try {
-      wsRef.current.send(JSON.stringify({
-        type: 'request_suggestion',
-        selection: '' // Empty means analyze entire document
-      }))
-      
-      // Timeout after 30 seconds
-      const timeoutId = setTimeout(() => {
-        setIsGeneratingSuggestions(prev => {
-          if (prev) {
-            setError('Suggestion generation timed out. Please try again.')
-            return false
+
+    // If WebSocket isn't open, reconnect and send once connected
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      if (wsRef.current) {
+        wsRef.current.close()
+      }
+      const apiUrl = getApiBaseUrl().replace(/^http/, 'ws')
+      const ws = new WebSocket(`${apiUrl}/ws/document/${activeDocument.id}`)
+      ws.onopen = () => {
+        setError(null)
+        sendRequest()
+      }
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          if (data.type === 'suggestions') {
+            const suggestionsList = Array.isArray(data.suggestions) ? data.suggestions : []
+            setSuggestions(suggestionsList)
+            setIsGeneratingSuggestions(false)
+            if (suggestionsList.length === 0) {
+              setError('No suggestions generated. Try writing more content.')
+            } else {
+              setError(null)
+            }
+          } else if (data.type === 'error') {
+            setError(data.message || 'Error generating suggestions')
+            setIsGeneratingSuggestions(false)
           }
-          return prev
-        })
-      }, 30000)
-      
-      // Store timeout ID to clear if suggestions arrive
-      // Note: This will be cleared when suggestions arrive in the WebSocket handler
-      return () => clearTimeout(timeoutId)
-    } catch (err) {
-      setError('Failed to send request. Please try again.')
-      setIsGeneratingSuggestions(false)
+        } catch {
+          setError('Failed to parse server response')
+          setIsGeneratingSuggestions(false)
+        }
+      }
+      ws.onerror = () => {
+        setError('Failed to connect to document service.')
+        setIsGeneratingSuggestions(false)
+      }
+      ws.onclose = (event) => {
+        if (event.code !== 1000) {
+          setError('Connection closed unexpectedly')
+        }
+      }
+      wsRef.current = ws
+    } else {
+      sendRequest()
     }
+
+    // Timeout after 30 seconds
+    const timeoutId = setTimeout(() => {
+      setIsGeneratingSuggestions(prev => {
+        if (prev) {
+          setError('Suggestion generation timed out. Please try again.')
+          return false
+        }
+        return prev
+      })
+    }, 30000)
+    return () => clearTimeout(timeoutId)
   }, [activeDocument])
 
   // Save on blur (immediate save when user leaves textarea)

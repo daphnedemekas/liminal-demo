@@ -48,9 +48,11 @@ export default function ContextTab({ goalId, userId }: ContextTabProps) {
     try {
       setIsAdding(true)
       setError(null)
-      const newItem = await api.addContext(goalId, userId, newContextText.trim(), 'text')
-      setContexts(prev => [newItem, ...prev])
+      await api.addContext(goalId, userId, newContextText.trim(), 'text')
       setNewContextText('')
+      // Reload from server to ensure consistency
+      const items = await api.getContexts(goalId)
+      setContexts(items.filter(item => item.is_active))
     } catch (err: any) {
       console.error('[ContextTab] Failed to add context:', err)
       setError(err.message || 'Failed to add context')

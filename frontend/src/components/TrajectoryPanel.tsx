@@ -196,12 +196,18 @@ function InsightsBanner({ data }: { data: LearnerTrajectoryDashboard | null }) {
 // Project Identity Card (radar + traits)
 // ============================================
 
+/** Grab the latest value from a learner_model field (which is an array of snapshots over time). */
+const latest = (arr: any) => {
+  if (Array.isArray(arr) && arr.length > 0) return arr[arr.length - 1]
+  return arr  // already a single value or null
+}
+
 function ProjectIdentityCard({ userData, learnerModel }: { userData: UserData | null; learnerModel: any }) {
-  const entryMode = learnerModel?.entry_mode || (userData as any)?.entry_mode
-  const curiosityType = (userData as any)?.curiosity_type
-  const motivationProfile = (userData as any)?.motivation_profile
-  const pacingPref = (userData as any)?.pacing_preference
-  const uncertaintyTol = (userData as any)?.uncertainty_tolerance
+  const entryMode = latest(learnerModel?.entry_mode) || (userData as any)?.entry_mode
+  const curiosityType = latest(learnerModel?.curiosity_type) || (userData as any)?.curiosity_type
+  const motivationProfile = latest(learnerModel?.motivation_profile) || (userData as any)?.motivation_profile
+  const pacingPref = latest(learnerModel?.pacing_preference) || (userData as any)?.pacing_preference
+  const uncertaintyTol = latest(learnerModel?.uncertainty_tolerance) || (userData as any)?.uncertainty_tolerance
 
   const hasData = entryMode || curiosityType || motivationProfile
 

@@ -417,16 +417,16 @@ export default function GoalChat({
             </button>
             <div className="goal-chat-status">
               <AudioToggle isAudioMode={isAudioMode} onToggle={toggleAudioMode} />
-              {isResumed && <span className="resumed-badge">Resumed</span>}
+              {isResumed && <span className="resumed-badge" title="Session resumed">Resumed</span>}
               {status ? (
-                <span className="status-indicator-small">
+                <span className="status-indicator-small" title={status}>
                   <span className="status-dot"></span>
                   {status}
                 </span>
               ) : isConnected ? (
-                <span className="connected-indicator">Connected</span>
+                <span className="connected-indicator" title="Connected">●</span>
               ) : (
-                <span className="connecting-indicator">Connecting...</span>
+                <span className="connecting-indicator" title="Connecting...">○</span>
               )}
             </div>
           </div>

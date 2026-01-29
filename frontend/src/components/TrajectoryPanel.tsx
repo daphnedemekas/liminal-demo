@@ -359,22 +359,50 @@ function HighlightsTimeline({ highlights }: { highlights: any[] }) {
 // ============================================
 
 function ProfileEvolutionChart({ learnerModel }: { learnerModel: any }) {
-  const stability = learnerModel?.stability
-  const profilePoints = stability?.confidence_in_profile || []
-  const targetPoints = stability?.confidence_in_target || []
+  // Derive profile confidence from trait confidence values across checkpoints
+  // Each trait (pacing_preference, uncertainty_tolerance, curiosity_type) is an array of snapshots with confidence
+  const pacingArr = learnerModel?.pacing_preference || []
+  const uncertaintyArr = learnerModel?.uncertainty_tolerance || []
+  const curiosityArr = learnerModel?.curiosity_type || []
+  const entryModeArr = learnerModel?.entry_mode || []
+  const motivationArr = learnerModel?.motivation_profile || []
 
-  // Hide if not enough data or all values are zero
-  if (profilePoints.length < 2 && targetPoints.length < 2) return null
-  const hasNonZero = [...profilePoints, ...targetPoints].some((v: number) => v > 0)
+  // Find the max number of checkpoints across all traits
+  const traitArrays = [pacingArr, uncertaintyArr, curiosityArr, entryModeArr, motivationArr]
+  const maxCheckpoints = Math.max(...traitArrays.map((a: any[]) => Array.isArray(a) ? a.length : 0))
+
+  if (maxCheckpoints < 2) return null
+
+  // For each checkpoint, compute average confidence across available traits
+  const getConfidence = (item: any): number | null => {
+    if (!item) return null
+    if (typeof item === 'object' && item.confidence !== undefined) return Number(item.confidence)
+    return null
+  }
+
+  // Compute a "trait richness" score: how many dimensions are populated at each checkpoint
+  const chartData = Array.from({ length: maxCheckpoints }, (_, i) => {
+    const confidences: number[] = []
+    for (const arr of traitArrays) {
+      if (Array.isArray(arr) && arr[i]) {
+        const c = getConfidence(arr[i])
+        if (c !== null) confidences.push(c)
+      }
+    }
+    const avgConfidence = confidences.length > 0
+      ? confidences.reduce((a, b) => a + b, 0) / confidences.length
+      : null
+    const traitCoverage = traitArrays.filter((a: any[]) => Array.isArray(a) && a.length > i).length / traitArrays.length
+
+    return {
+      point: i + 1,
+      profile: avgConfidence !== null ? Math.round(avgConfidence * 100) : null,
+      coverage: Math.round(traitCoverage * 100),
+    }
+  })
+
+  const hasNonZero = chartData.some(d => (d.profile !== null && d.profile > 0) || d.coverage > 0)
   if (!hasNonZero) return null
-
-  // Build chart data — assume arrays are time-ordered values
-  const maxLen = Math.max(profilePoints.length, targetPoints.length)
-  const chartData = Array.from({ length: maxLen }, (_, i) => ({
-    point: i + 1,
-    profile: profilePoints[i] !== undefined ? Math.round(profilePoints[i] * 100) : null,
-    target: targetPoints[i] !== undefined ? Math.round(targetPoints[i] * 100) : null,
-  }))
 
   return (
     <div className="trajectory-evolution-chart">
@@ -382,12 +410,12 @@ function ProfileEvolutionChart({ learnerModel }: { learnerModel: any }) {
       <ResponsiveContainer width="100%" height={200}>
         <AreaChart data={chartData}>
           <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-          <XAxis dataKey="point" tick={{ fontSize: 11 }} />
+          <XAxis dataKey="point" label={{ value: 'Checkpoint', position: 'insideBottom', offset: -5, fontSize: 11 }} tick={{ fontSize: 11 }} />
           <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
           <Tooltip />
           <Legend />
-          <Area type="monotone" dataKey="profile" name="Profile Confidence" stroke="#6366f1" fill="#c7d2fe" fillOpacity={0.4} connectNulls />
-          <Area type="monotone" dataKey="target" name="Target Confidence" stroke="#10b981" fill="#a7f3d0" fillOpacity={0.4} connectNulls />
+          <Area type="monotone" dataKey="profile" name="Trait Confidence" stroke="#6366f1" fill="#c7d2fe" fillOpacity={0.4} connectNulls />
+          <Area type="monotone" dataKey="coverage" name="Profile Coverage" stroke="#10b981" fill="#a7f3d0" fillOpacity={0.4} connectNulls />
         </AreaChart>
       </ResponsiveContainer>
     </div>

@@ -26,8 +26,6 @@ class CurriculumStepStatus(str, Enum):
 class TeachingPhase(str, Enum):
     """Phase of the teaching session."""
     ASSESSMENT = "assessment"  # Probing user's prior knowledge for this topic
-    CURRICULUM_PROPOSAL = "curriculum_proposal"  # Proposing curriculum with justifications
-    NEGOTIATION = "negotiation"  # User modifying curriculum
     TEACHING = "teaching"  # Active teaching
 
 
@@ -45,7 +43,6 @@ class TeachingAction(str, Enum):
     CHECK_PREREQUISITE = "check_prerequisite"  # Verify needed foundation
     SUMMARIZE_PROGRESS = "summarize_progress"  # Review what's been learned
     ASSESS_KNOWLEDGE = "assess_knowledge"  # Probe user's knowledge (assessment phase)
-    PROPOSE_CURRICULUM = "propose_curriculum"  # Propose the learning path
 
 
 # ============================================================================
@@ -261,7 +258,6 @@ class TeachingSchema(BaseModel):
     
     # Phase tracking
     teaching_phase: TeachingPhase = TeachingPhase.ASSESSMENT
-    curriculum_accepted: bool = False  # User accepted the proposed curriculum
     
     # Assessment tracking (for task-specific prior knowledge)
     assessment_concepts_known: List[str] = Field(default_factory=list)

@@ -376,9 +376,6 @@ def get_teaching_websocket_handler():
                             "narrative_summary": schema.get("narrative_summary", ""),
                         }
 
-                        if message_type == "curriculum_proposed":
-                            response_data["curriculum_plan"] = result.get("curriculum_plan")
-
                         if phase == "teaching":
                             response_data["understanding_markers"] = [
                                 {

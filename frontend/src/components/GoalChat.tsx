@@ -85,11 +85,11 @@ export default function GoalChat({
     
     setIsGeneratingPath(true)
     sendCommand('__GENERATE_LEARNING_PATH__')
-    
-    // Reset loading state after a delay (will also reset when response comes)
+
+    // Safety timeout — reset if no response after 60s
     setTimeout(() => {
       setIsGeneratingPath(false)
-    }, 5000)
+    }, 60000)
   }, [isConnected, isGeneratingPath, sendCommand])
 
   // Initialize or resume goal-specific session

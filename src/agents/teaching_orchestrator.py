@@ -335,10 +335,6 @@ What's your current sense of this? Even a rough mental model or analogy helps me
         Returns:
             Dict with response and metadata (phase, type, etc.)
         """
-        # Check for special commands
-        if user_message == "__ACCEPT_CURRICULUM__":
-            return self._handle_accept_curriculum()
-        
         # Add user message to history
         self.conversation_history.append({
             "role": "user",
@@ -356,10 +352,6 @@ What's your current sense of this? Even a rough mental model or analogy helps me
         # Handle based on current phase
         if current_phase == TeachingPhase.ASSESSMENT:
             return self._process_assessment_phase(user_message)
-        elif current_phase == TeachingPhase.CURRICULUM_PROPOSAL:
-            return self._process_proposal_phase(user_message)
-        elif current_phase == TeachingPhase.NEGOTIATION:
-            return self._process_negotiation_phase(user_message)
         else:  # TEACHING phase
             return self._process_teaching_phase(user_message)
     
@@ -374,7 +366,7 @@ What's your current sense of this? Even a rough mental model or analogy helps me
         # Usually after 2-3 turns of assessment
         if self.schema.assessment_confidence >= 0.6 or self.schema.turns_elapsed >= 3:
             print(f"[TeachingOrchestrator] Assessment complete (confidence: {self.schema.assessment_confidence:.2f})")
-            return self._transition_to_curriculum_proposal()
+            return self._transition_to_teaching()
         else:
             # Generate follow-up assessment question
             response = self._generate_assessment_followup(user_message)
@@ -460,67 +452,20 @@ Return just the message text."""
         )
         return response.strip()
     
-    def _transition_to_curriculum_proposal(self) -> dict:
-        """Generate curriculum and propose it to user."""
-        print("[TeachingOrchestrator] Transitioning to CURRICULUM_PROPOSAL phase...")
-        self.schema.teaching_phase = TeachingPhase.CURRICULUM_PROPOSAL
-        
-        # Generate curriculum using assessment data
-        self._generate_curriculum_plan()
-        
-        # Generate proposal message with justifications
-        response = self._generate_curriculum_proposal_message()
-        
-        self.conversation_history.append({"role": "assistant", "content": response})
-        self._save_state()
-        
-        return {
-            "message": response,
-            "phase": "curriculum_proposal",
-            "type": "curriculum_proposed",  # This triggers Accept/Modify buttons in UI
-            "curriculum_plan": {
-                "steps": [{"objective": s.objective, "why_for_you": s.why_for_you} for s in self.schema.curriculum_plan.steps]
-            }
-        }
-    
-    def _generate_curriculum_proposal_message(self) -> str:
-        """Generate message proposing the curriculum with justifications."""
-        plan = self.schema.curriculum_plan
-        candidate = self.schema.teaching_candidate
-        
-        # Build steps with justifications
-        steps_text = ""
-        for i, step in enumerate(plan.steps[:5]):  # Show up to 5 steps
-            why = step.why_for_you or "This builds on what you already know."
-            steps_text += f"\n{i+1}. **{step.objective}**\n   *Why this for you:* {why}\n"
-        
-        assessment_summary = ""
-        if self.schema.assessment_concepts_known:
-            assessment_summary = f"\n\nFrom our conversation, I can see you already understand: {', '.join(self.schema.assessment_concepts_known[:3])}."
-        if self.schema.assessment_concepts_unclear:
-            assessment_summary += f" We'll focus on clarifying: {', '.join(self.schema.assessment_concepts_unclear[:3])}."
-        
-        message = f"""Based on what you've shared, I've designed a learning path for **{candidate.topic}**:{assessment_summary}
-
-**Proposed Curriculum:**
-{steps_text}
-
-Does this learning path work for you? We can adjust the focus, add steps, or skip things you already know."""
-        
-        return message
-    
-    def _handle_accept_curriculum(self) -> dict:
-        """Handle user accepting the proposed curriculum."""
-        print("[TeachingOrchestrator] User accepted curriculum - transitioning to TEACHING phase")
-        self.schema.curriculum_accepted = True
+    def _transition_to_teaching(self) -> dict:
+        """Generate curriculum silently and transition directly to teaching."""
+        print("[TeachingOrchestrator] Transitioning directly to TEACHING phase...")
         self.schema.teaching_phase = TeachingPhase.TEACHING
+
+        # Generate curriculum silently (used internally as a guide)
+        self._generate_curriculum_plan()
 
         # Mark first step as in progress
         if len(self.schema.curriculum_plan.steps) > 0:
             self.schema.curriculum_plan.steps[0].status = CurriculumStepStatus.IN_PROGRESS
             self.schema.curriculum_plan.current_step_id = self.schema.curriculum_plan.steps[0].id
 
-        # Generate first teaching message
+        # Generate first teaching message directly
         response = self._generate_first_teaching_message()
 
         self.conversation_history.append({"role": "assistant", "content": response})
@@ -529,20 +474,20 @@ Does this learning path work for you? We can adjust the focus, add steps, or ski
         return {
             "message": response,
             "phase": "teaching",
-            "type": "curriculum_accepted",
+            "type": "teaching_message",
             "curriculum_progress": {
                 "current_step": self.schema.current_step_index,
                 "total_steps": len(self.schema.curriculum_plan.steps),
                 "completed_steps": len(self.schema.curriculum_plan.completed_step_ids)
             }
         }
-    
+
     def _generate_first_teaching_message(self) -> str:
-        """Generate the first actual teaching message after curriculum acceptance."""
+        """Generate the first teaching message after assessment."""
         current_step = self._get_current_step()
         if not current_step:
             return "Let's begin! What would you like to start with?"
-        
+
         prompt = f"""You're starting to teach "{self.schema.teaching_candidate.topic}".
 
 FIRST CURRICULUM STEP:
@@ -553,13 +498,16 @@ USER'S BACKGROUND:
 - They know: {', '.join(self.schema.assessment_concepts_known) or 'basics'}
 - They need clarity on: {', '.join(self.schema.assessment_concepts_unclear) or 'core concepts'}
 
-Generate a teaching message that:
-1. Acknowledges they're ready to begin
-2. Introduces the first concept clearly
-3. Uses an analogy or concrete example
-4. Ends with an engagement hook (question or thought prompt)
+CONVERSATION SO FAR:
+{self._format_recent_conversation()}
 
-Keep it focused and under 150 words. No fluff.
+Generate a teaching message that:
+1. Flows naturally from the assessment conversation — do NOT say "Great, let's begin" or announce a curriculum
+2. Directly addresses their key gap or misconception
+3. Uses an analogy or concrete example
+4. Ends with a question to check understanding
+
+Keep it focused and under 150 words. No fluff, no preamble about learning paths.
 Return just the teaching message."""
 
         model_name = self.model_config.get("interviewer") or get_model_name("interviewer")
@@ -570,78 +518,6 @@ Return just the teaching message."""
             max_tokens=400
         )
         return response.strip()
-    
-    def _process_proposal_phase(self, user_message: str) -> dict:
-        """Process message during curriculum proposal (user giving feedback)."""
-        # User is providing feedback on curriculum - transition to negotiation
-        self.schema.teaching_phase = TeachingPhase.NEGOTIATION
-        return self._process_negotiation_phase(user_message)
-    
-    def _process_negotiation_phase(self, user_message: str) -> dict:
-        """Process user's curriculum modification request."""
-        print("[TeachingOrchestrator] Negotiation phase - adjusting curriculum...")
-        
-        # Analyze modification request and adjust curriculum
-        self._adjust_curriculum_based_on_feedback(user_message)
-        
-        # Re-propose
-        response = self._generate_curriculum_proposal_message()
-        
-        self.conversation_history.append({"role": "assistant", "content": response})
-        self._save_state()
-        
-        return {
-            "message": response,
-            "phase": "negotiation",
-            "type": "curriculum_proposed"
-        }
-    
-    def _adjust_curriculum_based_on_feedback(self, user_message: str):
-        """Adjust curriculum based on user's modification request."""
-        prompt = f"""User wants to modify this curriculum for "{self.schema.teaching_candidate.topic}":
-
-CURRENT CURRICULUM:
-{[{"id": s.id, "objective": s.objective} for s in self.schema.curriculum_plan.steps]}
-
-USER'S FEEDBACK:
-{user_message}
-
-Suggest modifications. Return JSON:
-{{
-  "action": "add|remove|modify|reorder",
-  "step_ids_affected": [1, 2],
-  "new_objectives": ["New objective 1"],  // Only if adding/modifying
-  "reasoning": "Brief explanation"
-}}
-
-Return ONLY valid JSON."""
-
-        model_name = self.model_config.get("ranker") or get_model_name("ranker")
-        result = self.llm.chat_with_json(
-            messages=[{"role": "user", "content": prompt}],
-            model=model_name,
-            temperature=0.5,
-            max_tokens=500
-        )
-
-        if result:
-            action = result.get('action', 'unknown')
-            reasoning = result.get('reasoning', 'User requested modification')
-
-            # Record the modification
-            self.schema.curriculum_plan.adaptation_history.append(
-                f"User requested: {user_message[:100]}. Action: {action}. {reasoning}"
-            )
-
-            # Actually apply the modifications
-            if action != "no_change":
-                adaptation_for_apply = {
-                    "adaptation_type": action,
-                    "changes": result,
-                    "adaptation_note": reasoning
-                }
-                self._apply_curriculum_adaptation(adaptation_for_apply)
-                print(f"[TeachingOrchestrator] Applied {action} modification based on user feedback")
     
     def _process_teaching_phase(self, user_message: str) -> dict:
         """Process message during active teaching phase."""

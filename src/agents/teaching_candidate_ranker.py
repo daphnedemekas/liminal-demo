@@ -2,7 +2,7 @@
 from typing import Dict, Any, List, Tuple
 import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from src.agents.ranker_base import RankerAgentBase
 from src.schema.full_schema import (
     DiscoverySchema,
@@ -630,47 +630,65 @@ Write the transition:"""
         
         print(f"[TIMING] Phase 1.5 completed: {time.time() - phase1_5_start:.2f}s")
 
-        # ===== PHASE 2: Teaching candidates (ALWAYS discover, no gates) =====
-        # Continuously discover teaching candidates in background
-        # No assessment confidence gates - candidates appear as they're discovered
-        print(f"[TIMING] Phase 2: teaching candidates (continuous discovery)")
+        # ===== PHASE 2+3: Teaching candidates + Controller + Readiness (PARALLEL) =====
+        # Controller uses profile/themes/branch but not teaching candidates,
+        # so we can run all three concurrently for ~2x speedup.
+        print(f"[TIMING] Phase 2+3: teaching candidates + controller + readiness (PARALLEL)")
         phase2_start = time.time()
-
-        teaching_updates = self._update_teaching_candidates(
-            temp_schema,  # Now has fresh themes!
-            conversation_history,
-            current_schema.interview_state.turns_elapsed + 1
-        )
-
-        # Apply teaching candidate updates
-        if teaching_updates:
-            temp_schema.teaching_candidates = [TeachingCandidate(**t) for t in teaching_updates]
-        
-        print(f"[TIMING] Phase 2 completed: {time.time() - phase2_start:.2f}s")
 
         # Preserve goal_candidates (not updated in Phase 2)
         temp_schema.goal_candidates = current_schema.goal_candidates
 
-        # ===== PHASE 3: Controller + readiness (parallel) =====
-        print("[TIMING] Phase 3: controller + readiness (parallel)...")
-        phase3_start = time.time()
+        def _run_teaching_candidates():
+            return self._update_teaching_candidates(
+                temp_schema,
+                conversation_history,
+                current_schema.interview_state.turns_elapsed + 1
+            )
 
-        def _teaching_rec_task() -> Dict[str, Any]:
-            # Check teaching readiness (no minimum turn requirement)
+        def _run_teaching_readiness():
             return self._check_teaching_readiness(temp_schema, conversation_history)
 
-        with ThreadPoolExecutor(max_workers=2) as executor:
+        teaching_updates = None
+        controller_dict = None
+        teaching_rec_dict = None
+
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            future_teaching = executor.submit(_run_teaching_candidates)
             future_controller = executor.submit(self._generate_controller, temp_schema, branch_condition, user_message)
-            future_teaching_rec = executor.submit(_teaching_rec_task)
+            future_readiness = executor.submit(_run_teaching_readiness)
 
-            controller_dict = future_controller.result()
-            teaching_rec_dict = future_teaching_rec.result()
-            
-            # Ensure branch_condition is always set (LLM might not return it or return None)
-            if not controller_dict.get("branch_condition") or controller_dict.get("branch_condition") is None:
-                controller_dict["branch_condition"] = branch_condition or "unclear"
+            for future in as_completed([future_teaching, future_controller, future_readiness]):
+                try:
+                    if future is future_teaching:
+                        teaching_updates = future.result()
+                        print(f"[TIMING] teaching_candidates completed in {time.time() - phase2_start:.2f}s")
+                    elif future is future_controller:
+                        controller_dict = future.result()
+                        print(f"[TIMING] controller completed in {time.time() - phase2_start:.2f}s")
+                    else:
+                        teaching_rec_dict = future.result()
+                        print(f"[TIMING] teaching_readiness completed in {time.time() - phase2_start:.2f}s")
+                except Exception as e:
+                    print(f"[TIMING] Parallel task error: {e}")
+                    import traceback
+                    traceback.print_exc()
 
-        print(f"[TIMING] Phase 3 completed: {time.time() - phase3_start:.2f}s")
+        # Apply teaching candidate updates
+        if teaching_updates:
+            temp_schema.teaching_candidates = [TeachingCandidate(**t) for t in teaching_updates]
+
+        # Ensure controller_dict exists
+        if not controller_dict:
+            controller_dict = self._generate_controller(temp_schema, branch_condition, user_message)
+        if not controller_dict.get("branch_condition") or controller_dict.get("branch_condition") is None:
+            controller_dict["branch_condition"] = branch_condition or "unclear"
+
+        # Ensure teaching_rec_dict exists
+        if not teaching_rec_dict:
+            teaching_rec_dict = self._check_teaching_readiness(temp_schema, conversation_history)
+
+        print(f"[TIMING] Phase 2+3 completed: {time.time() - phase2_start:.2f}s")
 
         # Build final schema
         final_schema = temp_schema.model_copy(deep=True)

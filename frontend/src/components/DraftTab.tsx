@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { api, DocumentItem } from '../services/api'
 import { getApiBaseUrl } from '../config'
+import RichTextEditor from './RichTextEditor'
 
 interface DraftTabProps {
   goalId: number
@@ -27,7 +28,6 @@ export default function DraftTab({ goalId, userId, onSendToChat }: DraftTabProps
   const [isGeneratingSuggestions, setIsGeneratingSuggestions] = useState(false)
   const [isExpandingSuggestion, setIsExpandingSuggestion] = useState(false)
   const [expandedSuggestionId, setExpandedSuggestionId] = useState<string | null>(null)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const lastSavedContentRef = useRef<string>('')
@@ -87,17 +87,12 @@ export default function DraftTab({ goalId, userId, onSendToChat }: DraftTabProps
     if (!doc) return false
 
     const contentToSave = content !== undefined ? content : doc.plain_text
+    // Skip save if content hasn't changed
+    if (contentToSave === lastSavedContentRef.current) return true
     try {
       const updated = await api.updateDocument(doc.id, { plain_text: contentToSave })
-      // Version conflict detection: if server version jumped by more than 1,
-      // someone else edited the document concurrently
-      if (lastKnownVersionRef.current > 0 && updated.version > lastKnownVersionRef.current + 1) {
-        setError('Warning: This document was edited elsewhere. Your changes have been saved, but you may want to reload to see the latest version.')
-      }
       lastKnownVersionRef.current = updated.version
-      // Update local state with server response to ensure sync
       setActiveDocument(prev => prev?.id === doc.id ? updated : prev)
-      // Track last saved content to avoid unnecessary saves
       lastSavedContentRef.current = contentToSave || ''
       return true
     } catch (err: any) {
@@ -149,7 +144,7 @@ export default function DraftTab({ goalId, userId, onSendToChat }: DraftTabProps
       }
     }
 
-    ws.onerror = (err) => {
+    ws.onerror = () => {
       setError('Failed to connect to document service. Check backend logs.')
       setIsGeneratingSuggestions(false)
     }
@@ -171,35 +166,36 @@ export default function DraftTab({ goalId, userId, onSendToChat }: DraftTabProps
   }, [activeDocument?.id])
 
   // Auto-save on content change (debounced) and trigger suggestions
-  const handleContentChange = (content: string) => {
+  const handleContentChange = (plainText: string, jsonContent?: object) => {
     if (!activeDocument) return
 
     // Update local state immediately
-    setActiveDocument(prev => prev ? { ...prev, plain_text: content } : null)
+    setActiveDocument(prev => prev ? { ...prev, plain_text: plainText, content: jsonContent || prev.content } : null)
+    const content = plainText
 
     // Clear existing timeout
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current)
     }
 
-    // Set new timeout for auto-save (2 seconds after last change)
+    // Set new timeout for auto-save (3 seconds after last change)
     saveTimeoutRef.current = setTimeout(async () => {
       if (activeDocument) {
         setIsSaving(true)
-        await saveDocument(activeDocument, content)
+        const saved = await saveDocument(activeDocument, content)
         setIsSaving(false)
-        
-        // Send update to WebSocket to trigger AI suggestions
-        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+
+        // Only trigger AI suggestions if content was actually saved (changed)
+        if (saved && wsRef.current && wsRef.current.readyState === WebSocket.OPEN && content.trim().length >= 20) {
           setIsGeneratingSuggestions(true)
           wsRef.current.send(JSON.stringify({
             type: 'update',
             plain_text: content,
-            content: {} // Empty for now, could be rich text format
+            content: {}
           }))
         }
       }
-    }, 2000)
+    }, 3000)
   }
 
   // Handle clicking on a suggestion to expand it in chat
@@ -262,8 +258,7 @@ export default function DraftTab({ goalId, userId, onSendToChat }: DraftTabProps
       return
     }
     
-    // Check textarea value directly to get the most up-to-date content
-    const currentContent = textareaRef.current?.value || activeDocument.plain_text || ''
+    const currentContent = activeDocument.plain_text || ''
     if (!currentContent || currentContent.trim().length < 20) {
       setError('Document needs at least 20 characters for AI analysis')
       return
@@ -358,8 +353,6 @@ export default function DraftTab({ goalId, userId, onSendToChat }: DraftTabProps
       setActiveDocument(newDoc)
       setNewDocTitle('')
       setIsCreating(false)
-      // Focus textarea after creation
-      setTimeout(() => textareaRef.current?.focus(), 100)
     } catch (err: any) {
       setError(err.message || 'Failed to create document')
       setIsCreating(false)
@@ -403,7 +396,7 @@ export default function DraftTab({ goalId, userId, onSendToChat }: DraftTabProps
             <button 
               onClick={requestSuggestions} 
               className="suggest-btn" 
-              disabled={isGeneratingSuggestions || !activeDocument || !(textareaRef.current?.value || activeDocument.plain_text || '').trim()}
+              disabled={isGeneratingSuggestions || !activeDocument || !(activeDocument.plain_text || '').trim()}
             >
               Get AI Feedback
             </button>
@@ -415,7 +408,7 @@ export default function DraftTab({ goalId, userId, onSendToChat }: DraftTabProps
       </div>
 
       {error && (
-        <div className="panel-error">
+        <div className="panel-error" style={{ cursor: 'pointer' }} onClick={() => setError(null)}>
           {error}
         </div>
       )}
@@ -493,14 +486,11 @@ export default function DraftTab({ goalId, userId, onSendToChat }: DraftTabProps
                   v{activeDocument.version} • {activeDocument.document_type}
                 </span>
               </div>
-              <textarea
-                ref={textareaRef}
-                className="draft-editor-textarea"
-                value={activeDocument.plain_text || ''}
-                onChange={(e) => handleContentChange(e.target.value)}
+              <RichTextEditor
+                content={activeDocument.plain_text || ''}
+                onChange={(plainText, json) => handleContentChange(plainText, json)}
                 onBlur={handleBlur}
-                placeholder="Start writing... (Auto-saves every 2 seconds, or on blur)&#10;AI will analyze your writing and provide suggestions."
-                rows={15}
+                placeholder="Start writing... AI will analyze your writing and provide suggestions."
               />
               
               {/* AI Suggestions Panel */}

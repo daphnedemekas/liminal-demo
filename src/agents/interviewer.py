@@ -634,6 +634,50 @@ Generate ONLY the question:"""
         # Regular conversation - use text mode
         return self.generate_next_question(schema, conversation_history)
 
+    def generate_response_stream(
+        self,
+        user_message: str,
+        schema: DiscoverySchema,
+        conversation_history: List[Dict]
+    ) -> Generator[Union[str, Dict], None, None]:
+        """
+        Streaming version of generate_response.
+
+        For regular conversation, yields text chunks as they stream from the LLM.
+        For curriculum proposals (structured JSON), yields a single dict at the end
+        since those can't be meaningfully streamed.
+
+        Yields:
+            str chunks for regular conversation, or a single Dict for curriculum proposals
+        """
+        is_proposing_curriculum = schema.controller.conversation_mode == "propose_tasks"
+        is_negotiating_curriculum = schema.controller.conversation_mode == "negotiate_curriculum"
+
+        is_manual_generation = (
+            is_proposing_curriculum and
+            schema.controller.next_action == "propose_task_curriculum"
+        )
+
+        if is_proposing_curriculum and not schema.task_curriculum.proposed and not is_manual_generation:
+            is_proposing_curriculum = False
+
+        # Curriculum proposals need structured JSON — can't stream those
+        if is_negotiating_curriculum:
+            if schema.controller and schema.controller.next_action == "propose_task_curriculum":
+                yield self._generate_curriculum_proposal_json(schema, conversation_history)
+                return
+            else:
+                # Clarifying question — stream it
+                yield from self.generate_next_question_stream(schema, conversation_history)
+                return
+
+        if is_proposing_curriculum:
+            yield self._generate_curriculum_proposal_json(schema, conversation_history)
+            return
+
+        # Regular conversation — stream it
+        yield from self.generate_next_question_stream(schema, conversation_history)
+
     def _generate_curriculum_proposal_json(
         self,
         schema: DiscoverySchema,

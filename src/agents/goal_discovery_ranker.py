@@ -2,7 +2,7 @@
 from typing import Dict, Any, List, Tuple
 import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from src.agents.ranker_base import RankerAgentBase
 from src.schema.full_schema import (
     DiscoverySchema,
@@ -354,17 +354,41 @@ class GoalDiscoveryRanker(RankerAgentBase):
         if theme_updates:
             temp_schema.conversational_themes = [ConversationalTheme(**t) for t in theme_updates]
 
-        # ===== PHASE 2: Goal candidates (sequential - uses fresh themes) =====
-        print("[TIMING] Phase 2: goal candidates (uses fresh themes)...")
+        # ===== PHASE 2+3: Goal candidates + Controller IN PARALLEL =====
+        # Controller uses profile/themes/branch but doesn't need goal candidates,
+        # so we can run both LLM calls concurrently for ~2x speedup.
+        print("[TIMING] Phase 2+3: goal candidates + controller (PARALLEL)...")
         phase2_start = time.time()
 
-        print(f"[TIMING] Starting goal_candidates LLM call...")
-        goal_updates = self._update_goal_candidates(
-            temp_schema,  # Now has fresh themes!
-            conversation_history,
-            current_schema.interview_state.turns_elapsed + 1
-        )
-        print(f"[TIMING] goal_candidates LLM call completed in {time.time() - phase2_start:.2f}s")
+        def _run_goal_candidates():
+            return self._update_goal_candidates(
+                temp_schema,  # Has fresh themes
+                conversation_history,
+                current_schema.interview_state.turns_elapsed + 1
+            )
+
+        def _run_controller():
+            return self._generate_controller(temp_schema, branch_condition, user_message)
+
+        goal_updates = None
+        controller_dict = None
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            future_goals = executor.submit(_run_goal_candidates)
+            future_controller = executor.submit(_run_controller)
+
+            for future in as_completed([future_goals, future_controller]):
+                try:
+                    if future is future_goals:
+                        goal_updates = future.result()
+                        print(f"[TIMING] goal_candidates completed in {time.time() - phase2_start:.2f}s")
+                    else:
+                        controller_dict = future.result()
+                        print(f"[TIMING] controller completed in {time.time() - phase2_start:.2f}s")
+                except Exception as e:
+                    print(f"[TIMING] Parallel task error: {e}")
+                    import traceback
+                    traceback.print_exc()
 
         # Apply goal candidate updates
         if goal_updates:
@@ -373,26 +397,20 @@ class GoalDiscoveryRanker(RankerAgentBase):
         # Preserve teaching_candidates (not updated in Phase 1)
         temp_schema.teaching_candidates = current_schema.teaching_candidates
 
-        print(f"[TIMING] Phase 2 completed: {time.time() - phase2_start:.2f}s")
+        print(f"[TIMING] Phase 2+3 completed: {time.time() - phase2_start:.2f}s")
 
         # Check for phase transition: Is any goal ready?
-        # MINIMUM TURN REQUIREMENT: Don't propose goals until at least 2 user responses
-        # (Turn 1 is background onboarding, Turn 2+ is actual conversation)
         min_turns_for_goal = 2
-        current_turn = current_schema.interview_state.turns_elapsed + 1  # +1 because we're about to increment
-        
-        # COOLDOWN AFTER ACCEPTING A GOAL: Require at least 2 turns of exploration before proposing another
-        # This ensures we explore new threads instead of immediately proposing the next ready goal
+        current_turn = current_schema.interview_state.turns_elapsed + 1
+
         goal_acceptance_cooldown = 2
         last_accepted_turn = current_schema.interview_state.last_goal_accepted_turn
         turns_since_acceptance = (current_turn - last_accepted_turn) if last_accepted_turn is not None else float('inf')
-        
-        # COOLDOWN AFTER REJECTING A GOAL: Require at least 3 turns of exploration before proposing another
-        # This prevents the system from immediately proposing goals during normal conversation
+
         goal_rejection_cooldown = 3
         last_rejected_turn = current_schema.interview_state.last_goal_rejected_turn
         turns_since_rejection = (current_turn - last_rejected_turn) if last_rejected_turn is not None else float('inf')
-        
+
         if current_turn < min_turns_for_goal:
             print(f"[GOAL_DISCOVERY] Too early to propose goal (turn {current_turn} < {min_turns_for_goal})")
             goal_readiness = {"ready": False, "best_goal": None}
@@ -406,33 +424,29 @@ class GoalDiscoveryRanker(RankerAgentBase):
             goal_readiness = {"ready": False, "best_goal": None}
         else:
             goal_readiness = self._check_goal_readiness(temp_schema, conversation_history)
-        
+
         if goal_readiness["ready"]:
             best_goal = goal_readiness["best_goal"]
-            
-            # Check if we already proposed this goal (waiting for user response)
-            if (temp_schema.interview_state.proposed_goal == best_goal.goal and 
+
+            if (temp_schema.interview_state.proposed_goal == best_goal.goal and
                 temp_schema.interview_state.proposed_goal_id == best_goal.id):
                 print(f"[GOAL_DISCOVERY] Goal '{best_goal.goal}' already proposed, waiting for user response...")
             else:
-                # Propose the goal to the user (don't auto-confirm)
                 print(f"\n[GOAL_DISCOVERY] ===== GOAL PROPOSED =====")
                 print(f"[GOAL_DISCOVERY] Goal: '{best_goal.goal}'")
                 print(f"[GOAL_DISCOVERY] Readiness: {best_goal.readiness_score:.2f}")
                 temp_schema.interview_state.proposed_goal = best_goal.goal
                 temp_schema.interview_state.proposed_goal_id = best_goal.id
         else:
-            # Clear any pending proposal if goal no longer qualifies
             if temp_schema.interview_state.proposed_goal:
                 print(f"[GOAL_DISCOVERY] Clearing stale goal proposal")
                 temp_schema.interview_state.proposed_goal = None
                 temp_schema.interview_state.proposed_goal_id = None
-                
+
             if temp_schema.goal_candidates:
-                # Show best non-rejected candidate
                 rejected_ids = set(temp_schema.interview_state.rejected_goal_ids)
                 accepted_ids = set(temp_schema.interview_state.accepted_goal_ids)
-                available = [g for g in temp_schema.goal_candidates 
+                available = [g for g in temp_schema.goal_candidates
                             if g.id not in rejected_ids and g.id not in accepted_ids]
                 if available:
                     best = max(available, key=lambda g: g.readiness_score)
@@ -440,18 +454,11 @@ class GoalDiscoveryRanker(RankerAgentBase):
                 else:
                     print(f"[GOAL_DISCOVERY] No available candidates (all rejected or accepted)")
 
-        # ===== PHASE 3: Controller (uses all updates) =====
-        print("[TIMING] Phase 3: controller generation...")
-        phase3_start = time.time()
-        print(f"[TIMING] Starting controller LLM call...")
-        controller_dict = self._generate_controller(temp_schema, branch_condition, user_message)
-        
-        # Ensure branch_condition is always set (LLM might not return it or return None)
+        # Ensure branch_condition is always set
+        if not controller_dict:
+            controller_dict = self._generate_controller(temp_schema, branch_condition, user_message)
         if not controller_dict.get("branch_condition") or controller_dict.get("branch_condition") is None:
             controller_dict["branch_condition"] = branch_condition or "unclear"
-        
-        print(f"[TIMING] Controller LLM call completed in {time.time() - phase3_start:.2f}s")
-        print(f"[TIMING] Phase 3 completed: {time.time() - phase3_start:.2f}s")
 
         # Build final schema
         final_schema = temp_schema.model_copy(deep=True)

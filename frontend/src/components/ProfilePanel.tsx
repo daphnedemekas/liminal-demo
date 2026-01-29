@@ -17,9 +17,9 @@ interface ProfilePanelProps {
 
 const getReadinessLabel = (score: number | undefined): { label: string; level: string } => {
   if (score === undefined || score === null) return { label: 'Unknown', level: 'unknown' }
-  if (score >= 0.7) return { label: 'Ready', level: 'high' }
-  if (score >= 0.5) return { label: 'Developing', level: 'medium' }
-  return { label: 'Emerging', level: 'low' }
+  if (score >= 0.7) return { label: 'Explore', level: 'high' }
+  if (score >= 0.5) return { label: 'Taking shape', level: 'medium' }
+  return { label: 'Just starting', level: 'low' }
 }
 
 // @ts-ignore - unused for now, may be needed later
@@ -63,7 +63,7 @@ const getMarkerLevelBadge = (level: string): { label: string; className: string 
     case 'strong':
       return { label: 'Strong', className: 'marker-strong' }
     case 'developing':
-      return { label: 'Developing', className: 'marker-developing' }
+      return { label: 'Taking shape', className: 'marker-developing' }
     default:
       return { label: 'Not Yet', className: 'marker-not-yet' }
   }
@@ -411,7 +411,7 @@ export default function ProfilePanel({ sessionId, isConnected, initialSummary, i
   return (
     <div className="profile-panel">
       <div className="profile-panel-header">
-        <h2>Learner Profile</h2>
+        <h2>Profile</h2>
         <span className="turn-counter">Turn {interviewState.turns_elapsed || 0}</span>
       </div>
 
@@ -419,7 +419,7 @@ export default function ProfilePanel({ sessionId, isConnected, initialSummary, i
         {/* Summary Card */}
         <div className="profile-card summary-card">
           <div className="card-header">
-            <span className="card-title">Current Understanding</span>
+            <span className="card-title">Summary</span>
             <button 
               className="refresh-btn"
               onClick={() => generateSummary(true)}
@@ -511,7 +511,7 @@ export default function ProfilePanel({ sessionId, isConnected, initialSummary, i
         {goalCandidates.length > 0 && (
           <div className="profile-card">
             <div className="card-header">
-              <span className="card-title">Emerging Goals</span>
+              <span className="card-title">Early Ideas</span>
               <span className="item-count">{Math.min(goalCandidates.length, 5)}{goalCandidates.length > 5 ? '+' : ''}</span>
             </div>
             <div className="goal-list">
@@ -552,7 +552,7 @@ export default function ProfilePanel({ sessionId, isConnected, initialSummary, i
         {teachingCandidates.length > 0 && (
           <div className="profile-card">
             <div className="card-header">
-              <span className="card-title">Teaching Topics</span>
+              <span className="card-title">Suggested Deep Dives</span>
               <span className="item-count">{teachingCandidates.length}</span>
             </div>
             <div className="goal-list">

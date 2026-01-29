@@ -8,7 +8,7 @@ interface FeedItem {
   content: string
   source_citation?: string
   source_url?: string
-  source_type?: 'video' | 'article' | 'paper' | 'blog' | 'course' | 'general'
+  source_type?: 'video' | 'article' | 'paper' | 'blog' | 'course' | 'tweet' | 'discussion' | 'general'
   thumbnail_url?: string
   embed_url?: string
   relevance_note?: string
@@ -69,6 +69,14 @@ function SkeletonCard() {
   )
 }
 
+function getHostname(url: string): string {
+  try {
+    return new URL(url).hostname.replace('www.', '')
+  } catch {
+    return url.length > 40 ? url.slice(0, 40) + '...' : url
+  }
+}
+
 function getSourceIcon(sourceType?: string) {
   switch (sourceType) {
     case 'video': return '🎬'
@@ -76,6 +84,8 @@ function getSourceIcon(sourceType?: string) {
     case 'paper': return '📄'
     case 'blog': return '✍️'
     case 'course': return '🎓'
+    case 'tweet': return '𝕏'
+    case 'discussion': return '💬'
     default: return '📖'
   }
 }
@@ -92,54 +102,150 @@ export default function FeedPanel({
 }: FeedPanelProps) {
   const [items, setItems] = useState<FeedItem[]>([])
   const [loading, setLoading] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [justGenerated, setJustGenerated] = useState(false)
   const [hasEverLoaded, setHasEverLoaded] = useState(false)
   const [expandedVideo, setExpandedVideo] = useState<number | null>(null)
+  const [hasMore, setHasMore] = useState(false)
+  const [page, setPage] = useState(0)
+  const abortRef = useRef<AbortController | null>(null)
+  const scrollSentinelRef = useRef<HTMLDivElement>(null)
 
-  const fetchFeed = useCallback(async () => {
-    setLoading(true)
-    setError(null)
+  const fetchFeedStream = useCallback(async (loadPage = 0, append = false) => {
+    // Abort any in-flight request
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+
+    if (append) {
+      setLoadingMore(true)
+    } else {
+      setLoading(true)
+      setError(null)
+      setItems([])
+      setPage(0)
+    }
 
     try {
-      const response = await api.getFeed({
-        user_id: userId,
-        context_type: contextType,
-        goal_id: goalId,
-        goal_text: goalText,
-        teaching_candidate_id: teachingCandidateId,
-        teaching_topic: teachingTopic,
-        user_background: userBackground,
-        goals_summary: goalsSummary
+      const response = await fetch(api.streamFeedUrl(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: userId,
+          context_type: contextType,
+          goal_id: goalId,
+          goal_text: goalText,
+          teaching_candidate_id: teachingCandidateId,
+          teaching_topic: teachingTopic,
+          user_background: userBackground,
+          goals_summary: goalsSummary,
+          page: loadPage,
+        }),
+        signal: controller.signal,
       })
 
-      setItems(response.items)
-      setJustGenerated(response.generated)
-      setHasEverLoaded(true)
-    } catch (_) {
-      setError('Failed to load feed')
-      setItems([])
-    } finally {
+      if (!response.ok) throw new Error('Failed to load feed')
+      if (!response.body) throw new Error('No response body')
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          const jsonStr = line.slice(6).trim()
+          if (!jsonStr) continue
+
+          try {
+            const data = JSON.parse(jsonStr)
+
+            // Status messages (no title = status/control message)
+            if (data.done) {
+              setJustGenerated(!data.cached)
+              setHasMore(!!data.has_more)
+              setLoading(false)
+              setLoadingMore(false)
+              setHasEverLoaded(true)
+              continue
+            }
+            if (data.status) continue
+
+            // Feed item
+            if (data.title) {
+              if (append) {
+                setItems(prev => [...prev, data as FeedItem])
+              } else {
+                setItems(prev => [...prev, data as FeedItem])
+              }
+              setHasEverLoaded(true)
+              // Once first item arrives, stop showing full skeleton
+              setLoading(false)
+            }
+          } catch {
+            // Skip malformed JSON
+          }
+        }
+      }
+
       setLoading(false)
+      setLoadingMore(false)
+      setHasEverLoaded(true)
+    } catch (err: any) {
+      if (err.name === 'AbortError') return
+      setError('Failed to load feed')
+      if (!append) setItems([])
+      setLoading(false)
+      setLoadingMore(false)
     }
   }, [userId, contextType, goalId, goalText, teachingCandidateId, teachingTopic, userBackground, goalsSummary])
 
+  useEffect(() => {
+    return () => { abortRef.current?.abort() }
+  }, [])
+
   const handleGenerate = () => {
-    fetchFeed()
+    fetchFeedStream(0, false)
   }
+
+  const handleLoadMore = useCallback(() => {
+    if (loadingMore || !hasMore) return
+    const nextPage = page + 1
+    setPage(nextPage)
+    fetchFeedStream(nextPage, true)
+  }, [loadingMore, hasMore, page, fetchFeedStream])
+
+  // Infinite scroll: observe sentinel element at bottom
+  useEffect(() => {
+    if (!scrollSentinelRef.current || !hasMore) return
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) handleLoadMore() },
+      { rootMargin: '200px' }
+    )
+    observer.observe(scrollSentinelRef.current)
+    return () => observer.disconnect()
+  }, [hasMore, handleLoadMore])
 
   // Auto-load feed on mount with delay
   useEffect(() => {
     if (!hasEverLoaded && !loading) {
-      const timer = setTimeout(() => { fetchFeed() }, 5000)
+      const timer = setTimeout(() => { fetchFeedStream(0, false) }, 5000)
       return () => clearTimeout(timer)
     }
-  }, [hasEverLoaded, loading, fetchFeed])
+  }, [hasEverLoaded, loading, fetchFeedStream])
 
   // Auto-refresh when context changes
   useEffect(() => {
     if (hasEverLoaded && !loading) {
-      const timer = setTimeout(() => { fetchFeed() }, 2000)
+      const timer = setTimeout(() => { fetchFeedStream(0, false) }, 2000)
       return () => clearTimeout(timer)
     }
   }, [goalText, teachingTopic, goalId, teachingCandidateId])
@@ -157,8 +263,10 @@ export default function FeedPanel({
     }
   }
 
-  // Skeleton loading state
-  if (loading) {
+  // Show skeletons while loading and no items yet
+  const showSkeletons = loading && items.length === 0
+
+  if (showSkeletons) {
     return (
       <div className="feed-panel">
         <div className="feed-header">
@@ -233,70 +341,92 @@ export default function FeedPanel({
             </button>
           </div>
         ) : (
-          items.map((item) => (
-            <div key={item.id} className={`feed-item feed-item-${item.source_type || 'general'}`}>
-              {/* Thumbnail for articles/blogs/papers */}
-              {item.thumbnail_url && item.source_type !== 'video' && (
-                <div className="feed-item-thumbnail">
-                  <img src={item.thumbnail_url} alt="" loading="lazy" />
-                </div>
-              )}
-
-              <div className="feed-item-body">
-                <div className="feed-item-type-badge">
-                  <span>{getSourceIcon(item.source_type)}</span>
-                  <span className="feed-type-label">{item.source_type || 'resource'}</span>
-                </div>
-
-                <h4 className="feed-item-title">
-                  {item.source_url ? (
-                    <a href={item.source_url} target="_blank" rel="noopener noreferrer">
-                      {stripMarkdown(item.title)}
-                    </a>
-                  ) : (
-                    stripMarkdown(item.title)
-                  )}
-                </h4>
-
-                <p className="feed-item-content">{item.content}</p>
-
-                {/* Video embed */}
-                {item.source_type === 'video' && item.embed_url && (
-                  <>
-                    {expandedVideo === item.id ? (
-                      <LazyVideoEmbed embedUrl={item.embed_url} title={item.title} />
-                    ) : (
-                      <button
-                        className="feed-play-btn"
-                        onClick={() => setExpandedVideo(item.id)}
-                      >
-                        ▶ Watch Video
-                      </button>
-                    )}
-                  </>
-                )}
-
-                {item.source_citation && (
-                  <div className="feed-item-source">
-                    <span className="feed-source-icon">{getSourceIcon(item.source_type)}</span>
-                    <span className="feed-source-text">
-                      {item.source_url ? (
-                        <a href={item.source_url} target="_blank" rel="noopener noreferrer">
-                          {item.source_citation}
-                        </a>
-                      ) : (
-                        item.source_citation
-                      )}
-                    </span>
+          <>
+            {items.map((item) => (
+              <div key={item.id} className={`feed-item feed-item-${item.source_type || 'general'}`}>
+                {/* Thumbnail for articles/blogs/papers */}
+                {item.thumbnail_url && item.source_type !== 'video' && (
+                  <div className="feed-item-thumbnail">
+                    <img src={item.thumbnail_url} alt="" loading="lazy" onError={(e) => { (e.target as HTMLElement).parentElement!.style.display = 'none' }} />
                   </div>
                 )}
 
-                {item.relevance_note && (
-                  <p className="feed-item-relevance">{item.relevance_note}</p>
-                )}
+                <div className="feed-item-body">
+                  <div className="feed-item-type-badge">
+                    <span>{getSourceIcon(item.source_type)}</span>
+                    <span className="feed-type-label">{item.source_type || 'resource'}</span>
+                  </div>
+
+                  <h4 className="feed-item-title">
+                    {item.source_url ? (
+                      <a href={item.source_url} target="_blank" rel="noopener noreferrer">
+                        {stripMarkdown(item.title)}
+                      </a>
+                    ) : (
+                      stripMarkdown(item.title)
+                    )}
+                  </h4>
+
+                  <p className="feed-item-content">{item.content}</p>
+
+                  {/* Video embed */}
+                  {item.source_type === 'video' && item.embed_url && (
+                    <>
+                      {expandedVideo === item.id ? (
+                        <LazyVideoEmbed embedUrl={item.embed_url} title={item.title} />
+                      ) : (
+                        <button
+                          className="feed-play-btn"
+                          onClick={() => setExpandedVideo(item.id)}
+                        >
+                          ▶ Watch Video
+                        </button>
+                      )}
+                    </>
+                  )}
+
+                  {/* Video thumbnail */}
+                  {item.source_type === 'video' && item.thumbnail_url && expandedVideo !== item.id && (
+                    <div className="feed-item-thumbnail feed-video-thumb">
+                      <img src={item.thumbnail_url} alt="" loading="lazy" onError={(e) => { (e.target as HTMLElement).parentElement!.style.display = 'none' }} />
+                    </div>
+                  )}
+
+                  {(item.source_citation || item.source_url) && (
+                    <div className="feed-item-source">
+                      <span className="feed-source-icon">{getSourceIcon(item.source_type)}</span>
+                      <span className="feed-source-text">
+                        {item.source_url ? (
+                          <a href={item.source_url} target="_blank" rel="noopener noreferrer">
+                            {item.source_citation && !item.source_citation.startsWith('http')
+                              ? item.source_citation
+                              : getHostname(item.source_url)}
+                          </a>
+                        ) : (
+                          item.source_citation
+                        )}
+                      </span>
+                    </div>
+                  )}
+
+                  {item.relevance_note && (
+                    <p className="feed-item-relevance">{item.relevance_note}</p>
+                  )}
+                </div>
               </div>
-            </div>
-          ))
+            ))}
+            {/* Show trailing skeletons while loading more */}
+            {(loading || loadingMore) && (
+              <>
+                <SkeletonCard />
+                <SkeletonCard />
+              </>
+            )}
+            {/* Infinite scroll sentinel */}
+            {hasMore && !loadingMore && (
+              <div ref={scrollSentinelRef} style={{ height: 1 }} />
+            )}
+          </>
         )}
       </div>
     </div>

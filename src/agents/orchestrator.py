@@ -178,7 +178,7 @@ class DiscoveryOrchestrator:
         # (Goal sessions with existing background already have an opening from start())
         if is_first_message and len(self.conversation_history) == 0:
             # New user or exploration session - ask for background
-            opening_prompt = "Before we begin exploring, tell me a bit about yourself - what do you do, what are you interested in, and what's been on your mind lately?"
+            opening_prompt = "Tell me about yourself. What do you do, what are you interested in, and what's been on your mind lately? Do you have particular hobbies, projects, or curiosities, or do you just want to brainstorm?"
             self.conversation_history.append({
                 "role": "assistant",
                 "content": opening_prompt
@@ -260,6 +260,161 @@ class DiscoveryOrchestrator:
         else:
             return self._process_phase1_message(user_message)
 
+    def process_user_message_events(self, user_message: str, skip_history: bool = False):
+        """
+        Streaming version of process_user_message that yields typed events.
+
+        Each event is a dict with a "type" key:
+          - {"type": "stream_start"}
+          - {"type": "stream_chunk", "content": "..."}
+          - {"type": "stream_end", "content": "full text"}
+          - {"type": "goal_proposed", "goal": "..."}
+          - {"type": "curriculum_proposed", "response": dict}
+          - {"type": "empty"} — no response needed
+          - {"type": "complete", "content": "full text"} — non-streamed complete response
+
+        Args:
+            user_message: User's message
+            skip_history: If True, don't add to conversation history
+
+        Yields:
+            Event dicts
+        """
+        # --- Identical preamble to process_user_message ---
+        is_first_message = len([m for m in self.conversation_history if m["role"] == "user"]) == 0
+
+        if is_first_message and len(self.conversation_history) == 0:
+            opening_prompt = "Tell me about yourself. What do you do, what are you interested in, and what's been on your mind lately? Do you have particular hobbies, projects, or curiosities, or do you just want to brainstorm?"
+            self.conversation_history.append({"role": "assistant", "content": opening_prompt})
+
+        if not skip_history:
+            self.conversation_history.append({"role": "user", "content": user_message})
+            self.db.save_conversation_history(self.session_id, self.conversation_history)
+        else:
+            print("[Orchestrator] Skipping adding onboarding message to visible conversation history")
+
+        has_existing_opening = len([m for m in self.conversation_history if m["role"] == "assistant"]) > 0
+
+        # First message: non-streaming (opening question, then ranker in background)
+        if is_first_message and not has_existing_opening:
+            user_goal = self.user_goal
+            if user_goal:
+                exploration_context = getattr(self, 'exploration_history', None)
+                opening_question = self.interviewer.generate_goal_directed_opening(
+                    user_background=user_message, goal=user_goal,
+                    exploration_context=exploration_context
+                )
+            else:
+                opening_question = self.interviewer.generate_contextual_opening(user_background=user_message)
+
+            self.conversation_history.append({"role": "assistant", "content": opening_question})
+            self.db.save_conversation_history(self.session_id, self.conversation_history)
+
+            yield {"type": "complete", "content": opening_question}
+
+            # Run ranker after yielding response
+            ranker = self._get_ranker()
+            self.schema = ranker.update_schema(self.schema, self.conversation_history, user_message)
+            self.db.save_session_state(self.session_id, self.schema.model_dump())
+            return
+
+        if is_first_message and has_existing_opening and skip_history:
+            ranker = self._get_ranker()
+            self.schema = ranker.update_schema(self.schema, self.conversation_history, user_message)
+            self.db.save_session_state(self.session_id, self.schema.model_dump())
+            yield {"type": "empty"}
+            return
+
+        # --- Phase-specific handling with streaming ---
+        if self.schema.interview_state.goal_identified:
+            yield from self._process_phase2_message_events(user_message)
+        else:
+            yield from self._process_phase1_message_events(user_message)
+
+    def _process_phase1_message_events(self, user_message: str):
+        """Phase 1 streaming: run ranker, then stream interviewer (or yield goal proposal)."""
+        ranker = self._get_ranker()
+        print(f"[Ranker] Analyzing conversation using {ranker.__class__.__name__}...")
+        self.schema = ranker.update_schema(self.schema, self.conversation_history, user_message)
+        self._log_controller_state()
+        self._save_schema_and_profile()
+
+        # Goal proposed — not streamable, yield as single event
+        if self.schema.interview_state.proposed_goal and not self.schema.interview_state.goal_identified:
+            print(f"[Orchestrator] Goal proposed: '{self.schema.interview_state.proposed_goal}'")
+            yield {"type": "goal_proposed", "goal": self.schema.interview_state.proposed_goal}
+            return
+
+        # Stream the interviewer response
+        yield from self._stream_interviewer_response(user_message)
+
+    def _process_phase2_message_events(self, user_message: str):
+        """Phase 2 streaming: run ranker (unless curriculum modification), then stream interviewer."""
+        is_curriculum_modification = (
+            self.schema.task_curriculum.proposed and
+            not self.schema.task_curriculum.accepted and
+            self.schema.controller.conversation_mode == "negotiate_curriculum" and
+            self.schema.controller.next_action == "propose_task_curriculum"
+        )
+
+        if is_curriculum_modification:
+            print("[Orchestrator] Curriculum modification detected - skipping ranker")
+        else:
+            ranker = self._get_ranker()
+            print(f"[Ranker] Analyzing conversation using {ranker.__class__.__name__}...")
+            self.schema = ranker.update_schema(self.schema, self.conversation_history, user_message)
+
+        self._log_controller_state()
+        self._save_schema_and_profile()
+
+        # Stream interviewer (handles curriculum proposals as single dict yields)
+        yield from self._stream_interviewer_response(user_message)
+
+    def _stream_interviewer_response(self, user_message: str):
+        """Stream interviewer response, handling both text chunks and curriculum proposal dicts."""
+        print("[Interviewer] Generating streaming response...")
+
+        full_response = ""
+        stream_started = False
+
+        for item in self.interviewer.generate_response_stream(user_message, self.schema, self.conversation_history):
+            # Dict = curriculum proposal (not streamable)
+            if isinstance(item, dict) and item.get("type") == "curriculum_proposal":
+                result = self._handle_curriculum_proposal(item)
+                yield {"type": "curriculum_proposed", "response": item, "marker": result}
+                return
+
+            # String chunk = streaming text
+            if not stream_started:
+                yield {"type": "stream_start"}
+                stream_started = True
+
+            full_response += item
+            yield {"type": "stream_chunk", "content": item}
+
+        if not full_response:
+            yield {"type": "empty"}
+            return
+
+        # Finalize: save to history, track metadata
+        next_question = full_response
+        if self.interviewer.contains_framework(next_question):
+            self.schema.interview_state.frameworks_offered += 1
+
+        if self.schema.controller.question_intent:
+            self.schema.interview_state.recent_question_intents.append(self.schema.controller.question_intent)
+            self.schema.interview_state.recent_question_intents = self.schema.interview_state.recent_question_intents[-5:]
+
+        question_summary = next_question[:50] + "..." if len(next_question) > 50 else next_question
+        self.schema.interview_state.recent_question_summaries.append(question_summary)
+        self.schema.interview_state.recent_question_summaries = self.schema.interview_state.recent_question_summaries[-5:]
+
+        self.conversation_history.append({"role": "assistant", "content": next_question})
+        self.db.save_session_state(self.session_id, self.schema.model_dump())
+        self.db.save_conversation_history(self.session_id, self.conversation_history)
+
+        yield {"type": "stream_end", "content": next_question}
+
     def _process_phase1_message(self, user_message: str) -> str:
         """
         Process user message in Phase 1 (Goal Discovery).
@@ -338,29 +493,6 @@ class DiscoveryOrchestrator:
         # Save schema state and update user profile
         self._save_schema_and_profile()
 
-        # Check if ready for teaching
-        # Skip transition if controller wants to propose curriculum (manual button click)
-        controller_wants_curriculum = self._controller_wants_curriculum()
-        
-        if self.schema.teaching_recommendation.ready and not controller_wants_curriculum:
-            # Only send transition if we haven't already
-            if self.schema.interview_state.transition_message_sent:
-                print("[Orchestrator] Already sent transition message, continuing conversation...")
-                # Continue to interviewer instead of repeating transition
-            else:
-                print("[Orchestrator] Ready for teaching phase!")
-                transition_msg = self._create_transition_message()
-                self.schema.interview_state.transition_message_sent = True
-                return transition_msg
-
-        # Check if there's a teaching candidate suggestion to mention
-        teaching_suggestion = None
-        if self.schema.teaching_recommendation and self.schema.teaching_recommendation.suggestion_message:
-            teaching_suggestion = self.schema.teaching_recommendation.suggestion_message
-            candidate_id = self.schema.teaching_recommendation.target_topic_id
-            candidate_topic = self.schema.teaching_recommendation.target_topic
-            print(f"[Orchestrator] Found teaching candidate suggestion: {candidate_topic} (ID: {candidate_id})")
-
         # Generate interviewer response
         print("[Interviewer] Generating response...")
         interviewer_response = self.interviewer.generate_response(
@@ -382,30 +514,11 @@ class DiscoveryOrchestrator:
             print("[Orchestrator] This should never happen - interviewer should always return dict in propose_tasks mode")
             # Continue with regular response - this is a bug that needs fixing
         
-        # Check if a task curriculum has been proposed (needs user confirmation)
-        # This check happens AFTER the interviewer has had a chance to generate the curriculum
-        # Only return if curriculum was already proposed in a previous turn AND controller doesn't want to propose again
-        if (not controller_wants_curriculum and 
-            self.schema.task_curriculum.proposed and 
-            not self.schema.task_curriculum.accepted and 
-            len(self.schema.task_curriculum.tasks) > 0):
-            return self._get_existing_curriculum_marker()
-
         # Extract text from structured response if needed
         if isinstance(interviewer_response, dict):
             next_question = interviewer_response["text"]
         else:
             next_question = interviewer_response
-
-        # Append teaching candidate suggestion if present
-        if teaching_suggestion:
-            print(f"[Orchestrator] Appending teaching candidate suggestion to response")
-            # Append suggestion to the response
-            next_question = f"{next_question}\n\n{teaching_suggestion}"
-            # Clear suggestion so it's not repeated
-            self.schema.teaching_recommendation.suggestion_message = None
-            # Save updated schema
-            self.db.save_session_state(self.session_id, self.schema.model_dump())
 
         return self._finalize_response(next_question)
 
@@ -552,27 +665,6 @@ class DiscoveryOrchestrator:
         }
         return f"__TASK_CURRICULUM_PROPOSED__:{json.dumps(curriculum_info)}"
 
-    def _get_existing_curriculum_marker(self) -> str:
-        """Get marker for existing curriculum proposal."""
-        print(f"[Orchestrator] Task curriculum already proposed from previous turn: {len(self.schema.task_curriculum.tasks)} tasks")
-        
-        # Return special marker with curriculum info
-        import json
-        curriculum_info = {
-            "tasks": [
-                {
-                    "id": task.id,
-                    "topic": task.topic,
-                    "justification": task.justification,
-                    "prerequisites": task.prerequisites,
-                    "status": task.status
-                }
-                for task in self.schema.task_curriculum.tasks
-            ],
-            "overall_justification": f"Based on your goal '{self.schema.interview_state.user_goal}' and what I've learned about your background, here's my best guess at a complete learning path. This is just a starting point - we can adjust as we go based on what works for you:"
-        }
-        return f"__TASK_CURRICULUM_PROPOSED__:{json.dumps(curriculum_info)}"
-
     def _finalize_response(self, next_question: str) -> str:
         """Finalize response by tracking metadata and saving to database."""
         # Check if a cognitive framework was used
@@ -712,20 +804,7 @@ class DiscoveryOrchestrator:
         self.db.update_user_profile(self.user_id, profile_updates)
         print(f"[DB] Profile updated for user {self.user_id[:8]}...")
 
-        # Step 4: Check if ready for teaching
-        if self.schema.teaching_recommendation.ready:
-            # Only send transition if we haven't already
-            if self.schema.interview_state.transition_message_sent:
-                print("[Orchestrator] Already sent transition message, continuing conversation...")
-                # Fall through to interviewer instead of repeating transition
-            else:
-                print("[Orchestrator] Ready for teaching phase!")
-                transition_msg = self._create_transition_message()
-                self.schema.interview_state.transition_message_sent = True
-                yield transition_msg
-                return
-
-        # Step 5: Stream interviewer response
+        # Step 4: Stream interviewer response
         print("[Interviewer] Streaming next question...")
         full_response = ""
         for chunk in self.interviewer.generate_next_question_stream(
@@ -953,118 +1032,6 @@ class DiscoveryOrchestrator:
         # Generate a real response to the user's last message using the interviewer
         print("[Interviewer] Generating response after goal rejection...")
         next_question = self._generate_and_save_response("[Rejected goal - keep exploring]")
-        
-        return next_question
-
-    def accept_proposed_teaching(self) -> dict:
-        """
-        User accepted the proposed teaching candidate. Return data for frontend to create teaching panel.
-
-        NOTE: Does NOT transition this session - goal panel continues.
-        Frontend creates a separate teaching panel session.
-
-        Returns:
-            Dictionary with candidate info for panel creation
-        """
-        if not self.schema.interview_state.proposed_teaching_id:
-            return {"success": False, "message": "No teaching candidate to accept."}
-
-        # Find the proposed candidate
-        candidate = next(
-            (c for c in self.schema.teaching_candidates
-             if c.id == self.schema.interview_state.proposed_teaching_id),
-            None
-        )
-
-        if not candidate:
-            return {"success": False, "message": "Teaching candidate not found."}
-
-        # Clear proposal but stay in Phase 2 (goal panel continues discovering teaching targets)
-        self.schema.interview_state.proposed_teaching_id = None
-        # teaching_candidate_identified stays False - can discover more teaching targets
-
-        print(f"\n[Orchestrator] ===== TEACHING CANDIDATE ACCEPTED =====")
-        print(f"[Orchestrator] Topic: '{candidate.topic}'")
-        print(f"[Orchestrator] Goal panel continues - frontend creates teaching panel")
-
-        # Add acceptance to conversation history
-        confirmation_message = f"Perfect! Let's start learning about **{candidate.topic}**."
-        self.conversation_history.append({
-            "role": "user",
-            "content": "[Accepted teaching topic]"
-        })
-        self.conversation_history.append({
-            "role": "assistant",
-            "content": confirmation_message
-        })
-
-        # Save the updated state AND conversation history
-        self.db.save_session_state(self.session_id, self.schema.model_dump())
-        self.db.save_conversation_history(self.session_id, self.conversation_history)
-
-        return {
-            "success": True,
-            "message": confirmation_message,
-            "candidate": {
-                "id": candidate.id,
-                "topic": candidate.topic,
-                "focus_question": candidate.focus_question,
-                "identified_gap": candidate.identified_gap
-            }
-        }
-    
-    def reject_proposed_teaching(self) -> str:
-        """
-        User rejected the proposed teaching candidate. Continue finding alternatives.
-        
-        Returns:
-            Next question from interviewer
-        """
-        if not self.schema.interview_state.proposed_teaching_id:
-            return "No teaching candidate to reject."
-        
-        teaching_id = self.schema.interview_state.proposed_teaching_id
-        
-        # Find the rejected candidate for logging
-        candidate = next(
-            (c for c in self.schema.teaching_candidates 
-             if c.id == teaching_id),
-            None
-        )
-        topic = candidate.topic if candidate else "unknown"
-        
-        # Mark this candidate as rejected so we don't propose it again
-        self.schema.interview_state.rejected_teaching_ids.append(teaching_id)
-        
-        # Clear the proposal
-        self.schema.interview_state.proposed_teaching_id = None
-        
-        print(f"\n[Orchestrator] ===== TEACHING CANDIDATE REJECTED =====")
-        print(f"[Orchestrator] Topic: '{topic}'")
-        print(f"[Orchestrator] Continuing to find better starting point...")
-        
-        # Add rejection to conversation history
-        self.conversation_history.append({
-            "role": "user",
-            "content": "[Rejected topic - find another starting point]"
-        })
-        
-        # Generate a real response exploring alternatives
-        print("[Interviewer] Generating response after teaching rejection...")
-        next_question = self.interviewer.generate_next_question(
-            self.schema,
-            self.conversation_history
-        )
-        
-        # Add to history
-        self.conversation_history.append({
-            "role": "assistant",
-            "content": next_question
-        })
-        
-        # Save updated state AND conversation history
-        self.db.save_session_state(self.session_id, self.schema.model_dump())
-        self.db.save_conversation_history(self.session_id, self.conversation_history)
         
         return next_question
 

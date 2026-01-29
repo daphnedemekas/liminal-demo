@@ -157,8 +157,11 @@ class FeedItem(Base):
     content = Column(Text, nullable=False)  # Short paragraph
     source_citation = Column(String, nullable=True)  # Academic reference
     source_url = Column(String, nullable=True)  # Link if available
+    source_type = Column(String, nullable=True)  # video, article, paper, blog, course
+    thumbnail_url = Column(String, nullable=True)  # Thumbnail image URL
+    embed_url = Column(String, nullable=True)  # Embeddable URL (e.g. YouTube embed)
     relevance_note = Column(String, nullable=True)  # Why this is relevant
-    
+
     # Ordering
     display_order = Column(Integer, default=0)
 

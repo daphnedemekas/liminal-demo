@@ -215,6 +215,10 @@ export const api = {
     return response.json()
   },
 
+  streamFeedUrl(): string {
+    return `${getApiUrl()}/api/feed/stream`
+  },
+
   // Teaching session management
   async startTeachingSession(params: {
     user_id: string
@@ -416,6 +420,9 @@ export interface FeedItem {
   content: string
   source_citation?: string
   source_url?: string
+  source_type?: 'video' | 'article' | 'paper' | 'blog' | 'course' | 'general'
+  thumbnail_url?: string
+  embed_url?: string
   relevance_note?: string
 }
 

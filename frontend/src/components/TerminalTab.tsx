@@ -1,7 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { api, TerminalSession } from '../services/api'
 import { getApiBaseUrl } from '../config'
-import { stripAnsiEscapeSequences } from '../utils/textUtils'
+import { Terminal } from '@xterm/xterm'
+import { FitAddon } from '@xterm/addon-fit'
+import { WebLinksAddon } from '@xterm/addon-web-links'
+import '@xterm/xterm/css/xterm.css'
 
 interface TerminalTabProps {
   goalId: number
@@ -12,23 +15,128 @@ interface TerminalSuggestion {
   activity: string
   suggestion: string
   timestamp: number
+  isError?: boolean
+  learningOpportunity?: string
+  command?: string
 }
 
 export default function TerminalTab({ goalId, userId }: TerminalTabProps) {
   const [session, setSession] = useState<TerminalSession | null>(null)
   const [isConnecting, setIsConnecting] = useState(false)
   const [isConnected, setIsConnected] = useState(false)
-  const [output, setOutput] = useState<string>('')
-  const [commandHistory, setCommandHistory] = useState<string[]>([])
-  const [historyIndex, setHistoryIndex] = useState(-1)
-  const [currentInput, setCurrentInput] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [suggestions, setSuggestions] = useState<TerminalSuggestion[]>([])
   const wsRef = useRef<WebSocket | null>(null)
-  const outputRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const terminalRef = useRef<HTMLDivElement>(null)
+  const xtermRef = useRef<Terminal | null>(null)
+  const fitAddonRef = useRef<FitAddon | null>(null)
   const currentCommandRef = useRef<{ command: string; startOutput: string; isClaudeCode: boolean; lastActivityTime: number; inInteractiveMode: boolean } | null>(null)
   const claudeCodeTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const outputBufferRef = useRef<string>('')
+  const inputLineRef = useRef<string>('')  // Accumulates typed characters to build command string
+
+  const initXterm = () => {
+    if (!terminalRef.current || xtermRef.current) return
+
+    const term = new Terminal({
+      cursorBlink: true,
+      fontSize: 13,
+      fontFamily: '"SF Mono", "Cascadia Code", "Fira Code", Menlo, Monaco, "Courier New", monospace',
+      theme: {
+        background: '#1e1e2e',
+        foreground: '#cdd6f4',
+        cursor: '#f5e0dc',
+        selectionBackground: '#585b7066',
+        black: '#45475a',
+        red: '#f38ba8',
+        green: '#a6e3a1',
+        yellow: '#f9e2af',
+        blue: '#89b4fa',
+        magenta: '#f5c2e7',
+        cyan: '#94e2d5',
+        white: '#bac2de',
+        brightBlack: '#585b70',
+        brightRed: '#f38ba8',
+        brightGreen: '#a6e3a1',
+        brightYellow: '#f9e2af',
+        brightBlue: '#89b4fa',
+        brightMagenta: '#f5c2e7',
+        brightCyan: '#94e2d5',
+        brightWhite: '#a6adc8',
+      },
+      scrollback: 5000,
+      convertEol: true,
+    })
+
+    const fitAddon = new FitAddon()
+    term.loadAddon(fitAddon)
+    term.loadAddon(new WebLinksAddon())
+
+    term.open(terminalRef.current)
+    fitAddon.fit()
+
+    xtermRef.current = term
+    fitAddonRef.current = fitAddon
+
+    // Handle user input — send raw data to PTY via WebSocket
+    term.onData((data) => {
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'input', data }))
+      }
+
+      // Track typed characters to build command string
+      if (data === '\r' || data === '\n') {
+        // Enter pressed — commit the accumulated input as the current command
+        const command = inputLineRef.current.trim()
+        if (command) {
+          const isClaudeCode = /^(claude|cc|claude-code)\b/.test(command)
+          currentCommandRef.current = {
+            command,
+            startOutput: '',
+            isClaudeCode,
+            lastActivityTime: Date.now(),
+            inInteractiveMode: isClaudeCode,
+          }
+          // Reset output buffer for this new command
+          outputBufferRef.current = ''
+        }
+        inputLineRef.current = ''
+      } else if (data === '\x7f' || data === '\b') {
+        // Backspace — remove last character
+        inputLineRef.current = inputLineRef.current.slice(0, -1)
+      } else if (data === '\x03') {
+        // Ctrl+C — clear current input
+        inputLineRef.current = ''
+        currentCommandRef.current = null
+      } else if (data.length === 1 && data >= ' ') {
+        // Printable character
+        inputLineRef.current += data
+      } else if (data.length > 1 && !data.startsWith('\x1b')) {
+        // Pasted text (multiple chars, not an escape sequence)
+        inputLineRef.current += data
+      }
+    })
+
+    // Handle resize
+    term.onResize(({ cols, rows }) => {
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'resize', cols, rows }))
+      }
+    })
+
+    // Resize observer for container
+    const resizeObserver = new ResizeObserver(() => {
+      try { fitAddon.fit() } catch {}
+    })
+    resizeObserver.observe(terminalRef.current)
+
+    return () => {
+      resizeObserver.disconnect()
+      term.dispose()
+      xtermRef.current = null
+      fitAddonRef.current = null
+    }
+  }
 
   const startTerminal = async () => {
     if (session || isConnecting) return
@@ -38,13 +146,26 @@ export default function TerminalTab({ goalId, userId }: TerminalTabProps) {
       setError(null)
       const newSession = await api.startTerminal(goalId, userId, '~')
       setSession(newSession)
-      connectWebSocket(newSession.session_id)
     } catch (err: any) {
       console.error('[TerminalTab] Failed to start terminal:', err)
       setError(err.message || 'Failed to start terminal')
       setIsConnecting(false)
     }
   }
+
+  // Initialize xterm when session is created and container is ready
+  useEffect(() => {
+    if (!session || !terminalRef.current) return
+
+    const cleanup = initXterm()
+
+    // Connect WebSocket after xterm is ready
+    connectWebSocket(session.session_id)
+
+    return () => {
+      cleanup?.()
+    }
+  }, [session])
 
   const connectWebSocket = (sessionId: string) => {
     const apiUrl = getApiBaseUrl().replace(/^http/, 'ws')
@@ -54,190 +175,44 @@ export default function TerminalTab({ goalId, userId }: TerminalTabProps) {
       console.log('[TerminalTab] WebSocket connected')
       setIsConnected(true)
       setIsConnecting(false)
-      setOutput(prev => prev + '\n[Terminal connected]\n')
-      inputRef.current?.focus()
+      xtermRef.current?.focus()
+
+      // Send initial resize
+      if (xtermRef.current) {
+        ws.send(JSON.stringify({
+          type: 'resize',
+          cols: xtermRef.current.cols,
+          rows: xtermRef.current.rows,
+        }))
+      }
     }
 
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data)
-        
+
         if (data.type === 'output') {
-          // Strip ANSI escape sequences before displaying
-          const cleanedOutput = stripAnsiEscapeSequences(data.data)
-          setOutput(prev => {
-            const newOutput = prev + cleanedOutput
-            
-            // Detect command completion: look for new prompt pattern (e.g., "$ ", "% ", "> ")
-            // This indicates the previous command finished and a new prompt appeared
-            if (currentCommandRef.current) {
-              // Update last activity time for Claude Code commands
-              if (currentCommandRef.current.isClaudeCode) {
-                currentCommandRef.current.lastActivityTime = Date.now()
-                
-                // Detect if Claude Code is in interactive mode (showing prompts like "Enter to confirm")
-                // Patterns that indicate interactive prompts from Claude Code
-                const interactivePatterns = [
-                  /Enter to confirm/i,
-                  /Esc to cancel/i,
-                  /Do you want to use/i,
-                  /Quick safety check/i,
-                  /Accessing workspace/i,
-                  /Security guide/i,
-                  /❯\s*\d+\./  // Menu options like "❯ 1. Yes"
-                ]
-                
-                // Check if any interactive pattern is present in the output
-                const hasInteractivePrompt = interactivePatterns.some(pattern => pattern.test(newOutput))
-                
-                if (hasInteractivePrompt && !currentCommandRef.current.inInteractiveMode) {
-                  // Just entered interactive mode
-                  currentCommandRef.current.inInteractiveMode = true
-                  console.log('[TerminalTab] Claude Code entered interactive mode')
-                } else if (hasInteractivePrompt) {
-                  // Still in interactive mode - don't try to detect completion yet
-                  return newOutput
-                }
-              }
-              
-              // Check if the new output chunk contains a prompt pattern (common prompts: $, %, >, #)
-              // Look for prompt at the end of the accumulated output
-              // Improved pattern to match various shell prompts more reliably
-              const promptPattern = /[\r\n](?:[$%#>]|\w+@[\w-]+:[\w\/~]+\$|\w+@[\w-]+:[\w\/~]+[#\$])\s*$/
-              
-              // For Claude Code in interactive mode, we need to see a shell prompt AFTER the interactive session
-              // This means we should have seen interactive prompts before, and now we see a shell prompt
-              if (currentCommandRef.current.isClaudeCode && currentCommandRef.current.inInteractiveMode) {
-                // Only mark as complete if we see a shell prompt (meaning interactive session ended)
-                if (promptPattern.test(newOutput)) {
-                  // Check that the prompt appears well after the interactive content
-                  const promptMatches = [...newOutput.matchAll(new RegExp(promptPattern.source, 'g'))]
-                  if (promptMatches.length > 0) {
-                    const lastMatch = promptMatches[promptMatches.length - 1]
-                    if (lastMatch.index !== undefined) {
-                      const commandStartLength = currentCommandRef.current.startOutput.length
-                      const promptStartIndex = lastMatch.index
-                      
-                      // Ensure we have substantial output (interactive session + completion)
-                      if (promptStartIndex > commandStartLength + 200) {
-                        // Interactive session completed, now we can process
-                        currentCommandRef.current.inInteractiveMode = false
-                        // Continue to process completion below
-                      } else {
-                        // Still in interactive mode, don't process yet
-                        return newOutput
-                      }
-                    }
-                  }
-                } else {
-                  // Still in interactive mode, no shell prompt yet
-                  return newOutput
-                }
-              }
-              
-              if (promptPattern.test(newOutput)) {
-                // Command completed - extract output between command start and prompt
-                // Find the last prompt position
-                const promptMatches = [...newOutput.matchAll(new RegExp(promptPattern.source, 'g'))]
-                if (promptMatches.length > 0) {
-                  // Get the last prompt match (most recent)
-                  const lastMatch = promptMatches[promptMatches.length - 1]
-                  if (lastMatch.index !== undefined) {
-                    // Extract output: everything after the command start up to (but not including) the new prompt
-                    const commandStartLength = currentCommandRef.current.startOutput.length
-                    const promptStartIndex = lastMatch.index
-                    
-                    // For Claude Code, ensure we have substantial output (it's interactive)
-                    const minOutputLength = currentCommandRef.current.isClaudeCode ? 100 : 0
-                    
-                    // Only process if we have a new prompt (not the one we started with)
-                    // and for Claude Code, ensure we have enough output
-                    if (promptStartIndex > commandStartLength + minOutputLength) {
-                      const commandOutput = newOutput.substring(commandStartLength, promptStartIndex).trim()
-                      
-                      // Send command_complete message (even if output is empty, the command was executed)
-                      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-                        try {
-                          wsRef.current.send(JSON.stringify({
-                            type: 'command_complete',
-                            command: currentCommandRef.current.command,
-                            output: commandOutput,
-                            exit_code: 0 // We can't reliably detect exit codes from output alone
-                          }))
-                          console.log('[TerminalTab] Sent command_complete:', currentCommandRef.current.command, currentCommandRef.current.isClaudeCode ? '(Claude Code)' : '')
-                        } catch (err) {
-                          console.error('[TerminalTab] Failed to send command_complete:', err)
-                        }
-                      }
-                      
-                      // Clear timeout if set
-                      if (claudeCodeTimeoutRef.current) {
-                        clearTimeout(claudeCodeTimeoutRef.current)
-                        claudeCodeTimeoutRef.current = null
-                      }
-                      
-                      // Clear current command tracking
-                      currentCommandRef.current = null
-                    }
-                  }
-                }
-              } else if (currentCommandRef.current.isClaudeCode) {
-                // For Claude Code, if no prompt appears after a delay, force completion
-                // This handles cases where Claude Code doesn't return to prompt immediately
-                const timeSinceLastActivity = Date.now() - currentCommandRef.current.lastActivityTime
-                const timeSinceStart = Date.now() - (currentCommandRef.current.lastActivityTime - 1000) // Approximate start time
-                
-                // If we've had output recently but no prompt for 5+ seconds, and it's been 10+ seconds total
-                if (timeSinceLastActivity > 5000 && timeSinceStart > 10000 && newOutput.length > currentCommandRef.current.startOutput.length + 200) {
-                  // Force completion for Claude Code
-                  const commandStartLength = currentCommandRef.current.startOutput.length
-                  const commandOutput = newOutput.substring(commandStartLength).trim()
-                  
-                  if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-                    try {
-                      wsRef.current.send(JSON.stringify({
-                        type: 'command_complete',
-                        command: currentCommandRef.current.command,
-                        output: commandOutput,
-                        exit_code: 0
-                      }))
-                      console.log('[TerminalTab] Sent command_complete (Claude Code, timeout):', currentCommandRef.current.command)
-                    } catch (err) {
-                      console.error('[TerminalTab] Failed to send command_complete:', err)
-                    }
-                  }
-                  
-                  if (claudeCodeTimeoutRef.current) {
-                    clearTimeout(claudeCodeTimeoutRef.current)
-                    claudeCodeTimeoutRef.current = null
-                  }
-                  
-                  currentCommandRef.current = null
-                }
-              }
-            }
-            
-            return newOutput
-          })
-          
-          // Auto-scroll to bottom
-          setTimeout(() => {
-            outputRef.current?.scrollTo(0, outputRef.current.scrollHeight)
-          }, 10)
+          // Write raw output to xterm (it handles ANSI natively)
+          xtermRef.current?.write(data.data)
+
+          // Track output for command completion detection
+          outputBufferRef.current += data.data
+          detectCommandCompletion(data.data)
         } else if (data.type === 'observation') {
-          // AI observation - display as suggestion
           console.log('[TerminalTab] AI observation:', data)
           const suggestion: TerminalSuggestion = {
             activity: data.activity || 'terminal',
             suggestion: data.suggestion || 'AI detected terminal activity',
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            isError: data.is_error || false,
+            learningOpportunity: data.learning_opportunity,
+            command: data.command,
           }
           setSuggestions(prev => [...prev, suggestion])
         }
-      } catch (err) {
-        // If not JSON, treat as raw output and strip ANSI sequences
-        const cleanedOutput = stripAnsiEscapeSequences(event.data)
-        setOutput(prev => prev + cleanedOutput)
+      } catch {
+        // Raw output
+        xtermRef.current?.write(event.data)
       }
     }
 
@@ -250,96 +225,68 @@ export default function TerminalTab({ goalId, userId }: TerminalTabProps) {
     ws.onclose = () => {
       console.log('[TerminalTab] WebSocket closed')
       setIsConnected(false)
-      setOutput(prev => prev + '\n[Terminal disconnected]\n')
+      xtermRef.current?.write('\r\n[Terminal disconnected]\r\n')
     }
 
     wsRef.current = ws
   }
 
-  const sendCommand = (command: string) => {
-    if (!wsRef.current || !isConnected || !command.trim()) return
+  const detectCommandCompletion = (_newData: string) => {
+    if (!currentCommandRef.current) return
 
-    // Add to history
-    setCommandHistory(prev => [...prev, command])
-    setHistoryIndex(-1)
-
-    // Track current command for completion detection
-    // The shell will echo the command, so we track the output length before sending
-    const isClaudeCode = command.toLowerCase().trim().startsWith('claude') || command.toLowerCase().trim().startsWith('cc ')
-    setOutput(prev => {
-      currentCommandRef.current = {
-        command: command.trim(),
-        startOutput: prev, // Track from current output position (before command echo)
-        isClaudeCode: isClaudeCode,
-        lastActivityTime: Date.now(),
-        inInteractiveMode: false // Will be set to true when we detect interactive prompts
-      }
-      return prev // Don't modify output here, let the shell echo handle it
-    })
-    
-    // For Claude Code, set a timeout to force completion detection if no prompt appears
-    if (isClaudeCode && claudeCodeTimeoutRef.current) {
-      clearTimeout(claudeCodeTimeoutRef.current)
+    if (currentCommandRef.current.isClaudeCode) {
+      currentCommandRef.current.lastActivityTime = Date.now()
     }
 
-    // Send command
-    wsRef.current.send(JSON.stringify({
-      type: 'input',
-      data: command + '\n'
-    }))
+    // Strip ANSI escape codes for prompt detection
+    const stripped = outputBufferRef.current.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').replace(/\x1b\][^\x07]*\x07/g, '')
 
-    setCurrentInput('')
+    // Check for shell prompt indicating command completed
+    // Match common prompts: user@host:~/dir$ , ~/dir % , # , >
+    const promptPattern = /[$%#>]\s*$/
+    if (promptPattern.test(stripped.trimEnd()) && stripped.length > 10) {
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        try {
+          wsRef.current.send(JSON.stringify({
+            type: 'command_complete',
+            command: currentCommandRef.current.command,
+            output: stripped.slice(-2000), // last 2000 chars, ANSI-stripped
+            exit_code: 0
+          }))
+          console.log('[TerminalTab] Sent command_complete:', currentCommandRef.current.command)
+        } catch (err) {
+          console.error('[TerminalTab] Failed to send command_complete:', err)
+        }
+      }
+
+      if (claudeCodeTimeoutRef.current) {
+        clearTimeout(claudeCodeTimeoutRef.current)
+        claudeCodeTimeoutRef.current = null
+      }
+      currentCommandRef.current = null
+    }
   }
 
   const dismissSuggestion = (timestamp: number) => {
     setSuggestions(prev => prev.filter(s => s.timestamp !== timestamp))
   }
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      sendCommand(currentInput)
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      if (commandHistory.length > 0) {
-        const newIndex = historyIndex === -1 
-          ? commandHistory.length - 1 
-          : Math.max(0, historyIndex - 1)
-        setHistoryIndex(newIndex)
-        setCurrentInput(commandHistory[newIndex])
-      }
-    } else if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      if (historyIndex >= 0) {
-        const newIndex = historyIndex + 1
-        if (newIndex >= commandHistory.length) {
-          setHistoryIndex(-1)
-          setCurrentInput('')
-        } else {
-          setHistoryIndex(newIndex)
-          setCurrentInput(commandHistory[newIndex])
-        }
-      }
-    }
-  }
-
-  // Auto-focus input when connected
-  useEffect(() => {
-    if (isConnected) {
-      inputRef.current?.focus()
-    }
-  }, [isConnected])
-
-  // Cleanup WebSocket and timeouts on unmount
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (wsRef.current) {
-        wsRef.current.close()
-      }
+      wsRef.current?.close()
       if (claudeCodeTimeoutRef.current) {
         clearTimeout(claudeCodeTimeoutRef.current)
       }
     }
+  }, [])
+
+  // Fit terminal when tab becomes visible
+  useEffect(() => {
+    const fitTimer = setInterval(() => {
+      try { fitAddonRef.current?.fit() } catch {}
+    }, 1000)
+    return () => clearInterval(fitTimer)
   }, [])
 
   return (
@@ -382,11 +329,11 @@ export default function TerminalTab({ goalId, userId }: TerminalTabProps) {
             {suggestions.length > 0 && (
               <div className="terminal-suggestions">
                 {suggestions.map((suggestion) => (
-                  <div key={suggestion.timestamp} className="terminal-suggestion-banner">
+                  <div key={suggestion.timestamp} className={`terminal-suggestion-banner ${suggestion.isError ? 'terminal-suggestion-error' : ''}`}>
                     <div className="terminal-suggestion-content">
-                      <strong>AI Observation:</strong> {suggestion.suggestion}
-                      {suggestion.activity && suggestion.activity !== 'terminal' && (
-                        <span className="terminal-activity-badge">{suggestion.activity}</span>
+                      <strong>{suggestion.isError ? 'Error Detected' : 'AI Observation'}:</strong> {suggestion.suggestion}
+                      {suggestion.command && (
+                        <code className="terminal-suggestion-command">{suggestion.command}</code>
                       )}
                     </div>
                     <button
@@ -401,31 +348,13 @@ export default function TerminalTab({ goalId, userId }: TerminalTabProps) {
               </div>
             )}
             <div
-              ref={outputRef}
-              className="terminal-output"
-            >
-              <pre>{output || '[Terminal ready]\n'}</pre>
-            </div>
-            <div className="terminal-input-container">
-              <span className="terminal-prompt">$</span>
-              <input
-                ref={inputRef}
-                type="text"
-                className="terminal-input"
-                value={currentInput}
-                onChange={(e) => setCurrentInput(e.target.value)}
-                onKeyDown={handleKeyPress}
-                placeholder={isConnected ? "Type a command..." : "Connecting..."}
-                disabled={!isConnected}
-                autoFocus
-              />
-            </div>
+              ref={terminalRef}
+              className="terminal-xterm-container"
+              style={{ width: '100%', height: '300px' }}
+            />
           </>
         )}
       </div>
     </div>
   )
 }
-
-
-

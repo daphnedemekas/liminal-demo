@@ -6,7 +6,7 @@ export interface Message {
   role: 'user' | 'assistant'
   content: string
   audio_url?: string
-  type?: 'message' | 'topic_found' | 'learning_message' | 'goal_proposed' | 'goal_accepted' | 'teaching_proposed' | 'teaching_accepted' | 'create_goal_panel' | 'create_teaching_panel' | 'task_curriculum_proposed' | 'task_curriculum_accepted'
+  type?: 'message' | 'topic_found' | 'learning_message' | 'goal_proposed' | 'goal_accepted' | 'teaching_accepted' | 'create_goal_panel' | 'create_teaching_panel' | 'task_curriculum_proposed' | 'task_curriculum_accepted'
   topic?: any
   proposedGoal?: string  // For goal_proposed type
   goalData?: {  // For create_goal_panel type
@@ -229,20 +229,6 @@ export function useWebSocket(sessionId: string, phase: 'discovery' | 'learning')
             tasks: data.tasks  // Include the accepted tasks
           }
           setMessages(prev => [...prev, acceptedMessage])
-          return
-        }
-
-        // Handle teaching_proposed - show confirmation UI for teaching candidate (legacy single-candidate)
-        if (data.type === 'teaching_proposed') {
-          const teachingMessage: Message = {
-            id: crypto.randomUUID(),
-            role: 'assistant',
-            content: data.content || data.message,
-            audio_url: data.audio_url,
-            type: 'teaching_proposed',
-            teachingCandidate: data.candidate,
-          }
-          setMessages(prev => [...prev, teachingMessage])
           return
         }
 

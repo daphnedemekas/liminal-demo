@@ -258,3 +258,8 @@ if frontend_dist.exists():
 
         # Otherwise serve index.html for client-side routing
         return FileResponse(frontend_dist / "index.html")
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

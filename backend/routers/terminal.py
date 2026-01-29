@@ -219,6 +219,7 @@ def get_terminal_websocket_handler():
             pty_session.on_output = lambda data: asyncio.create_task(handle_output(data))
 
             current_command = ""
+            input_line_buffer = ""  # Accumulate typed characters
 
             while True:
                 data = await websocket.receive_json()
@@ -228,7 +229,22 @@ def get_terminal_websocket_handler():
                     input_data = data.get("data", "")
 
                     if "\n" in input_data or "\r" in input_data:
-                        current_command = input_data.strip()
+                        # Enter pressed — commit accumulated input as current command
+                        current_command = input_line_buffer.strip()
+                        input_line_buffer = ""
+                    elif input_data == "\x7f" or input_data == "\b":
+                        # Backspace
+                        input_line_buffer = input_line_buffer[:-1]
+                    elif input_data == "\x03":
+                        # Ctrl+C
+                        input_line_buffer = ""
+                        current_command = ""
+                    elif len(input_data) == 1 and input_data >= " ":
+                        # Printable character
+                        input_line_buffer += input_data
+                    elif len(input_data) > 1 and not input_data.startswith("\x1b"):
+                        # Pasted text
+                        input_line_buffer += input_data
 
                     await _terminal_manager.write_input(session_id, input_data)
 
@@ -257,12 +273,32 @@ def get_terminal_websocket_handler():
                             if observer.should_trigger_suggestion_now():
                                 suggestion_context = observer.get_suggestion_context()
 
+                                # Build a meaningful suggestion message
+                                suggestion_parts = []
+                                if observation.is_error and observation.error_summary:
+                                    suggestion_parts.append(f"Error detected: {observation.error_summary}")
+                                if observation.learning_opportunity:
+                                    suggestion_parts.append(f"Learning opportunity: {observation.learning_opportunity}")
+                                if observation.understanding_signal == "struggling":
+                                    suggestion_parts.append("It looks like you're hitting some friction — the chat can help break this down.")
+                                elif observation.understanding_signal == "exploring":
+                                    suggestion_parts.append("Looks like you're exploring — want a deeper explanation of what you're finding?")
+                                if observation.topics_detected:
+                                    suggestion_parts.append(f"Topics: {', '.join(observation.topics_detected)}")
+
+                                suggestion_text = " · ".join(suggestion_parts) if suggestion_parts else f"Detected {observation.activity_type} activity"
+
                                 await websocket.send_json({
                                     "type": "observation",
                                     "activity": observation.activity_type,
-                                    "suggestion": f"Detected {observation.activity_type} activity"
+                                    "suggestion": suggestion_text,
+                                    "is_error": observation.is_error,
+                                    "learning_opportunity": observation.learning_opportunity,
+                                    "understanding_signal": observation.understanding_signal,
+                                    "topics": observation.topics_detected,
+                                    "command": observation.command[:100],
                                 })
-                                print(f"[TerminalWS] Sent observation to client: {observation.activity_type}")
+                                print(f"[TerminalWS] Sent observation to client: {observation.activity_type} - {suggestion_text[:80]}")
 
                                 if _suggestion_router:
                                     try:

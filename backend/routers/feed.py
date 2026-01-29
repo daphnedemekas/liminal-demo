@@ -1,6 +1,9 @@
 """Feed content generation endpoints."""
 import asyncio
+import json
+import time
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, List
 from pathlib import Path
@@ -26,6 +29,7 @@ class FeedRequest(BaseModel):
     teaching_topic: Optional[str] = None
     user_background: Optional[str] = None
     goals_summary: Optional[str] = None
+    page: int = 0  # For pagination / load-more
 
 
 class FeedItemResponse(BaseModel):
@@ -38,11 +42,262 @@ class FeedItemResponse(BaseModel):
     thumbnail_url: Optional[str] = None
     embed_url: Optional[str] = None
     relevance_note: Optional[str] = None
+    engagement: Optional[int] = None  # likes, points, citations, etc.
 
 
 class FeedResponse(BaseModel):
     items: List[FeedItemResponse]
     generated: bool
+
+
+def _interleave_by_type(items: List[dict]) -> List[dict]:
+    """Reorder items so no two consecutive items share the same source_type."""
+    if len(items) <= 1:
+        return items
+
+    # Group by source_type
+    from collections import defaultdict, deque
+    buckets = defaultdict(deque)
+    for item in items:
+        buckets[item.get("source_type", "general")].append(item)
+
+    result = []
+    last_type = None
+    remaining = sum(len(b) for b in buckets.values())
+
+    while remaining > 0:
+        # Pick the fullest bucket that isn't the same type as last
+        best_type = None
+        best_len = -1
+        for t, b in buckets.items():
+            if len(b) > 0 and t != last_type and len(b) > best_len:
+                best_type = t
+                best_len = len(b)
+
+        # If all remaining are the same type, just take from whatever's left
+        if best_type is None:
+            for t, b in buckets.items():
+                if len(b) > 0:
+                    best_type = t
+                    break
+
+        if best_type is None:
+            break
+
+        result.append(buckets[best_type].popleft())
+        last_type = best_type
+        remaining -= 1
+
+    return result
+
+
+def _build_context_description(request: FeedRequest) -> str:
+    """Build a text description of the learning context for query generation."""
+    if request.context_type == "exploration":
+        return f"User is exploring learning directions. Interests/goals: {request.goals_summary or 'Still discovering'}. Background: {request.user_background or 'Not provided'}"
+    elif request.context_type == "goal":
+        return f"Learning goal: {request.goal_text}"
+    elif request.context_type == "teaching_candidate":
+        return f"Learning goal: {request.goal_text}. Specific topic: {request.teaching_topic}"
+    return request.goals_summary or request.goal_text or "general learning"
+
+
+async def _generate_search_queries(request: FeedRequest) -> List[str]:
+    """Use a small LLM call to generate 2-3 search queries for the context."""
+    from src.llm_client import LLMClient
+
+    context = _build_context_description(request)
+    if request.context_type == "exploration":
+        prompt = f"""Given this user's interests and background, generate 3 diverse search queries (each 3-8 words) that span DIFFERENT interests/topics the user has. Each query should target a different area. Return as a JSON array of strings.
+
+User context: {context}
+
+Return ONLY a JSON array like: ["query about interest 1", "query about interest 2", "query about interest 3"]"""
+    else:
+        prompt = f"""Given this learning context, generate 2-3 short search queries (each 3-8 words) that would find relevant articles, videos, and academic papers. Return as a JSON array of strings.
+
+Context: {context}
+
+Return ONLY a JSON array like: ["query one", "query two", "query three"]"""
+
+    llm = LLMClient()
+    try:
+        loop = asyncio.get_event_loop()
+        response = await asyncio.wait_for(
+            loop.run_in_executor(
+                None,
+                lambda: llm.chat_with_json(
+                    messages=[{"role": "user", "content": prompt}],
+                    model="openai:gpt-4o-mini",
+                    json_top_level="array",
+                    max_retries=2
+                )
+            ),
+            timeout=10.0
+        )
+        if isinstance(response, list):
+            return [str(q) for q in response[:3]]
+    except Exception as e:
+        print(f"[Feed] Query generation error: {e}")
+
+    # Fallback: use context text directly as a query
+    fallback = request.teaching_topic or request.goal_text or request.goals_summary or "learning resources"
+    return [fallback]
+
+
+async def _fetch_all_apis(queries: List[str]) -> List[dict]:
+    """Fire all API sources in parallel and collect results."""
+    from backend.services.content_apis import (
+        fetch_brave_results,
+        fetch_youtube_results,
+        fetch_semantic_scholar,
+        fetch_twitter_results,
+        fetch_reddit_results,
+        fetch_hackernews_results,
+    )
+
+    primary_query = queries[0]
+    secondary_query = queries[1] if len(queries) > 1 else queries[0]
+
+    tasks = [
+        fetch_brave_results(primary_query, count=2),
+        fetch_youtube_results(secondary_query, count=2),
+        fetch_twitter_results(primary_query, count=2),
+        fetch_reddit_results(secondary_query, count=1),
+        fetch_hackernews_results(primary_query, count=1),
+        fetch_semantic_scholar(primary_query, count=1),
+    ]
+
+    all_items = []
+    for coro in asyncio.as_completed(tasks):
+        try:
+            items = await coro
+            all_items.extend(items)
+        except Exception as e:
+            print(f"[Feed] API fetch error: {e}")
+
+    return _interleave_by_type(all_items)
+
+
+@router.post("/feed/stream")
+async def stream_feed(request: FeedRequest):
+    """SSE endpoint that streams feed items as each API returns."""
+
+    async def event_generator():
+        t0 = time.time()
+
+        # Phase 0: Check cache
+        has_feed = _db.has_feed_items(
+            user_id=request.user_id,
+            context_type=request.context_type,
+            goal_id=request.goal_id,
+            teaching_candidate_id=request.teaching_candidate_id
+        )
+
+        if has_feed:
+            items = _db.get_feed_items(
+                user_id=request.user_id,
+                context_type=request.context_type,
+                goal_id=request.goal_id,
+                teaching_candidate_id=request.teaching_candidate_id
+            )
+            items = _interleave_by_type(items)
+            # Pagination: return a page of items
+            page_size = 7
+            start = request.page * page_size
+            page_items = items[start:start + page_size]
+            has_more = (start + page_size) < len(items)
+            for item in page_items:
+                yield f"data: {json.dumps(item)}\n\n"
+            yield f"data: {json.dumps({'done': True, 'cached': True, 'count': len(page_items), 'has_more': has_more})}\n\n"
+            print(f"[Feed] Streamed {len(page_items)} cached items (page {request.page}) in {time.time()-t0:.1f}s")
+            return
+
+        # Phase 1: Generate search queries
+        yield f"data: {json.dumps({'status': 'generating_queries'})}\n\n"
+        queries = await _generate_search_queries(request)
+        print(f"[Feed] Generated queries: {queries} in {time.time()-t0:.1f}s")
+        yield f"data: {json.dumps({'status': 'fetching', 'queries': queries})}\n\n"
+
+        # Phase 2: Fetch from all APIs in parallel, stream as they arrive
+        from backend.services.content_apis import (
+            fetch_brave_results,
+            fetch_youtube_results,
+            fetch_semantic_scholar,
+            fetch_twitter_results,
+            fetch_reddit_results,
+            fetch_hackernews_results,
+        )
+
+        primary_query = queries[0]
+        secondary_query = queries[1] if len(queries) > 1 else queries[0]
+        tertiary_query = queries[2] if len(queries) > 2 else primary_query
+
+        # For exploration, use different queries for each API to maximize diversity
+        if request.context_type == "exploration":
+            tasks = {
+                asyncio.create_task(fetch_brave_results(primary_query, count=2)): "brave1",
+                asyncio.create_task(fetch_brave_results(tertiary_query, count=2)): "brave2",
+                asyncio.create_task(fetch_youtube_results(secondary_query, count=2)): "youtube",
+                asyncio.create_task(fetch_twitter_results(primary_query, count=2)): "twitter",
+                asyncio.create_task(fetch_reddit_results(secondary_query, count=2)): "reddit",
+                asyncio.create_task(fetch_hackernews_results(tertiary_query, count=2)): "hn",
+                asyncio.create_task(fetch_semantic_scholar(primary_query, count=1)): "scholar",
+            }
+        else:
+            tasks = {
+                asyncio.create_task(fetch_brave_results(primary_query, count=2)): "brave",
+                asyncio.create_task(fetch_youtube_results(secondary_query, count=2)): "youtube",
+                asyncio.create_task(fetch_twitter_results(primary_query, count=2)): "twitter",
+                asyncio.create_task(fetch_reddit_results(secondary_query, count=1)): "reddit",
+                asyncio.create_task(fetch_hackernews_results(primary_query, count=1)): "hn",
+                asyncio.create_task(fetch_semantic_scholar(primary_query, count=1)): "scholar",
+            }
+
+        all_items = []
+        item_id_counter = 0
+
+        # Collect all items first, then interleave and stream
+        for task in asyncio.as_completed(list(tasks.keys())):
+            try:
+                items = await task
+                for item in items:
+                    item["id"] = item_id_counter
+                    item_id_counter += 1
+                    all_items.append(item)
+            except Exception as e:
+                print(f"[Feed] API error: {e}")
+
+        # Interleave so no two consecutive items have the same type
+        all_items = _interleave_by_type(all_items)
+        for item in all_items:
+            yield f"data: {json.dumps(item)}\n\n"
+
+        # Phase 3: Save to DB
+        if all_items:
+            try:
+                _db.save_feed_items(
+                    user_id=request.user_id,
+                    context_type=request.context_type,
+                    items=all_items,
+                    goal_id=request.goal_id,
+                    teaching_candidate_id=request.teaching_candidate_id
+                )
+            except Exception as e:
+                print(f"[Feed] DB save error: {e}")
+
+        yield f"data: {json.dumps({'done': True, 'cached': False, 'count': len(all_items), 'has_more': False})}\n\n"
+        print(f"[Feed] Streamed {len(all_items)} new items in {time.time()-t0:.1f}s")
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.post("/feed", response_model=FeedResponse)
@@ -68,124 +323,42 @@ async def get_or_generate_feed(request: FeedRequest):
                 generated=False
             )
 
-        from src.llm_client import LLMClient
+        # No cache — use real APIs via streaming fetcher, then return
+        queries = await _generate_search_queries(request)
+        all_items = await _fetch_all_apis(queries)
 
-        prompt_path = Path(__file__).parent.parent.parent / "prompts" / "feed" / "generate_feed.txt"
-        with open(prompt_path) as f:
-            prompt_template = f.read()
+        if not all_items:
+            return FeedResponse(items=[], generated=False)
 
-        context_details = ""
-        user_background_for_prompt = request.user_background or "No background provided"
-
-        if request.context_type == "exploration":
-            context_details = f"User is exploring potential learning directions.\nCurrent interests/goals: {request.goals_summary or 'Still discovering'}"
-        elif request.context_type == "goal":
-            context_details = f"User's learning goal: {request.goal_text}"
-            user_background_for_prompt = "Focus ONLY on the learning goal specified above. Ignore any general user background that is not directly relevant to this specific goal."
-        elif request.context_type == "teaching_candidate":
-            context_details = f"Goal: {request.goal_text}\nSpecific topic: {request.teaching_topic}"
-            user_background_for_prompt = "Focus ONLY on the specific teaching topic mentioned above. Ignore any general user background that is not directly relevant to this specific topic."
-
-        prompt = prompt_template.format(
-            context_type=request.context_type,
-            context_details=context_details,
-            user_background=user_background_for_prompt,
-            num_items=7
-        )
-
-        llm = LLMClient()
-        response = None
+        # Save to DB
         try:
-            loop = asyncio.get_event_loop()
-            response = await asyncio.wait_for(
-                loop.run_in_executor(
-                    None,
-                    lambda: llm.chat_with_json(
-                        messages=[{"role": "user", "content": prompt}],
-                        model="openai:gpt-4o-mini",
-                        json_top_level="array",
-                        max_retries=3
-                    )
-                ),
-                timeout=300.0
-            )
-        except asyncio.TimeoutError:
-            print(f"[Feed] LLM call timed out after 180s - this is unusual, check API status")
-            return FeedResponse(items=[], generated=False)
-        except Exception as e:
-            print(f"[Feed] Error generating feed: {e}")
-            import traceback
-            traceback.print_exc()
-            return FeedResponse(items=[], generated=False)
-
-        if response is None:
-            print(f"[Feed] No response from LLM - returning empty feed")
-            return FeedResponse(items=[], generated=False)
-
-        if isinstance(response, list):
-            items = response
-        elif isinstance(response, dict) and "items" in response:
-            items = response["items"]
-        else:
-            print(f"[Feed] Unexpected response format: {type(response)}")
-            items = []
-
-        validated_items = []
-        for item in items:
-            if isinstance(item, dict) and "title" in item and "content" in item:
-                validated_items.append(item)
-            else:
-                print(f"[Feed] Skipping invalid item: {item}")
-
-        items = validated_items
-
-        if not items:
-            print(f"[Feed] No items generated - likely not enough conversation yet")
-            return FeedResponse(items=[], generated=False)
-
-        save_successful = False
-        if items:
-            try:
-                _db.save_feed_items(
-                    user_id=request.user_id,
-                    context_type=request.context_type,
-                    items=items,
-                    goal_id=request.goal_id,
-                    teaching_candidate_id=request.teaching_candidate_id
-                )
-                save_successful = True
-            except Exception as e:
-                print(f"[Feed] Failed to save items to database: {e}")
-                import traceback
-                traceback.print_exc()
-
-        if save_successful:
-            saved_items = _db.get_feed_items(
+            _db.save_feed_items(
                 user_id=request.user_id,
                 context_type=request.context_type,
+                items=all_items,
                 goal_id=request.goal_id,
                 teaching_candidate_id=request.teaching_candidate_id
             )
-            print(f"[Feed] Retrieved {len(saved_items)} saved items from database")
-            try:
-                response_items = [FeedItemResponse(**item) for item in saved_items]
-                return FeedResponse(
-                    items=response_items,
-                    generated=True
-                )
-            except Exception as e:
-                print(f"[Feed] Error creating FeedItemResponse from saved items: {e}")
-                import traceback
-                traceback.print_exc()
-                return FeedResponse(
-                    items=[FeedItemResponse(id=i, **item) for i, item in enumerate(items)],
-                    generated=True
-                )
-        else:
+        except Exception as e:
+            print(f"[Feed] Failed to save items: {e}")
+            import traceback
+            traceback.print_exc()
+            # Return items even if save fails
             return FeedResponse(
-                items=[FeedItemResponse(id=i, **item) for i, item in enumerate(items)],
+                items=[FeedItemResponse(id=i, **item) for i, item in enumerate(all_items)],
                 generated=True
             )
+
+        saved_items = _db.get_feed_items(
+            user_id=request.user_id,
+            context_type=request.context_type,
+            goal_id=request.goal_id,
+            teaching_candidate_id=request.teaching_candidate_id
+        )
+        return FeedResponse(
+            items=[FeedItemResponse(**item) for item in saved_items],
+            generated=True
+        )
 
     except Exception as e:
         print(f"[Feed] Error: {e}")

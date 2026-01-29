@@ -1,4 +1,4 @@
-import { useEditor, EditorContent, BubbleMenu } from '@tiptap/react'
+import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Image from '@tiptap/extension-image'
 import Placeholder from '@tiptap/extension-placeholder'
@@ -248,50 +248,6 @@ export default function RichTextEditor({
           </button>
         </div>
       </div>
-
-      {/* Bubble menu for quick formatting */}
-      {editor && (
-        <BubbleMenu editor={editor} tippyOptions={{ duration: 100 }}>
-          <div
-            className="bubble-menu"
-            style={{
-              display: 'flex',
-              gap: '2px',
-              padding: '4px 6px',
-              borderRadius: '8px',
-              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-              zIndex: 50,
-              background: 'var(--bg-primary, #fff)',
-              border: '1px solid var(--border-color, #e0e0e0)'
-            }}
-          >
-            <button
-              type="button"
-              onClick={() => editor.chain().focus().toggleBold().run()}
-              className={editor.isActive('bold') ? 'active' : ''}
-              title="Bold (Cmd+B)"
-            >
-              B
-            </button>
-            <button
-              type="button"
-              onClick={() => editor.chain().focus().toggleItalic().run()}
-              className={editor.isActive('italic') ? 'active' : ''}
-              title="Italic (Cmd+I)"
-            >
-              I
-            </button>
-            <button
-              type="button"
-              onClick={() => editor.chain().focus().toggleStrike().run()}
-              className={editor.isActive('strike') ? 'active' : ''}
-              title="Strikethrough (Cmd+Shift+X)"
-            >
-              S
-            </button>
-          </div>
-        </BubbleMenu>
-      )}
 
       {/* Editor content */}
       <EditorContent editor={editor} className="rich-editor-content" />

@@ -590,7 +590,7 @@ export default function TeachingChat({
                               onClick={handleAcceptCurriculum}
                               disabled={isLoading || !isConnected}
                             >
-                              Accept — Let's learn
+                              Accept — Let's dive in
                             </button>
                             <button 
                               className="curriculum-modify-btn"

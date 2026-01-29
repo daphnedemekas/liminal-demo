@@ -13,7 +13,7 @@ import ContextTab from './ContextTab'
 import DraftTab from './DraftTab'
 import TerminalTab from './TerminalTab'
 import { ModelConfig } from './ModelSelector'
-import { stripMarkdown } from '../utils/textUtils'
+
 
 interface TeachingCandidate {
   id: number
@@ -317,13 +317,6 @@ export default function GoalChat({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isListening, isAudioMode, stopListening, transcript, handleSend, resetTranscript])
 
-  // Check for teaching candidate proposed (legacy single-candidate flow)
-  const lastTeachingProposedIndex = messages.map((m, i) => m.type === 'teaching_proposed' ? i : -1).filter(i => i >= 0).pop() ?? -1
-  const lastTeachingPanelIndex = messages.map((m, i) => (m.type === 'create_teaching_panel' || m.type === 'teaching_accepted') ? i : -1).filter(i => i >= 0).pop() ?? -1
-  const hasPendingTeaching = lastTeachingProposedIndex > lastTeachingPanelIndex && lastTeachingProposedIndex >= 0
-  // @ts-ignore - unused for now, may be needed later
-  const _pendingTeachingProposal = hasPendingTeaching ? messages[lastTeachingProposedIndex] : null
-
   // Check for task curriculum proposed (new batch proposal flow)
   const lastCurriculumProposedIndex = messages.map((m, i) => m.type === 'task_curriculum_proposed' ? i : -1).filter(i => i >= 0).pop() ?? -1
   const lastCurriculumAcceptedIndex = messages.map((m, i) => m.type === 'task_curriculum_accepted' ? i : -1).filter(i => i >= 0).pop() ?? -1
@@ -331,20 +324,7 @@ export default function GoalChat({
   // @ts-ignore - unused for now, may be needed later
   const _pendingCurriculumProposal = hasPendingCurriculum ? messages[lastCurriculumProposedIndex] : null
 
-  // Handle teaching candidate accept/reject (legacy)
-  const handleAcceptTeaching = () => {
-    if (isConnected) {
-      sendCommand('__ACCEPT_TEACHING__')
-    }
-  }
-
-  const handleRejectTeaching = () => {
-    if (isConnected) {
-      sendCommand('__REJECT_TEACHING__')
-    }
-  }
-
-  // Handle task curriculum accept/modify (new)
+  // Handle task curriculum accept/modify
   const handleAcceptCurriculum = () => {
     if (isConnected) {
       sendCommand('__ACCEPT_CURRICULUM__')
@@ -466,38 +446,6 @@ export default function GoalChat({
                   onAudioPlay={() => msg.audio_url && playAudio(msg.audio_url)}
                 />
               )}
-              {/* Show teaching candidate confirmation buttons (legacy single-candidate) */}
-              {msg.type === 'teaching_proposed' && 
-               msg.teachingCandidate && 
-               index === lastTeachingProposedIndex && 
-               hasPendingTeaching && (
-                <div className="teaching-confirmation">
-                  <div className="teaching-candidate-preview">
-                    <h4>Suggested Starting Point</h4>
-                    <p className="teaching-topic">{stripMarkdown(msg.teachingCandidate.topic)}</p>
-                    {msg.teachingCandidate.focus_question && (
-                      <p className="teaching-question">"{msg.teachingCandidate.focus_question}"</p>
-                    )}
-                  </div>
-                  <div className="teaching-confirmation-buttons">
-                    <button 
-                      className="teaching-accept-btn"
-                      onClick={handleAcceptTeaching}
-                      disabled={!isConnected}
-                    >
-                      Let's start here
-                    </button>
-                    <button 
-                      className="teaching-reject-btn"
-                      onClick={handleRejectTeaching}
-                      disabled={!isConnected}
-                    >
-                      Not quite — explore more
-                    </button>
-                  </div>
-                </div>
-              )}
-
               {/* Show task curriculum with tasks list and Accept/Modify buttons (new batch proposal) */}
               {msg.type === 'task_curriculum_proposed' && 
                index === lastCurriculumProposedIndex && 

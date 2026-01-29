@@ -49,6 +49,19 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
     resetTranscript,
   } = useSpeechRecognition()
 
+  // Helper to find last index (since findLastIndex may not be available)
+  const findLastIdx = (arr: any[], predicate: (item: any) => boolean): number => {
+    for (let i = arr.length - 1; i >= 0; i--) {
+      if (predicate(arr[i])) return i
+    }
+    return -1
+  }
+
+  // Check if there's a pending goal proposal
+  const lastGoalProposedIndex = findLastIdx(messages, m => m.type === 'goal_proposed')
+  const lastGoalPanelIndex = findLastIdx(messages, m => m.type === 'create_goal_panel' || m.type === 'goal_accepted')
+  const hasPendingGoal = lastGoalProposedIndex > lastGoalPanelIndex && lastGoalProposedIndex >= 0
+
   // handleSend must be defined before any useEffect that depends on it
   const handleSend = useCallback(async (text?: string) => {
     const messageText = text || inputText.trim()
@@ -75,11 +88,28 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
       // Note: Don't call addMessage here - sendMessage already adds the user message to UI
     }
 
+    // In audio mode, intercept yes/no responses when a goal is pending
+    if (isAudioMode && hasPendingGoal) {
+      const lower = messageText.toLowerCase().trim()
+      const isYes = /^(yes|yeah|yep|sure|absolutely|let's do it|sounds good|that's right|correct|go for it)/i.test(lower)
+      const isNo = /^(no|nah|nope|not quite|keep exploring|not really|let's keep)/i.test(lower)
+      if (isYes) {
+        sendCommand('__ACCEPT_GOAL__')
+        setInputText('')
+        return
+      }
+      if (isNo) {
+        sendCommand('__REJECT_GOAL__')
+        setInputText('')
+        return
+      }
+    }
+
     // Send to backend via WebSocket (this saves to conversation history and adds to UI)
     // Include audio mode preference so backend knows to generate TTS
     sendMessage(messageText, isAudioMode)
     setInputText('')
-  }, [inputText, isConnected, sendMessage, isAudioMode, awaitingBackground, userId, onBackgroundCollected, addMessage])
+  }, [inputText, isConnected, sendMessage, sendCommand, isAudioMode, awaitingBackground, userId, onBackgroundCollected, addMessage, hasPendingGoal])
 
   // Reset initRef when component unmounts to allow re-initialization on remount
   useEffect(() => {
@@ -128,7 +158,7 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
         setQueuedOpening({ content: '', audio_url: undefined })  // No need for opening
       } else if (!onboardingInfo) {
         // No onboarding info yet - show prompt asking for background
-        const backgroundPrompt = "Before we begin exploring, tell me a bit about yourself - what do you do, what are you interested in, and what's been on your mind lately?"
+        const backgroundPrompt = "What are you interested in these days? Do you have any hobbies, projects, or goals you're thinking about — or are you just exploring what might be interesting?"
         setAwaitingBackground(true)
         setOnboardingSent(true)  // Don't trigger automatic onboarding send
         setQueuedOpening({ content: backgroundPrompt, audio_url: undefined })
@@ -312,19 +342,6 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isListening, isAudioMode, stopListening, transcript, handleSend, resetTranscript])
-
-  // Helper to find last index (since findLastIndex may not be available)
-  const findLastIdx = (arr: any[], predicate: (item: any) => boolean): number => {
-    for (let i = arr.length - 1; i >= 0; i--) {
-      if (predicate(arr[i])) return i
-    }
-    return -1
-  }
-
-  // Check if there's a pending goal proposal (last goal_proposed message without a subsequent goal panel creation)
-  const lastGoalProposedIndex = findLastIdx(messages, m => m.type === 'goal_proposed')
-  const lastGoalPanelIndex = findLastIdx(messages, m => m.type === 'create_goal_panel' || m.type === 'goal_accepted')
-  const hasPendingGoal = lastGoalProposedIndex > lastGoalPanelIndex && lastGoalProposedIndex >= 0
 
   // Handle goal accept/reject
   const handleAcceptGoal = () => {

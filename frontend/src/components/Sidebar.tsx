@@ -98,7 +98,7 @@ export default function Sidebar({
               title={!onSelectTrajectory ? 'Project history unavailable' : 'View your project history'}
             >
               <span className="sidebar-exploration-icon"></span>
-              <span>Project Journey</span>
+              <span>Project Journeys</span>
             </button>
           </div>
 

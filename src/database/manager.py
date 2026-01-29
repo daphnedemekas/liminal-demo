@@ -42,8 +42,26 @@ class DatabaseManager:
         # Create all tables
         Base.metadata.create_all(self.engine)
         print(f"[Database] Tables created/verified successfully")
-        
+
+        self._run_migrations()
+
         self.SessionLocal = sessionmaker(bind=self.engine, autoflush=False, autocommit=False)
+
+    def _run_migrations(self):
+        """Run idempotent schema migrations for new columns."""
+        from sqlalchemy import inspect, text
+        insp = inspect(self.engine)
+        if 'feed_items' in insp.get_table_names():
+            cols = {c['name'] for c in insp.get_columns('feed_items')}
+            with self.engine.begin() as conn:
+                for col_name, col_type in [
+                    ('source_type', 'VARCHAR'),
+                    ('thumbnail_url', 'VARCHAR'),
+                    ('embed_url', 'VARCHAR'),
+                ]:
+                    if col_name not in cols:
+                        conn.execute(text(f"ALTER TABLE feed_items ADD COLUMN {col_name} {col_type}"))
+                        print(f"[Database] Added column feed_items.{col_name}")
 
     # ============================================
     # Learner Trajectory (cross-phase dashboard)
@@ -1108,8 +1126,10 @@ class DatabaseManager:
                     "content": item.content,
                     "source_citation": item.source_citation,
                     "source_url": item.source_url,
+                    "source_type": item.source_type,
+                    "thumbnail_url": item.thumbnail_url,
+                    "embed_url": item.embed_url,
                     "relevance_note": item.relevance_note,
-                    # Note: display_order is used for query ordering but not returned in response
                 }
                 for item in items
             ]
@@ -1131,6 +1151,9 @@ class DatabaseManager:
                     content=item_data.get("content", ""),
                     source_citation=item_data.get("source_citation"),
                     source_url=item_data.get("source_url"),
+                    source_type=item_data.get("source_type"),
+                    thumbnail_url=item_data.get("thumbnail_url"),
+                    embed_url=item_data.get("embed_url"),
                     relevance_note=item_data.get("relevance_note"),
                     display_order=i
                 )

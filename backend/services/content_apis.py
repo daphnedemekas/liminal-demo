@@ -308,12 +308,26 @@ async def fetch_reddit_results(query: str, count: int = 2) -> List[Dict[str, Any
                     "q": query,
                     "sort": "relevance",
                     "t": "year",
-                    "limit": count + 8,
+                    "limit": count + 20,  # Fetch extra since we allowlist subreddits
                 },
                 headers={"User-Agent": "liminal-feed/1.0"},
             )
             resp.raise_for_status()
             data = resp.json()
+
+        # Only allow educational/academic/intellectual subreddits
+        ALLOWED_SUBREDDITS = {
+            "science", "askscience", "askhistorians", "explainlikeimfive",
+            "physics", "math", "mathematics", "computerscience", "machinelearning",
+            "artificial", "philosophy", "linguistics", "neuroscience", "biology",
+            "chemistry", "astronomy", "space", "engineering",
+            "literature", "books", "poetry", "truefilm", "musictheory",
+            "deeplearning", "datascience", "statistics",
+            "history", "economics", "psychology",
+            "learnprogramming", "compsci", "coding",
+            "lectures", "documentaries", "todayilearned",
+            "startups", "entrepreneur",
+        }
 
         results = []
         for child in data.get("data", {}).get("children", []):
@@ -323,6 +337,11 @@ async def fetch_reddit_results(query: str, count: int = 2) -> List[Dict[str, Any
             score = post.get("score", 0)
             if score < 10:
                 continue  # Skip low-engagement posts
+
+            # Only include posts from educational subreddits
+            subreddit_name = post.get("subreddit", "").lower()
+            if subreddit_name not in ALLOWED_SUBREDDITS:
+                continue
 
             # Basic relevance filter: at least one query keyword must appear in title or content
             query_words = [w.lower() for w in query.split() if len(w) > 3]

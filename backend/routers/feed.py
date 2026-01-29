@@ -110,11 +110,15 @@ async def _generate_search_queries(request: FeedRequest) -> List[str]:
     if request.context_type == "exploration":
         prompt = f"""Given this user's interests and background, generate 3 diverse search queries (each 3-8 words) that span DIFFERENT interests/topics the user has. Each query should target a different area. Return as a JSON array of strings.
 
+IMPORTANT: Generate queries focused on EDUCATIONAL, INTELLECTUAL, and CREATIVE content — articles, essays, academic work, talks, book discussions, technical explainers. NEVER generate queries about dating, relationships, lifestyle advice, or clickbait topics. Focus on substantive learning material.
+
 User context: {context}
 
 Return ONLY a JSON array like: ["query about interest 1", "query about interest 2", "query about interest 3"]"""
     else:
         prompt = f"""Given this learning context, generate 2-3 short search queries (each 3-8 words) that would find relevant articles, videos, and academic papers. Return as a JSON array of strings.
+
+IMPORTANT: Queries must target EDUCATIONAL and INTELLECTUAL content only — essays, lectures, book analyses, research papers, technical discussions. Avoid anything related to dating, relationships, lifestyle, or clickbait.
 
 Context: {context}
 

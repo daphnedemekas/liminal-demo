@@ -402,7 +402,6 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
       <div className="discovery-layout">
         {/* Chat Area */}
         <div className="chat-container" style={{ position: 'relative' }}>
-          <AudioToggle isAudioMode={isAudioMode} onToggle={toggleAudioMode} />
 
           {/* Voice Mode Overlay - covers the chat panel */}
           <BreathingCircle 
@@ -551,6 +550,7 @@ export default function DiscoveryChat({ modelConfig, onboardingInfo, userId, onT
                 placeholder="Type your message..."
                 disabled={!isConnected}
               />
+              <AudioToggle isAudioMode={isAudioMode} onToggle={toggleAudioMode} />
               <button
                 className="send-button"
                 onClick={() => handleSend()}

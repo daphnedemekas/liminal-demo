@@ -422,7 +422,6 @@ export default function GoalChat({
           </div>
           <div className="goal-chat-header-actions">
             <div className="goal-chat-status">
-              <AudioToggle isAudioMode={isAudioMode} onToggle={toggleAudioMode} />
               {isResumed && <span className="resumed-badge" title="Session resumed">Resumed</span>}
               {status ? (
                 <span className="status-indicator-small" title={status}>
@@ -520,6 +519,7 @@ export default function GoalChat({
                 placeholder="Continue exploring this goal..."
                 disabled={!isConnected}
               />
+              <AudioToggle isAudioMode={isAudioMode} onToggle={toggleAudioMode} />
               <button
                 className="send-button"
                 onClick={() => handleSend()}

@@ -493,8 +493,7 @@ export default function TeachingChat({
                     {isResumed && <span className="resumed-badge">Resumed</span>}
                   </div>
                   <div className="goal-chat-status">
-                    <AudioToggle isAudioMode={isAudioMode} onToggle={toggleAudioMode} />
-                    
+
                     {/* Curriculum Progress */}
                     {curriculumProgress && curriculumProgress.total_steps > 0 && (
                       <span className="curriculum-progress">
@@ -552,6 +551,7 @@ export default function TeachingChat({
                         placeholder="Ask a question or share what you're thinking..."
                         disabled={isLoading || !isConnected}
                       />
+                      <AudioToggle isAudioMode={isAudioMode} onToggle={toggleAudioMode} />
                       <button
                         className="send-button"
                         onClick={() => handleSend()}

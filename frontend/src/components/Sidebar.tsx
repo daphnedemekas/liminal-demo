@@ -107,11 +107,12 @@ export default function Sidebar({
   }
 
   return (
+    <>
+    {/* Mobile overlay backdrop — rendered outside sidebar so it doesn't block sidebar content */}
+    {!isCollapsed && (
+      <div className="sidebar-backdrop" onClick={() => setIsCollapsed(true)} />
+    )}
     <div className={`sidebar ${isCollapsed ? 'collapsed' : ''}`}>
-      {/* Mobile overlay backdrop */}
-      {!isCollapsed && (
-        <div className="sidebar-backdrop" onClick={() => setIsCollapsed(true)} />
-      )}
       <div className="sidebar-header">
         <h2 className="sidebar-title">
           <span className="sidebar-title-full">Liminal</span>
@@ -272,5 +273,6 @@ export default function Sidebar({
         </div>
       )}
     </div>
+    </>
   )
 }

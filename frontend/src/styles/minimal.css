@@ -1352,13 +1352,6 @@ body {
     display: none;
   }
 
-  /* Hide the Audio toggle button position — move into mobile header */
-  .goal-chat-header .audio-mode-toggle,
-  .discovery-chat-header .audio-mode-toggle {
-    position: relative;
-    top: auto;
-    right: auto;
-  }
 }
 
 /* ============================================= */

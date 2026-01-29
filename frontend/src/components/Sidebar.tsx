@@ -1,6 +1,15 @@
 import { useState, useEffect } from 'react'
 import { stripMarkdown } from '../utils/textUtils'
 
+/** Shorten text to a sidebar-friendly title (max ~40 chars). */
+const toTitle = (text: string, max = 40): string => {
+  const clean = stripMarkdown(text).replace(/\s+/g, ' ').trim()
+  if (clean.length <= max) return clean
+  // Try to cut at a word boundary
+  const cut = clean.lastIndexOf(' ', max)
+  return clean.slice(0, cut > 20 ? cut : max) + '…'
+}
+
 export type TaskStatus = 'locked' | 'available' | 'in_progress' | 'completed'
 
 export interface TeachingCandidate {
@@ -170,7 +179,7 @@ export default function Sidebar({
                       >
                         <span className="sidebar-session-icon"></span>
                         <div className="sidebar-session-info">
-                          <span className="sidebar-session-goal">{session.goal}</span>
+                          <span className="sidebar-session-goal" title={stripMarkdown(session.goal)}>{toTitle(session.goal)}</span>
                           <span className="sidebar-session-date">
                             {new Date(session.createdAt).toLocaleDateString()}
                           </span>
@@ -211,7 +220,7 @@ export default function Sidebar({
                                 {isInProgress && '▶'}
                                 {tc.status === 'available' && `${idx + 1}`}
                               </span>
-                              <span className="sidebar-teaching-topic">{stripMarkdown(tc.topic)}</span>
+                              <span className="sidebar-teaching-topic">{toTitle(tc.topic, 35)}</span>
                             </button>
                           )
                         })}

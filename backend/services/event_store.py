@@ -40,7 +40,10 @@ class EventStore:
             return db.query(RunEvent).filter_by(run_id=run_id).order_by(RunEvent.sequence).all()
         session = get_session_factory()()
         try:
-            return session.query(RunEvent).filter_by(run_id=run_id).order_by(RunEvent.sequence).all()
+            events = session.query(RunEvent).filter_by(run_id=run_id).order_by(RunEvent.sequence).all()
+            # Eagerly expire and detach so callers don't hit DetachedInstanceError
+            session.expunge_all()
+            return events
         finally:
             session.close()
 

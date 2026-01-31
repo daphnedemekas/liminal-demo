@@ -42,7 +42,8 @@ export function ChatPanel({ projectId, projectName, onProjectRenamed }: Props) {
     }
 
     if (lastEvent.type === "event" && lastEvent.event_type === "tool_use") {
-      const tool = (lastEvent.content as Record<string, string>)?.tool;
+      const tools = (lastEvent.content as Record<string, unknown>)?.tools as Array<Record<string, string>> | undefined;
+      const tool = tools?.[0]?.tool;
       setMessages((prev) => [
         ...prev,
         { role: "system", content: `Using tool: ${tool}` },
@@ -59,12 +60,6 @@ export function ChatPanel({ projectId, projectName, onProjectRenamed }: Props) {
     }
 
     if (lastEvent.type === "status" && lastEvent.status === "done") {
-      if (lastEvent.result_summary) {
-        setMessages((prev) => [
-          ...prev,
-          { role: "assistant", content: lastEvent.result_summary! },
-        ]);
-      }
       setIsRunning(false);
       setActiveRunId(null);
     }

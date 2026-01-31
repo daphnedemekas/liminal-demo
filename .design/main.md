@@ -4,23 +4,17 @@ Ground-up rewrite: Liminal pivots from a learning/discovery platform to a projec
 
 ## Review
 
-**Verdict:** Needs work
+**Verdict:** Ready to land
 
-### 1. `ChatPanel` tool_use event reads wrong field
+### Fixed
 
-`ChatPanel.tsx:45` reads `lastEvent.content.tool` but the executor emits `{"tools": [...]}`. The field should be `lastEvent.content.tools[0].tool`. Tool use messages will always show "Using tool: undefined".
+1. **ChatPanel tool_use field** — Fixed `ChatPanel.tsx` to read `content.tools[0].tool` instead of `content.tool`, matching the executor's output shape.
+2. **Duplicate assistant messages** — Removed the redundant message append from the `status: done` handler; the `result` event path is the single source of the final answer.
+3. **event_store detached session** — Added `session.expunge_all()` before closing the local session in `get_events()` so returned ORM objects remain usable.
 
-### 2. Duplicate assistant messages on run completion
+### Known (not blocking)
 
-`ChatPanel.tsx` appends the result text on both the `result` event (line 55) and the `status: done` event (line 63). The run manager emits both, so the final answer appears twice. Pick one path.
-
-### 3. `event_store.get_events()` detached session risk
-
-When called without a `db` argument, `event_store.py:41-45` creates a local session, queries, closes the session, then returns ORM objects. Lazy attribute access on the returned `RunEvent` list will raise `DetachedInstanceError`. Currently safe because the only caller passes `db=`, but the standalone path is a latent bug.
-
-### 4. No user ownership checks on endpoints
-
-All project/run endpoints accept `user_id` from the client with no verification. Any caller can access any user's data by supplying a different ID. Auth endpoint auto-creates accounts for any name. Acceptable for local-only demo; needs addressing before any shared deployment.
+4. **No user ownership checks on endpoints** — All project/run endpoints accept `user_id` from the client with no verification. Acceptable for local-only demo; needs addressing before any shared deployment.
 
 ## Design notes
 

@@ -94,6 +94,8 @@ class AgentRun(Base):
     created_at = Column(DateTime, default=utcnow)
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
+    enriched_instruction = Column(Text, nullable=True)
+    system_prompt_hash = Column(String, nullable=True)
 
     project = relationship("Project", back_populates="runs")
     events = relationship("RunEvent", back_populates="run", cascade="all, delete-orphan",

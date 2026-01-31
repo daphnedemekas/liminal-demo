@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { api } from "../services/api";
+import type { Project } from "../services/api";
 import { useRunStream } from "../hooks/useRunStream";
 
 interface Message {
@@ -9,18 +10,83 @@ interface Message {
 }
 
 interface Props {
-  projectId: number;
-  projectName: string;
+  project: Project;
   onProjectRenamed?: () => void;
 }
 
-export function ChatPanel({ projectId, projectName, onProjectRenamed }: Props) {
+export function ChatPanel({ project, onProjectRenamed }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
+  const [hasAutoStarted, setHasAutoStarted] = useState(false);
+  const [greetingLoaded, setGreetingLoaded] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const { events, status } = useRunStream(activeRunId);
+  const { events } = useRunStream(activeRunId);
+
+  // Fetch proactive greeting when project opens
+  useEffect(() => {
+    if (greetingLoaded || hasAutoStarted) return;
+
+    // For suggested projects with no runs, kick off a full run instead of greeting
+    if (project.suggested_by_system && project.run_count === 0) return;
+
+    setGreetingLoaded(true);
+
+    api.getProjectGreeting(project.id).then(({ greeting }) => {
+      if (greeting) {
+        setMessages([{ role: "assistant", content: greeting }]);
+      }
+    }).catch(() => {
+      // Greeting failed silently — user still sees empty chat
+    });
+  }, [project.id, greetingLoaded, hasAutoStarted, project.suggested_by_system, project.run_count]);
+
+  // Auto-kick-off for suggested projects that haven't been started yet
+  useEffect(() => {
+    if (hasAutoStarted) return;
+    if (!project.suggested_by_system || project.run_count > 0) return;
+
+    setHasAutoStarted(true);
+
+    const kickoff = async () => {
+      setIsRunning(true);
+      setMessages([
+        {
+          role: "system",
+          content: `Starting: ${project.name}`,
+        },
+      ]);
+
+      try {
+        const goal =
+          `You are working on the project "${project.name}". ` +
+          `Context: ${project.description} ` +
+          `Start by figuring out what you need to know to be most helpful. ` +
+          `Do some initial research or planning, then present what you've found ` +
+          `and ask the user what direction they want to go.`;
+        const run = await api.createRun(project.id, goal);
+        setActiveRunId(run.run_id);
+      } catch (err) {
+        setMessages((prev) => [
+          ...prev,
+          { role: "system", content: `Failed to start: ${(err as Error).message}` },
+        ]);
+        setIsRunning(false);
+      }
+    };
+
+    kickoff();
+  }, [project, hasAutoStarted]);
+
+  // Reset state when project changes
+  useEffect(() => {
+    setMessages([]);
+    setActiveRunId(null);
+    setIsRunning(false);
+    setHasAutoStarted(false);
+    setGreetingLoaded(false);
+  }, [project.id]);
 
   // Process streaming events into messages
   useEffect(() => {
@@ -88,12 +154,12 @@ export function ChatPanel({ projectId, projectName, onProjectRenamed }: Props) {
     setIsRunning(true);
 
     try {
-      // Rename project to first message (truncated)
-      if (messages.length === 0) {
+      // Rename project to first user message (truncated) if it's a blank project
+      if (!project.suggested_by_system && messages.filter((m) => m.role === "user").length === 0) {
         const shortName = text.length > 60 ? text.slice(0, 57) + "..." : text;
-        api.updateProject(projectId, { name: shortName }).then(() => onProjectRenamed?.());
+        api.updateProject(project.id, { name: shortName }).then(() => onProjectRenamed?.());
       }
-      const run = await api.createRun(projectId, text);
+      const run = await api.createRun(project.id, text);
       setActiveRunId(run.run_id);
     } catch (err) {
       setMessages((prev) => [
@@ -114,12 +180,12 @@ export function ChatPanel({ projectId, projectName, onProjectRenamed }: Props) {
   return (
     <div className="chat-panel">
       <div className="chat-header">
-        <h3>{projectName}</h3>
+        <h3>{project.name}</h3>
         {isRunning && <span className="running-indicator">Working...</span>}
       </div>
 
       <div className="chat-messages">
-        {messages.length === 0 && (
+        {messages.length === 0 && !isRunning && greetingLoaded && (
           <div className="empty-chat">
             <p className="prompt">What would you like help with?</p>
             <p className="hint">

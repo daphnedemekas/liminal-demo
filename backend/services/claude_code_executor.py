@@ -35,6 +35,7 @@ class ClaudeCodeExecutor:
     async def execute(
         self,
         instruction: str,
+        system_prompt: Optional[str] = None,
         working_dir: str = ".",
         allowed_tools: Optional[List[str]] = None,
         max_turns: Optional[int] = None,
@@ -48,7 +49,7 @@ class ClaudeCodeExecutor:
             "claude", "-p", instruction,
             "--output-format", "stream-json",
             "--verbose",
-            "--system-prompt", self.SYSTEM_PROMPT,
+            "--system-prompt", system_prompt or self.SYSTEM_PROMPT,
         ]
 
         if allowed_tools:

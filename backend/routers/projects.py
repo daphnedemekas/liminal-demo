@@ -1,11 +1,16 @@
 """Project CRUD routes."""
 
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy.orm import Session
 
-from backend.database import Project, Artifact, AgentRun, get_db
+from backend.database import Project, Artifact, AgentRun, UserProfile, get_db
+from backend.services.prompt_builder import build_system_prompt, build_proactive_instruction
+from backend.services.llm import chat
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -94,6 +99,43 @@ def update_project(project_id: int, req: ProjectUpdate, db: Session = Depends(ge
     db.commit()
     db.refresh(project)
     return _to_response(db, project)
+
+
+@router.get("/{project_id}/greeting")
+async def project_greeting(project_id: int, db: Session = Depends(get_db)):
+    """Fast single-turn greeting when user opens a project."""
+    project = db.query(Project).filter_by(id=project_id).first()
+    if not project:
+        raise HTTPException(404, "Project not found")
+
+    user = db.query(UserProfile).filter_by(id=project.user_id).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+
+    recent_runs = (
+        db.query(AgentRun)
+        .filter_by(project_id=project_id)
+        .order_by(AgentRun.created_at.desc())
+        .limit(3)
+        .all()
+    )
+
+    instruction = build_proactive_instruction(user, project, recent_runs)
+    system_prompt = build_system_prompt(user, project)
+
+    prompt = f"{system_prompt}\n\n---\n\n{instruction}"
+
+    try:
+        greeting_text = chat(prompt)
+    except Exception as e:
+        logger.warning(f"Greeting generation failed for project {project_id}: {e}")
+        # Fallback to a simple greeting
+        if recent_runs:
+            greeting_text = f"Welcome back to {project.name}. Ready to pick up where we left off?"
+        else:
+            greeting_text = f"Let's get started on {project.name}. What would you like to do first?"
+
+    return {"greeting": greeting_text}
 
 
 def _to_response(db: Session, project: Project) -> dict:

@@ -236,16 +236,26 @@ Return ONLY the JSON object, no other text."""
             for msg in history[-8:]:
                 context_parts.append(f"  {msg['role']}: {msg['content']}")
 
-        return f"""You are Liminal, a personal AI assistant. Based on everything you know about this user, suggest 3-4 specific things you could help them with RIGHT NOW.
+        return f"""You are Liminal, a personal AI assistant. Based on everything you know about this user, suggest 2-3 PROJECT AREAS you could help them with.
 
 {chr(10).join(context_parts)}
 
-Each suggestion should be:
-- Specific and actionable (not vague like "help with research")
-- Something the AI can actually do (research, compare, plan, draft, organize, analyze)
-- Described in plain language the user would understand
+IMPORTANT — each suggestion should be a BROAD project, not a single task. Think about how a user would want to organize their work:
+- GOOD: "Kitchen Renovation Planner" (encompasses research, budgeting, sourcing, scheduling)
+- BAD: "Tile price comparison" (too narrow — that's one task within a project)
+- GOOD: "Job Search Command Center" (resume, applications, interview prep, company research)
+- BAD: "Resume tailoring" (too narrow — that's one task within a project)
 
-Respond with a JSON array of objects with "name" (short title, <60 chars) and "description" (1-2 sentences explaining what you'd do). Return ONLY the JSON array."""
+Each project should:
+- Bundle related tasks the user would naturally group together
+- Be something the AI can actively work on over multiple sessions
+- Have a clear scope but room for the AI to proactively do useful things within it
+
+Keep it to 2-3 suggestions. Fewer, broader projects are better than many narrow ones.
+
+For the "description", write 1-2 sentences from the AI's perspective explaining what it would proactively do: "I'll research X, compare Y, draft Z, and keep everything organized for you."
+
+Respond with a JSON array of objects with "name" (short title, <60 chars) and "description". Return ONLY the JSON array."""
 
     def _summarize_user(self, name: str, signals: dict) -> str:
         parts = [f"{name}"]

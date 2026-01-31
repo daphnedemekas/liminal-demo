@@ -112,6 +112,9 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
+  getProjectGreeting: (projectId: number) =>
+    request<{ greeting: string }>(`/api/projects/${projectId}/greeting`),
+
   createRun: (projectId: number, goal: string) =>
     request<Run>("/api/runs", {
       method: "POST",

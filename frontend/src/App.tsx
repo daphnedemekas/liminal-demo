@@ -75,8 +75,7 @@ function App() {
       <main className="main-content">
         {activeProject ? (
           <ChatPanel
-            projectId={activeProject.id}
-            projectName={activeProject.name}
+            project={activeProject}
             onProjectRenamed={loadProjects}
           />
         ) : (

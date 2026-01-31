@@ -5,9 +5,11 @@ import asyncio
 from datetime import datetime, timezone
 from typing import Callable, Awaitable, Dict, Optional
 
-from backend.database import AgentRun, get_session_factory
+from backend.database import AgentRun, UserProfile, Project, get_session_factory
 from backend.services.claude_code_executor import executor
 from backend.services.event_store import event_store
+from backend.services.prompt_builder import build_system_prompt, build_instruction, prompt_hash
+from backend.services.user_model_service import user_model_service
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +43,27 @@ class RunManager:
                 logger.error(f"Run {run_id} not found")
                 return
 
+            # Build personalized prompt
+            project = session.query(Project).filter_by(id=run.project_id).first()
+            user = session.query(UserProfile).filter_by(id=run.user_id).first()
+
+            system_prompt = None
+            instruction = run.goal
+
+            if user and project:
+                recent_runs = (
+                    session.query(AgentRun)
+                    .filter_by(project_id=run.project_id)
+                    .filter(AgentRun.run_id != run_id)
+                    .order_by(AgentRun.created_at.desc())
+                    .limit(3)
+                    .all()
+                )
+                system_prompt = build_system_prompt(user, project)
+                instruction = build_instruction(user, project, run.goal, recent_runs)
+                run.enriched_instruction = instruction
+                run.system_prompt_hash = prompt_hash(system_prompt)
+
             run.status = "working"
             run.started_at = datetime.now(timezone.utc)
             session.commit()
@@ -50,7 +73,11 @@ class RunManager:
 
             result_parts = []
             has_error = False
-            async for ev in executor.execute(instruction=run.goal, working_dir="."):
+            async for ev in executor.execute(
+                instruction=instruction,
+                system_prompt=system_prompt,
+                working_dir=".",
+            ):
                 event_store.log(
                     run_id=run_id,
                     event_type=ev.type,
@@ -82,6 +109,13 @@ class RunManager:
             run.completed_at = datetime.now(timezone.utc)
             run.result_summary = "\n".join(result_parts)
             session.commit()
+
+            # Update user model after successful completion
+            if run.status == "done" and user:
+                try:
+                    await user_model_service.update_model(run.user_id)
+                except Exception as e:
+                    logger.warning(f"Failed to update user model after run {run_id}: {e}")
 
             if on_event:
                 await on_event(run_id, {

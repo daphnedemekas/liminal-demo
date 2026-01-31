@@ -20,8 +20,6 @@ export function useRunStream(runId: string | null) {
     const wsBase = import.meta.env.VITE_WS_URL || "ws://localhost:8000";
     const ws = new WebSocket(`${wsBase}/ws/run/${runId}`);
     wsRef.current = ws;
-    setStatus("connecting");
-    setEvents([]);
 
     ws.onopen = () => setStatus("connected");
 
@@ -32,7 +30,9 @@ export function useRunStream(runId: string | null) {
         if (data.type === "status") {
           setStatus(data.status || "unknown");
         }
-      } catch {}
+      } catch {
+        // ignore malformed messages
+      }
     };
 
     ws.onerror = () => setStatus("error");
@@ -41,6 +41,8 @@ export function useRunStream(runId: string | null) {
     return () => {
       ws.close();
       wsRef.current = null;
+      setStatus("idle");
+      setEvents([]);
     };
   }, [runId]);
 

@@ -11,7 +11,7 @@ function App() {
   const [user, setUser] = useState<User | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<number | null>(null);
-  const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
+  const onboardingDone = user?.onboarding_complete ?? null;
 
   const loadProjects = useCallback(async () => {
     if (!user) return;
@@ -25,16 +25,19 @@ function App() {
 
   useEffect(() => {
     if (!user) return;
-    setOnboardingDone(user.onboarding_complete);
-    loadProjects();
-  }, [user, loadProjects]);
+    let cancelled = false;
+    api.listProjects(user.id).then((list) => {
+      if (!cancelled) setProjects(list);
+    }).catch((err) => {
+      console.error("Failed to load projects:", err);
+    });
+    return () => { cancelled = true; };
+  }, [user]);
 
   const handleOnboardingComplete = async () => {
     if (!user) return;
-    // Refresh user and projects after onboarding
     const updated = await api.getUser(user.id);
     setUser(updated);
-    setOnboardingDone(true);
     await loadProjects();
   };
 
@@ -56,7 +59,6 @@ function App() {
     return <LoginScreen onLogin={setUser} />;
   }
 
-  // Show onboarding for new users (null = still loading check)
   if (onboardingDone === false) {
     return <OnboardingView userId={user.id} userName={user.name} onComplete={handleOnboardingComplete} />;
   }

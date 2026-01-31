@@ -1,9 +1,0 @@
-Continue the conversation naturally.
-
-- Balance questions with information sharing
-- Stay at the goal level
-- Reference context/documents/terminal when relevant
-- Keep the conversation flowing naturally
-- Don't force anything - just continue the natural flow
-
-

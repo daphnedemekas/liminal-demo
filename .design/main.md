@@ -1,34 +1,32 @@
 # Main
 
-Two changes bundled together: (1) rebranding from "learning platform" to "long-term project companion," and (2) extracting `backend/main.py` into router modules with a new RichTextEditor component.
+Ground-up rewrite: Liminal pivots from a learning/discovery platform to a project-based agent runner that shells out to Claude Code CLI. ~57k lines deleted, ~2k lines of new code.
 
 ## Review
 
 **Verdict:** Needs work
 
-### 1. New router files and RichTextEditor are untracked — can't review the extraction
+### 1. `ChatPanel` tool_use event reads wrong field
 
-`backend/routers/` (2537 lines across 8 files) and `frontend/src/components/RichTextEditor.tsx` (339 lines) show as `??` in git status. The diff only shows ~2700 lines deleted from `backend/main.py`. The replacement code isn't staged, so the refactor is invisible to review. Stage these files so the full picture is diffable.
+`ChatPanel.tsx:45` reads `lastEvent.content.tool` but the executor emits `{"tools": [...]}`. The field should be `lastEvent.content.tools[0].tool`. Tool use messages will always show "Using tool: undefined".
 
-### 2. `backend/main.py` uses inline imports for HTTPException
+### 2. Duplicate assistant messages on run completion
 
-Lines 178, 186, and 252 each do `from fastapi import HTTPException` inside a function body. These should be a single top-level import — the module already imports from `fastapi` at line 15.
+`ChatPanel.tsx` appends the result text on both the `result` event (line 55) and the `status: done` event (line 63). The run manager emits both, so the final answer appears twice. Pick one path.
 
-### 3. Rebranding is consistent
+### 3. `event_store.get_events()` detached session risk
 
-"Learning path" → "Project path", "curriculum" → "roadmap", "teaching sessions" → "deep dives" across frontend, prompts, and welcome message. Pure string replacement, no logic changes. Looks complete across touched files.
+When called without a `db` argument, `event_store.py:41-45` creates a local session, queries, closes the session, then returns ORM objects. Lazy attribute access on the returned `RunEvent` list will raise `DetachedInstanceError`. Currently safe because the only caller passes `db=`, but the standalone path is a latent bug.
 
-### 4. Prompt teachability criteria are a real improvement
+### 4. No user ownership checks on endpoints
 
-`analyze_assessment.txt` and `update_teaching_candidates.txt` add a "teachability test" requiring concepts to have a mechanism/principle, not just be labels. Good concrete examples (business terms excluded, mechanisms included). Substantive improvement to prompt quality.
-
-### 5. CSS still has the classes TrajectoryPanel uses
-
-Previous review flagged that `.mini-label`, `.mini-value`, `.teaching-steps-progress`, and `.steps-label` might have been removed from CSS. They weren't — they're still defined (lines 4869-4895 in `minimal.css`). No breakage here.
+All project/run endpoints accept `user_id` from the client with no verification. Any caller can access any user's data by supplying a different ID. Auth endpoint auto-creates accounts for any name. Acceptable for local-only demo; needs addressing before any shared deployment.
 
 ## Design notes
 
-- Rebranding shifts Liminal from education-specific to general-purpose project support. The entire prompt system now frames things as "projects" and "journeys" rather than "curiosity" and "learning."
-- Router extraction uses an `init_router(db)` pattern to pass dependencies at startup rather than global state. Clean separation into auth, discovery, teaching, feed, terminal, documents, trajectory modules.
-- RichTextEditor uses TipTap/ProseMirror, adding `@tiptap/*` dependencies.
-- The `.design/refactor.md` file (previous branch's design doc about prompt assembly/scheduler) was deleted — appropriate cleanup.
+- Complete product pivot. Old learning platform (discovery chat, teaching, trajectory, prompts, flows, scheduler) fully removed. New system: project management UI that runs Claude Code CLI as a subprocess.
+- Architecture: FastAPI + SQLAlchemy ORM + SQLite backend. React + WebSocket frontend. Runs spawn `claude -p "instruction" --output-format stream-json` and stream events to the browser.
+- Data model: UserProfile -> Projects -> AgentRuns -> RunEvents/Artifacts. Runs track cost, tokens, status lifecycle (planning -> working -> done/failed).
+- `ClaudeCodeExecutor` is the core abstraction -- async wrapper around Claude Code CLI that parses stream-json into typed events.
+- Database uses a single global engine via `get_engine()` singleton. Session factory shared across all modules.
+- Frontend URLs support `VITE_API_URL` / `VITE_WS_URL` env vars with localhost fallbacks for local dev.

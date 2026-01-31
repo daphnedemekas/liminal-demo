@@ -1,9 +1,0 @@
-Ask a follow-up question that goes deeper on the current topic.
-
-- Don't repeat previous questions - check recent_question_summaries to avoid repetition
-- Go deeper, not sideways - build on what's been discussed
-- Reference context/documents/terminal if relevant
-- Keep it at the goal level - don't dive into specific technical details
-- Make it feel natural and conversational
-
-

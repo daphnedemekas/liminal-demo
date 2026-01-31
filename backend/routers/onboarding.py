@@ -1,4 +1,5 @@
 """Onboarding routes: quick context, Q&A, suggestions."""
+from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel

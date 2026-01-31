@@ -9,6 +9,8 @@ Flow:
 Each phase is skippable. The user can jump straight to using the app at any time.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 

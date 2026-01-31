@@ -13,6 +13,7 @@ Configure via environment variables:
 import json
 import logging
 import os
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,7 @@ def _get_client():
     return _client
 
 
-def chat(prompt: str, model: str | None = None) -> str:
+def chat(prompt: str, model: Optional[str] = None) -> str:
     """Single-turn LLM call. Returns the text response. Raises on failure."""
     client = _get_client()
     m = model or MODEL
@@ -56,7 +57,7 @@ def chat(prompt: str, model: str | None = None) -> str:
         return response.choices[0].message.content or ""
 
 
-def chat_json(prompt: str, model: str | None = None):
+def chat_json(prompt: str, model: Optional[str] = None):
     """Single-turn LLM call that parses the response as JSON. Raises on failure."""
     text = chat(prompt, model=model)
     return parse_json(text)

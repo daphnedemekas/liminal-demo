@@ -3,7 +3,7 @@
 import asyncio
 import json
 import logging
-from typing import AsyncIterator
+from typing import AsyncIterator, List, Optional
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -36,8 +36,8 @@ class ClaudeCodeExecutor:
         self,
         instruction: str,
         working_dir: str = ".",
-        allowed_tools: list[str] | None = None,
-        max_turns: int | None = None,
+        allowed_tools: Optional[List[str]] = None,
+        max_turns: Optional[int] = None,
     ) -> AsyncIterator[ExecutorEvent]:
         """
         Run a single Claude Code instruction and yield parsed events.
@@ -91,7 +91,7 @@ class ClaudeCodeExecutor:
                 raw={},
             )
 
-    def _parse_event(self, data: dict) -> ExecutorEvent | None:
+    def _parse_event(self, data: dict) -> Optional[ExecutorEvent]:
         """Parse a stream-json line into an ExecutorEvent."""
         msg_type = data.get("type", "")
 

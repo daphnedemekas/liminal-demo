@@ -3,7 +3,7 @@
 import logging
 import asyncio
 from datetime import datetime, timezone
-from typing import Callable, Awaitable
+from typing import Callable, Awaitable, Dict, Optional
 
 from backend.database import AgentRun, get_session_factory
 from backend.services.claude_code_executor import executor
@@ -18,9 +18,9 @@ class RunManager:
     """Manages the lifecycle of agent runs."""
 
     def __init__(self):
-        self._active_runs: dict[str, asyncio.Task] = {}
+        self._active_runs: Dict[str, asyncio.Task] = {}
 
-    async def start_run(self, run_id: str, on_event: EventCallback | None = None):
+    async def start_run(self, run_id: str, on_event: Optional[EventCallback] = None):
         if run_id in self._active_runs:
             logger.warning(f"Run {run_id} already active")
             return
@@ -33,7 +33,7 @@ class RunManager:
             task.cancel()
             self._update_status(run_id, "failed")
 
-    async def _execute_run(self, run_id: str, on_event: EventCallback | None):
+    async def _execute_run(self, run_id: str, on_event: Optional[EventCallback]):
         session = get_session_factory()()
         try:
             run = session.query(AgentRun).filter_by(run_id=run_id).first()
@@ -49,6 +49,7 @@ class RunManager:
                 await on_event(run_id, {"type": "status", "status": "working"})
 
             result_parts = []
+            has_error = False
             async for ev in executor.execute(instruction=run.goal, working_dir="."):
                 event_store.log(
                     run_id=run_id,
@@ -72,8 +73,12 @@ class RunManager:
                     cost_usd = ev.content.get("cost_usd", 0)
                     run.cost_cents = int(float(cost_usd) * 100) if cost_usd else 0
                     run.token_usage = ev.content.get("tokens", {})
+                    if ev.content.get("is_error"):
+                        has_error = True
+                elif ev.type == "error":
+                    has_error = True
 
-            run.status = "done"
+            run.status = "failed" if has_error else "done"
             run.completed_at = datetime.now(timezone.utc)
             run.result_summary = "\n".join(result_parts)
             session.commit()

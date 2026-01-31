@@ -1,6 +1,7 @@
 """WebSocket connection manager for broadcasting run events."""
 
 import logging
+from typing import Dict, List
 from fastapi import WebSocket
 
 logger = logging.getLogger(__name__)
@@ -10,7 +11,7 @@ class ConnectionManager:
     """Tracks WebSocket connections per run_id and broadcasts events."""
 
     def __init__(self):
-        self._connections: dict[str, list[WebSocket]] = {}
+        self._connections: Dict[str, List[WebSocket]] = {}
 
     async def connect(self, run_id: str, ws: WebSocket):
         await ws.accept()

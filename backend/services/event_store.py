@@ -1,6 +1,7 @@
 """Append-only event logging for agent runs."""
 
 from datetime import datetime, timezone
+from typing import Dict, List, Optional
 from sqlalchemy.orm import Session
 
 from backend.database import RunEvent, get_session_factory
@@ -8,7 +9,7 @@ from backend.database import RunEvent, get_session_factory
 
 class EventStore:
     def __init__(self):
-        self._sequence_counters: dict[str, int] = {}
+        self._sequence_counters: Dict[str, int] = {}
 
     def _next_seq(self, run_id: str) -> int:
         seq = self._sequence_counters.get(run_id, 0)
@@ -16,7 +17,7 @@ class EventStore:
         return seq
 
     def log(self, run_id: str, event_type: str, payload: dict,
-            source_url: str | None = None, source_title: str | None = None) -> RunEvent:
+            source_url: Optional[str] = None, source_title: Optional[str] = None) -> RunEvent:
         session = get_session_factory()()
         try:
             ev = RunEvent(
@@ -35,7 +36,7 @@ class EventStore:
         finally:
             session.close()
 
-    def get_events(self, run_id: str, db: Session | None = None) -> list[RunEvent]:
+    def get_events(self, run_id: str, db: Optional[Session] = None) -> List[RunEvent]:
         if db:
             return db.query(RunEvent).filter_by(run_id=run_id).order_by(RunEvent.sequence).all()
         session = get_session_factory()()

@@ -10,6 +10,7 @@ from backend.services.claude_code_executor import executor
 from backend.services.event_store import event_store
 from backend.services.prompt_builder import build_system_prompt, build_instruction, prompt_hash
 from backend.services.user_model_service import user_model_service
+from backend.services.mediator import synthesize_result
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +117,21 @@ class RunManager:
                     await user_model_service.update_model(run.user_id)
                 except Exception as e:
                     logger.warning(f"Failed to update user model after run {run_id}: {e}")
+
+                # Synthesize results before broadcasting done
+                try:
+                    synthesis = synthesize_result(run, project, user, session)
+                    if on_event:
+                        await on_event(run_id, {
+                            "type": "synthesis",
+                            "summary": synthesis["summary"],
+                            "full_output": run.result_summary,
+                            "artifacts": synthesis["artifacts"],
+                            "suggested_next_steps": synthesis["suggested_next_steps"],
+                            "actions": synthesis["actions"],
+                        })
+                except Exception as e:
+                    logger.warning(f"Synthesis failed for run {run_id}: {e}")
 
             if on_event:
                 await on_event(run_id, {

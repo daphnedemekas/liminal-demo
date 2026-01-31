@@ -3,8 +3,18 @@
 
 echo "Starting Liminal..."
 
-# Start backend
 cd "$(dirname "$0")"
+
+# Init DB (creates tables if missing)
+mkdir -p data
+python3 -c "
+from backend.database import Base, get_session_factory
+engine = get_session_factory().kw.get('bind') or get_session_factory()().get_bind()
+Base.metadata.create_all(engine)
+print('Database initialized.')
+"
+
+# Start backend
 python3 -m uvicorn backend.main:app --reload --port 8000 &
 BACKEND_PID=$!
 

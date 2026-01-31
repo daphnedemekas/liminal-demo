@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 _client = None
 PROVIDER = os.environ.get("LLM_PROVIDER", "openai")
-MODEL = os.environ.get("LLM_MODEL", "gpt-4o-mini")
+MODEL = os.environ.get("LLM_MODEL", "gpt-4o")
 
 
 def _get_client():
@@ -54,6 +54,28 @@ def chat(prompt: str, model: Optional[str] = None) -> str:
             messages=[{"role": "user", "content": prompt}],
             max_tokens=1024,
         )
+        return response.choices[0].message.content or ""
+
+
+def chat_messages(system_prompt: str, messages: list[dict], model: Optional[str] = None, json_mode: bool = False) -> str:
+    """Multi-turn LLM call. messages is a list of {role, content} dicts."""
+    client = _get_client()
+    m = model or MODEL
+
+    if PROVIDER == "anthropic":
+        response = client.messages.create(
+            model=m,
+            max_tokens=1024,
+            system=system_prompt,
+            messages=messages,
+        )
+        return response.content[0].text
+    else:
+        all_messages = [{"role": "system", "content": system_prompt}] + messages
+        kwargs = dict(model=m, messages=all_messages, max_tokens=1024)
+        if json_mode:
+            kwargs["response_format"] = {"type": "json_object"}
+        response = client.chat.completions.create(**kwargs)
         return response.choices[0].message.content or ""
 
 

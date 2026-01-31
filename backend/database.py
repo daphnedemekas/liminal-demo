@@ -7,6 +7,7 @@ from sqlalchemy import (
     Column, String, Text, Integer, Boolean, DateTime, JSON, ForeignKey,
     create_engine, event
 )
+from sqlalchemy.ext.mutable import MutableDict, MutableList
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
 Base = declarative_base()
@@ -32,8 +33,8 @@ class UserProfile(Base):
     onboarding_complete = Column(Boolean, default=False)
     default_involvement = Column(String, default="check_ins")  # hands_off|check_ins|involved
     explanation_preference = Column(String, default="brief_summary")  # just_results|brief_summary|show_your_work
-    known_domains = Column(JSON, default=dict)
-    connected_sources = Column(JSON, default=list)
+    known_domains = Column(MutableDict.as_mutable(JSON), default=dict)
+    connected_sources = Column(MutableList.as_mutable(JSON), default=list)
     model_summary = Column(Text, default="")
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
@@ -48,10 +49,10 @@ class OnboardingState(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(String, ForeignKey("user_profiles.id"), unique=True, nullable=False)
     phase = Column(String, default="quick_context")  # quick_context|deeper_qa|exploring|complete
-    gathered_signals = Column(JSON, default=dict)
-    pending_questions = Column(JSON, default=list)
-    suggested_projects = Column(JSON, default=list)
-    conversation_history = Column(JSON, default=list)
+    gathered_signals = Column(MutableDict.as_mutable(JSON), default=dict)
+    pending_questions = Column(MutableList.as_mutable(JSON), default=list)
+    suggested_projects = Column(MutableList.as_mutable(JSON), default=list)
+    conversation_history = Column(MutableList.as_mutable(JSON), default=list)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
     user = relationship("UserProfile", back_populates="onboarding_state")
@@ -68,6 +69,7 @@ class Project(Base):
     involvement_level = Column(String, nullable=True)  # inherits from user if null
     budget_limit_cents = Column(Integer, nullable=True)
     budget_spent_cents = Column(Integer, default=0)
+    conversation_signals = Column(MutableDict.as_mutable(JSON), default=dict)
     suggested_by_system = Column(Boolean, default=False)
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
@@ -75,6 +77,8 @@ class Project(Base):
     user = relationship("UserProfile", back_populates="projects")
     runs = relationship("AgentRun", back_populates="project", cascade="all, delete-orphan")
     artifacts = relationship("Artifact", back_populates="project", cascade="all, delete-orphan")
+    chat_messages = relationship("ChatMessage", back_populates="project", cascade="all, delete-orphan",
+                                 order_by="ChatMessage.created_at")
 
 
 class AgentRun(Base):
@@ -86,11 +90,11 @@ class AgentRun(Base):
     user_id = Column(String, ForeignKey("user_profiles.id"), nullable=False, index=True)
     goal = Column(Text, nullable=False)
     status = Column(String, default="planning")  # planning|working|waiting_for_user|done|failed
-    plan = Column(JSON, default=list)
+    plan = Column(MutableList.as_mutable(JSON), default=list)
     current_step = Column(Integer, default=0)
     result_summary = Column(Text, default="")
     cost_cents = Column(Integer, default=0)
-    token_usage = Column(JSON, default=dict)
+    token_usage = Column(MutableDict.as_mutable(JSON), default=dict)
     created_at = Column(DateTime, default=utcnow)
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
@@ -109,12 +113,26 @@ class RunEvent(Base):
     run_id = Column(String, ForeignKey("agent_runs.run_id"), nullable=False, index=True)
     sequence = Column(Integer, nullable=False)
     event_type = Column(String, nullable=False)  # action|result|source_found|file_changed|question_for_user|error
-    payload = Column(JSON, nullable=False, default=dict)
+    payload = Column(MutableDict.as_mutable(JSON), nullable=False, default=dict)
     source_url = Column(String, nullable=True)
     source_title = Column(String, nullable=True)
     timestamp = Column(DateTime, default=utcnow)
 
     run = relationship("AgentRun", back_populates="events")
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False, index=True)
+    role = Column(String, nullable=False)  # user|assistant|system
+    content = Column(Text, nullable=False)
+    actions = Column(MutableList.as_mutable(JSON), default=list)  # [{label, action_text}]
+    run_id = Column(String, ForeignKey("agent_runs.run_id"), nullable=True)
+    created_at = Column(DateTime, default=utcnow)
+
+    project = relationship("Project", back_populates="chat_messages")
 
 
 class Artifact(Base):
@@ -126,7 +144,7 @@ class Artifact(Base):
     artifact_type = Column(String, nullable=False)  # report|comparison_table|file|draft|list|spreadsheet
     title = Column(String, nullable=False)
     content = Column(JSON, nullable=False)
-    sources = Column(JSON, default=list)
+    sources = Column(MutableList.as_mutable(JSON), default=list)
     created_at = Column(DateTime, default=utcnow)
 
     project = relationship("Project", back_populates="artifacts")

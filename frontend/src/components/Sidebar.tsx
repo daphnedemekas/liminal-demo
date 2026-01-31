@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import type { Project } from "../services/api";
 
 interface Props {
@@ -8,7 +9,23 @@ interface Props {
   onGoHome: () => void;
 }
 
+function useTheme() {
+  const [dark, setDark] = useState(() => {
+    const stored = localStorage.getItem("theme");
+    return stored ? stored === "dark" : true;
+  });
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+    localStorage.setItem("theme", dark ? "dark" : "light");
+  }, [dark]);
+
+  return { dark, toggle: () => setDark((d) => !d) };
+}
+
 export function Sidebar({ projects, activeProjectId, onSelectProject, onNewProject, onGoHome }: Props) {
+  const theme = useTheme();
+
   return (
     <div className="sidebar">
       <div className="sidebar-header" onClick={onGoHome}>
@@ -21,7 +38,7 @@ export function Sidebar({ projects, activeProjectId, onSelectProject, onNewProje
 
       <div className="project-list">
         {projects.length === 0 && (
-          <div style={{ padding: "24px 16px", textAlign: "center", color: "#94a3b8", fontSize: "13px" }}>
+          <div style={{ padding: "24px 16px", textAlign: "center", color: "var(--text-muted)", fontSize: "13px" }}>
             No projects yet
           </div>
         )}
@@ -39,6 +56,10 @@ export function Sidebar({ projects, activeProjectId, onSelectProject, onNewProje
           </div>
         ))}
       </div>
+
+      <button className="theme-toggle" onClick={theme.toggle}>
+        {theme.dark ? "\u2600\uFE0F Light mode" : "\uD83C\uDF19 Dark mode"}
+      </button>
     </div>
   );
 }

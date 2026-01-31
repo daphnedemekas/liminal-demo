@@ -73,6 +73,34 @@ export interface Artifact {
   created_at: string;
 }
 
+export interface SynthesisArtifact {
+  type: string;
+  title: string;
+  content: string;
+  sources: string[];
+}
+
+export interface SynthesisEvent {
+  type: "synthesis";
+  summary: string;
+  full_output: string;
+  artifacts: SynthesisArtifact[];
+  suggested_next_steps: string[];
+  actions: ChatAction[];
+}
+
+export interface ChatAction {
+  label: string;
+  description: string;
+  action_text: string;
+}
+
+export interface ChatResponse {
+  message: string;
+  actions: ChatAction[];
+  run_id: string | null;
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     headers: { "Content-Type": "application/json" },
@@ -114,6 +142,17 @@ export const api = {
 
   getProjectGreeting: (projectId: number) =>
     request<{ greeting: string }>(`/api/projects/${projectId}/greeting`),
+
+  getMessages: (projectId: number) =>
+    request<{ role: string; content: string; actions: ChatAction[]; created_at: string }[]>(
+      `/api/projects/${projectId}/messages`,
+    ),
+
+  sendChat: (projectId: number, message?: string) =>
+    request<ChatResponse>(`/api/projects/${projectId}/chat`, {
+      method: "POST",
+      body: JSON.stringify({ message: message || null }),
+    }),
 
   createRun: (projectId: number, goal: string) =>
     request<Run>("/api/runs", {

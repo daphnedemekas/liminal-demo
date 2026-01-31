@@ -58,6 +58,10 @@ Return ONLY the JSON object."""
             user.model_summary = result.get("summary", user.model_summary)
             if result.get("known_domains"):
                 user.known_domains = result["known_domains"]
+            if result.get("suggested_involvement"):
+                user.default_involvement = result["suggested_involvement"]
+            if result.get("suggested_explanation"):
+                user.explanation_preference = result["suggested_explanation"]
 
             session.commit()
 

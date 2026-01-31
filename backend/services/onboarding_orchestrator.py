@@ -64,7 +64,7 @@ class OnboardingOrchestrator:
             signals = state.gathered_signals or {}
             signals["context_types"] = selected_ids
             signals["context_labels"] = selected_labels
-            state.gathered_signals = signals
+            state.gathered_signals = dict(signals)  # force new object for SQLAlchemy mutation detection
 
             if selected_ids:
                 type_map = {"business": "business", "developer": "developer",
@@ -94,6 +94,9 @@ class OnboardingOrchestrator:
 
             question = chat_json(prompt)
 
+            # Store the question in history so the next question knows what was already asked
+            history.append({"role": "assistant", "content": question["question"]})
+            state.conversation_history = list(history)  # force new object for SQLAlchemy mutation detection
             state.pending_questions = [question]
             session.commit()
             return question
@@ -111,10 +114,10 @@ class OnboardingOrchestrator:
 
             history = state.conversation_history or []
             history.append({"role": "user", "content": answer})
-            state.conversation_history = history
+            state.conversation_history = list(history)  # force new object for SQLAlchemy mutation detection
 
             signals = await self._extract_signals(user.name, state.gathered_signals or {}, history)
-            state.gathered_signals = signals
+            state.gathered_signals = dict(signals)  # force new object for SQLAlchemy mutation detection
 
             # After 2+ answers, we have enough to make suggestions
             answer_count = sum(1 for m in history if m["role"] == "user")
@@ -176,7 +179,7 @@ class OnboardingOrchestrator:
 
             state.phase = "complete"
             user.onboarding_complete = True
-            user.model_summary = self._summarize_user(user.name, state.gathered_signals or {})
+            user.model_summary = self._summarize_user(user.name, state.gathered_signals or {}, state.conversation_history or [])
             user.onboarding_info = json.dumps(state.gathered_signals or {})
             session.commit()
             return created
@@ -257,14 +260,31 @@ For the "description", write 1-2 sentences from the AI's perspective explaining 
 
 Respond with a JSON array of objects with "name" (short title, <60 chars) and "description". Return ONLY the JSON array."""
 
-    def _summarize_user(self, name: str, signals: dict) -> str:
-        parts = [f"{name}"]
-        if signals.get("context_labels"):
-            parts.append(f"interested in {', '.join(signals['context_labels'])}")
-        for key, val in signals.items():
-            if key not in ("context_types", "context_labels") and isinstance(val, str) and val:
-                parts.append(val)
-        return ". ".join(parts)
+    def _summarize_user(self, name: str, signals: dict, history: list) -> str:
+        """Use LLM to generate a rich user summary from onboarding signals."""
+        from backend.services.llm import chat as llm_chat
+
+        prompt = f"""Write a concise profile summary (3-5 sentences) of this person based on their onboarding conversation. This will be used by an AI assistant to personalize its help.
+
+Name: {name}
+Signals: {json.dumps(signals)}
+Conversation:
+{chr(10).join(f"  {m['role']}: {m['content']}" for m in history[-8:])}
+
+Write in third person. Focus on: what they do, what they need help with, what frustrates them, and their goals. Be specific, not generic. Return ONLY the summary text, no JSON."""
+
+        try:
+            return llm_chat(prompt)
+        except Exception:
+            # Fallback to simple summary
+            parts = [name]
+            if signals.get("context_labels"):
+                parts.append(f"interested in {', '.join(signals['context_labels'])}")
+            if signals.get("needs"):
+                parts.append(f"needs help with: {', '.join(signals['needs'][:5])}")
+            if signals.get("goals"):
+                parts.append(f"goals: {', '.join(signals['goals'][:3])}")
+            return ". ".join(parts)
 
     async def _extract_signals(self, name: str, existing_signals: dict, history: list) -> dict:
         prompt = f"""You are analyzing an onboarding conversation for Liminal, a personal AI assistant.

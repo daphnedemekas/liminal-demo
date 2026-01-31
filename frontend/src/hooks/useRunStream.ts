@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { SynthesisEvent } from "../services/api";
 
 export interface StreamEvent {
   type: string;
@@ -12,11 +13,13 @@ export interface StreamEvent {
 export function useRunStream(runId: string | null) {
   const [events, setEvents] = useState<StreamEvent[]>([]);
   const [status, setStatus] = useState<string>("idle");
+  const [synthesis, setSynthesis] = useState<SynthesisEvent | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     if (!runId) return;
 
+    setSynthesis(null);
     const wsBase = import.meta.env.VITE_WS_URL || "ws://localhost:8000";
     const ws = new WebSocket(`${wsBase}/ws/run/${runId}`);
     wsRef.current = ws;
@@ -25,10 +28,14 @@ export function useRunStream(runId: string | null) {
 
     ws.onmessage = (e) => {
       try {
-        const data: StreamEvent = JSON.parse(e.data);
-        setEvents((prev) => [...prev, data]);
-        if (data.type === "status") {
-          setStatus(data.status || "unknown");
+        const data = JSON.parse(e.data);
+        if (data.type === "synthesis") {
+          setSynthesis(data as SynthesisEvent);
+        } else {
+          setEvents((prev) => [...prev, data as StreamEvent]);
+          if (data.type === "status") {
+            setStatus(data.status || "unknown");
+          }
         }
       } catch {
         // ignore malformed messages
@@ -43,8 +50,9 @@ export function useRunStream(runId: string | null) {
       wsRef.current = null;
       setStatus("idle");
       setEvents([]);
+      setSynthesis(null);
     };
   }, [runId]);
 
-  return { events, status };
+  return { events, status, synthesis };
 }

@@ -2,22 +2,27 @@
 
 Personalized system prompts, proactive greetings, auto-kickoff for suggested projects, and user model updates wired into the run lifecycle.
 
-## Review
+## Status: Ready to land
 
-**Verdict:** Ready to ship
+## What shipped
 
-Implementation is clean and follows the design. Three minor issues noted below — none blocking.
+- **`prompt_builder.py`** — prompt assembly layer with `build_system_prompt`, `build_instruction`, `build_proactive_instruction`, `build_synthesis_prompt`. Involvement level cascades project -> user default. All fields handled gracefully when null/empty.
+- **`mediator.py`** — structured mediation pipeline (extract signals -> rank action -> generate response). Handles greetings, follow-up questions, plan proposals, and escalation to agent. Persists conversation signals on project and feeds them back to user profile.
+- **`user_model_service.py`** — re-analyzes user interactions after each successful run to update model_summary, known_domains, and preferences.
+- **Greeting endpoint** (`GET /api/projects/{id}/greeting`) — fast single-turn LLM greeting when user opens a project. Falls back to static text on failure.
+- **Chat endpoint** (`POST /api/projects/{id}/chat`) — conversational mediation that can escalate to a full agent run.
+- **`ChatPanel`** receives full `Project` object. Handles greeting loading, auto-kickoff for suggested projects, synthesis display with artifacts, and activity log.
+- **`useRunStream`** extended to handle `synthesis` events from WebSocket.
+- **Database** — added `enriched_instruction` and `system_prompt_hash` columns to `AgentRun`.
+- **Onboarding** — suggestion prompt improved to generate broader project areas instead of narrow tasks.
+- **Audio** — TTS endpoint, `useAudio` hook, mic/voice UI in ChatPanel. Speech recognition type declarations.
 
-1. **Greeting endpoint blocks on LLM call.** `project_greeting` is `async def` but calls `chat()` synchronously, tying up the event loop for the duration of the LLM call. For a local demo this is fine; for concurrent users, wrap in `asyncio.to_thread(chat, prompt)` or use an async LLM client.
+## Fixes applied during polish
 
-2. **Greeting races with auto-kickoff on fresh suggested projects.** The greeting effect checks `project.suggested_by_system && project.run_count === 0` to skip, and the auto-kickoff effect checks the same condition to fire. Both depend on `hasAutoStarted` as a guard, so they won't collide in practice — but the logic is subtle. A single effect that decides "greeting vs kickoff" would be clearer.
+1. **`mediator.py`** — removed hardcoded `model="gpt-5"` from `_generate()`, now uses default model via `chat()`.
+2. **`speech.d.ts`** — expanded from stub `Window` interface to full ambient type declarations for `SpeechRecognition`, `SpeechRecognitionEvent`, `SpeechRecognitionResultList`, `SpeechRecognitionResult`, and `SpeechRecognitionAlternative`. Fixes three TypeScript compilation errors.
 
-3. **`run_manager` queries inside an already-open session.** `_execute_run` opens its own session via `get_session_factory()()` and queries `Project` + `UserProfile` + recent `AgentRun`s. This is consistent with how the rest of `run_manager` works (it owns its session), but worth noting that `create_run` in `runs.py` does *not* pass the personalized prompt — the enrichment happens entirely in `run_manager`. This is actually a good separation; just calling it out since the design doc suggested doing it in `runs.py`.
+## Known limitations (not blocking)
 
-## Design notes
-
-- `prompt_builder.py` is the new prompt assembly layer. Three public functions: `build_system_prompt`, `build_instruction`, `build_proactive_instruction`. Involvement level cascades project -> user default. All fields handled gracefully when null/empty.
-- Greeting uses `llm.chat()` (direct API call) rather than Claude Code CLI, avoiding CLI cold-start latency. Matches the design constraint about speed.
-- `UserModelService.update_model()` is called after each successful run in `run_manager._execute_run()`. Failures are caught and logged, not propagated.
-- `ChatPanel` now receives the full `Project` object instead of `projectId`/`projectName`, which is cleaner for the greeting and auto-kickoff logic.
-- Onboarding suggestion prompt improved to generate broader project areas instead of narrow tasks.
+1. **Greeting endpoint blocks on LLM call.** For concurrent users, should wrap in `asyncio.to_thread()` or use async LLM client.
+2. **Greeting vs auto-kickoff logic is subtle.** Both use `hasAutoStarted` as guard but a single deciding effect would be clearer.

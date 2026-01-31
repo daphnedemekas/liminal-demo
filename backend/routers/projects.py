@@ -6,9 +6,10 @@ from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy.orm import Session
 
-from backend.database import Project, Artifact, AgentRun, UserProfile, get_db
+from backend.database import Project, Artifact, AgentRun, ChatMessage, UserProfile, get_db
 from backend.services.prompt_builder import build_system_prompt, build_proactive_instruction
 from backend.services.llm import chat
+from backend.services.mediator import mediate
 
 logger = logging.getLogger(__name__)
 
@@ -136,6 +137,67 @@ async def project_greeting(project_id: int, db: Session = Depends(get_db)):
             greeting_text = f"Let's get started on {project.name}. What would you like to do first?"
 
     return {"greeting": greeting_text}
+
+
+@router.get("/{project_id}/messages")
+def get_messages(project_id: int, db: Session = Depends(get_db)):
+    """Return chat history for a project."""
+    project = db.query(Project).filter_by(id=project_id).first()
+    if not project:
+        raise HTTPException(404, "Project not found")
+    msgs = (
+        db.query(ChatMessage)
+        .filter_by(project_id=project_id)
+        .order_by(ChatMessage.created_at.asc())
+        .all()
+    )
+    return [
+        {
+            "role": m.role,
+            "content": m.content,
+            "actions": m.actions or [],
+            "created_at": str(m.created_at),
+        }
+        for m in msgs
+    ]
+
+
+class ChatRequest(BaseModel):
+    message: Optional[str] = None
+
+
+@router.post("/{project_id}/chat")
+async def project_chat(project_id: int, req: ChatRequest, db: Session = Depends(get_db)):
+    """Conversational mediation endpoint. Returns a fast chat response or escalates to agent."""
+    project = db.query(Project).filter_by(id=project_id).first()
+    if not project:
+        raise HTTPException(404, "Project not found")
+
+    result = mediate(project_id, req.message, db)
+
+    response = {
+        "message": result["message"],
+        "actions": result["actions"],
+        "run_id": None,
+    }
+
+    if result["escalate"] and result["task_description"]:
+        from backend.services.run_manager import run_manager
+        from backend.services.ws_manager import ws_manager
+
+        run = AgentRun(
+            project_id=project_id,
+            user_id=project.user_id,
+            goal=result["task_description"],
+        )
+        db.add(run)
+        db.commit()
+        db.refresh(run)
+
+        await run_manager.start_run(run.run_id, on_event=ws_manager.broadcast)
+        response["run_id"] = run.run_id
+
+    return response
 
 
 def _to_response(db: Session, project: Project) -> dict:

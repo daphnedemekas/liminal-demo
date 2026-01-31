@@ -26,6 +26,25 @@ def build_system_prompt(user: UserProfile, project: Project) -> str:
     if user.model_summary:
         parts.append(f"\n## About this person\n{user.model_summary}")
 
+    # Detailed signals from onboarding
+    if user.onboarding_info:
+        try:
+            signals = json.loads(user.onboarding_info) if isinstance(user.onboarding_info, str) else user.onboarding_info
+            if signals.get("needs"):
+                parts.append(f"Needs help with: {', '.join(signals['needs'][:8])}")
+            if signals.get("pain_points"):
+                parts.append(f"Frustrations: {', '.join(signals['pain_points'][:6])}")
+            if signals.get("goals"):
+                parts.append(f"Goals: {', '.join(signals['goals'][:6])}")
+            if isinstance(signals.get("domain_knowledge"), dict):
+                dk = signals["domain_knowledge"]
+                if dk.get("well_known"):
+                    parts.append(f"Knows well: {', '.join(dk['well_known'][:5])}")
+                if dk.get("needs_help"):
+                    parts.append(f"Needs guidance on: {', '.join(dk['needs_help'][:5])}")
+        except (json.JSONDecodeError, TypeError):
+            pass
+
     if user.known_domains:
         domains = user.known_domains if isinstance(user.known_domains, dict) else {}
         if domains:
@@ -106,6 +125,64 @@ def build_proactive_instruction(
             f"Briefly welcome them back, summarize where things stand, "
             f"and suggest 2-3 things you could do next. Be concise."
         )
+
+
+def build_synthesis_prompt(
+    user: UserProfile,
+    project: Project,
+    goal: str,
+    raw_result: str,
+    conversation: list[dict],
+    explanation_pref: str | None = None,
+) -> str:
+    """Build a prompt that synthesizes raw agent output into a personalized summary."""
+    pref = explanation_pref or user.explanation_preference or "brief_summary"
+
+    depth_instruction = {
+        "just_results": (
+            "Be extremely concise. Only state what was produced or found. "
+            "No process narration, no reasoning. Bullet points preferred."
+        ),
+        "brief_summary": (
+            "Give a short summary of what was done and what was found. "
+            "Keep it to 2-4 sentences, then present key findings."
+        ),
+        "show_your_work": (
+            "Explain what was done, why, what alternatives were considered, "
+            "and what sources were used. Be thorough but organized."
+        ),
+    }
+
+    conv_text = ""
+    if conversation:
+        conv_text = "\n".join(f"{m['role']}: {m['content']}" for m in conversation[-10:])
+
+    return f"""\
+You are synthesizing the results of an agent run for {user.name}.
+
+## Their goal
+{goal}
+
+## Project
+{project.name}: {project.description or 'No description'}
+
+## Conversation context
+{conv_text or 'No prior conversation'}
+
+## Raw agent output
+{raw_result}
+
+## Your task
+Summarize this result for the user. {depth_instruction.get(pref, depth_instruction['brief_summary'])}
+
+Extract any structured artifacts from the output — reports, comparison tables, action item lists, drafted content, etc. Each artifact should have a type, title, content (as a string), and list of source URLs if applicable.
+
+Suggest 2-3 concrete next steps the user could take based on the results.
+
+Return ONLY a JSON object with this shape:
+{{"summary": "your personalized summary", "artifacts": [{{"type": "report|comparison_table|action_items|draft|list", "title": "Artifact title", "content": "The artifact content", "sources": ["url1", "url2"]}}], "suggested_next_steps": ["step 1", "step 2", "step 3"], "actions": [{{"label": "Short button text", "description": "What this does", "action_text": "Message sent if clicked"}}]}}
+
+If there are no artifacts to extract, use an empty array. Always include at least 2 suggested_next_steps and corresponding actions."""
 
 
 def prompt_hash(prompt: str) -> str:

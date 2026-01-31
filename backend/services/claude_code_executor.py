@@ -39,7 +39,7 @@ class ClaudeCodeExecutor:
         working_dir: str = ".",
         allowed_tools: Optional[List[str]] = None,
         max_turns: Optional[int] = None,
-    ) -> AsyncIterator[ExecutorEvent]:
+    ) -> AsyncIterator[ExecutorEvent]:  # type: ignore[misc]
         """
         Run a single Claude Code instruction and yield parsed events.
 

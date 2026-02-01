@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from backend.database import init_db
-from backend.routers import auth, projects, runs, onboarding
+from backend.routers import auth, projects, runs, onboarding, discovery
 logging.basicConfig(level=logging.INFO)
 
 app = FastAPI(title="Liminal", description="Your AI that gets things done")
@@ -33,6 +33,7 @@ app.include_router(auth.router)
 app.include_router(projects.router)
 app.include_router(runs.router)
 app.include_router(onboarding.router)
+app.include_router(discovery.router)
 
 # WebSocket routes
 app.add_api_websocket_route("/ws/run/{run_id}", runs.ws_run)

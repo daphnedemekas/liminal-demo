@@ -44,7 +44,7 @@ def chat(prompt: str, model: Optional[str] = None) -> str:
     if PROVIDER == "anthropic":
         response = client.messages.create(
             model=m,
-            max_tokens=1024,
+            max_tokens=2048,
             messages=[{"role": "user", "content": prompt}],
         )
         return response.content[0].text
@@ -52,7 +52,7 @@ def chat(prompt: str, model: Optional[str] = None) -> str:
         response = client.chat.completions.create(
             model=m,
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=1024,
+            max_tokens=2048,
         )
         return response.choices[0].message.content or ""
 
@@ -65,14 +65,14 @@ def chat_messages(system_prompt: str, messages: list[dict], model: Optional[str]
     if PROVIDER == "anthropic":
         response = client.messages.create(
             model=m,
-            max_tokens=1024,
+            max_tokens=2048,
             system=system_prompt,
             messages=messages,
         )
         return response.content[0].text
     else:
         all_messages = [{"role": "system", "content": system_prompt}] + messages
-        kwargs = dict(model=m, messages=all_messages, max_tokens=1024)
+        kwargs = dict(model=m, messages=all_messages, max_tokens=2048)
         if json_mode:
             kwargs["response_format"] = {"type": "json_object"}
         response = client.chat.completions.create(**kwargs)

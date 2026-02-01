@@ -22,6 +22,7 @@ class UserResponse(BaseModel):
     name: str
     user_type: str
     onboarding_complete: bool
+    discovery_complete: bool
     default_involvement: str
     explanation_preference: str
     model_summary: str

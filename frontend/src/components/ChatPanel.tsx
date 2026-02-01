@@ -16,6 +16,7 @@ interface Message {
 interface Props {
   project: Project;
   onProjectRenamed?: () => void;
+  onRunComplete?: () => void;
 }
 
 interface ActivityEntry {
@@ -51,7 +52,7 @@ function formatToolActivity(tool: string, input: Record<string, unknown>): strin
   }
 }
 
-export function ChatPanel({ project, onProjectRenamed }: Props) {
+export function ChatPanel({ project, onProjectRenamed, onRunComplete }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
@@ -224,6 +225,7 @@ export function ChatPanel({ project, onProjectRenamed }: Props) {
       setIsRunning(false);
       setShowFullOutput(false);
       setActiveRunId(null);
+      onRunComplete?.();
     }
 
     if (lastEvent.type === "error") {
@@ -261,7 +263,8 @@ export function ChatPanel({ project, onProjectRenamed }: Props) {
     setActivityLog([]);
     setIsRunning(false);
     setActiveRunId(null);
-  }, [synthesis]);
+    onRunComplete?.();
+  }, [synthesis, onRunComplete]);
 
   // Auto-scroll
   useEffect(() => {
@@ -365,7 +368,7 @@ export function ChatPanel({ project, onProjectRenamed }: Props) {
                             <span className="artifact-title">{art.title}</span>
                           </div>
                           <div className="artifact-content">
-                            <ReactMarkdown>{art.content}</ReactMarkdown>
+                            <ReactMarkdown>{typeof art.content === "string" ? art.content : JSON.stringify(art.content, null, 2)}</ReactMarkdown>
                           </div>
                           {art.sources.length > 0 && (
                             <div className="artifact-sources">

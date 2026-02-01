@@ -64,19 +64,38 @@ export interface OnboardingSuggestion {
   description: string;
 }
 
+// Structured artifact content types
+export interface ScheduleContent {
+  entries: { day: string; time_block: string; activity: string; notes?: string }[];
+}
+
+export interface ChecklistContent {
+  categories: { name: string; items: { text: string; checked: boolean }[] }[];
+}
+
+export interface VideoCollectionContent {
+  videos: { title: string; url: string; description: string }[];
+}
+
+export interface ResourceListContent {
+  resources: { title: string; url: string; description: string; category?: string }[];
+}
+
+export type ArtifactContent = ScheduleContent | ChecklistContent | VideoCollectionContent | ResourceListContent | string;
+
 export interface Artifact {
   id: number;
   artifact_type: string;
   title: string;
-  content: unknown;
-  sources: { url: string; title: string; snippet: string }[];
+  content: ArtifactContent;
+  sources: { url: string }[];
   created_at: string;
 }
 
 export interface SynthesisArtifact {
   type: string;
   title: string;
-  content: string;
+  content: ArtifactContent;
   sources: string[];
 }
 
@@ -206,6 +225,15 @@ export const api = {
     request<{ status: string }>("/api/onboarding/skip", {
       method: "POST",
       body: JSON.stringify({ user_id: userId }),
+    }),
+
+  getArtifacts: (projectId: number) =>
+    request<Artifact[]>(`/api/projects/${projectId}/artifacts`),
+
+  updateArtifact: (projectId: number, artifactId: number, content: ArtifactContent) =>
+    request<{ status: string }>(`/api/projects/${projectId}/artifacts/${artifactId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ content }),
     }),
 };
 

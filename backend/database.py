@@ -36,11 +36,14 @@ class UserProfile(Base):
     known_domains = Column(MutableDict.as_mutable(JSON), default=dict)
     connected_sources = Column(MutableList.as_mutable(JSON), default=list)
     model_summary = Column(Text, default="")
+    discovery_complete = Column(Boolean, default=False)
+    selected_domains = Column(MutableList.as_mutable(JSON), default=list)  # ["work", "health", ...]
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
     projects = relationship("Project", back_populates="user", cascade="all, delete-orphan")
     onboarding_state = relationship("OnboardingState", back_populates="user", uselist=False, cascade="all, delete-orphan")
+    discovery_domains = relationship("DiscoveryDomain", back_populates="user", cascade="all, delete-orphan")
 
 
 class OnboardingState(Base):
@@ -58,6 +61,23 @@ class OnboardingState(Base):
     user = relationship("UserProfile", back_populates="onboarding_state")
 
 
+class DiscoveryDomain(Base):
+    __tablename__ = "discovery_domains"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String, ForeignKey("user_profiles.id"), nullable=False, index=True)
+    domain = Column(String, nullable=False)  # work|social|studies|health|hobbies|money|mental_health
+    status = Column(String, default="pending")  # pending|active|explored|completed
+    depth = Column(Integer, default=0)  # how many narrowing turns completed
+    signals = Column(MutableDict.as_mutable(JSON), default=dict)
+    conversation = Column(MutableList.as_mutable(JSON), default=list)
+    proposed_projects = Column(MutableList.as_mutable(JSON), default=list)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    user = relationship("UserProfile", back_populates="discovery_domains")
+
+
 class Project(Base):
     __tablename__ = "projects"
 
@@ -71,6 +91,9 @@ class Project(Base):
     budget_spent_cents = Column(Integer, default=0)
     conversation_signals = Column(MutableDict.as_mutable(JSON), default=dict)
     suggested_by_system = Column(Boolean, default=False)
+    success_metric = Column(String, nullable=True)  # e.g. "workouts per week"
+    metric_target = Column(String, nullable=True)  # e.g. "4"
+    domain = Column(String, nullable=True)  # discovery domain that spawned this project
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 

@@ -34,9 +34,15 @@ Extract and return a JSON object with these fields (merge with existing — keep
 - "intent": string — what the user is trying to accomplish (update if clearer now)
 - "constraints": list of strings — budget, timeline, preferences, requirements mentioned
 - "decisions_made": list of strings — things the user has confirmed or chosen
-- "open_questions": list of strings — things still unclear that need answering before work can begin
+- "open_questions": list of strings — things still unclear that MUST be answered before work can begin
 - "needs": list of strings — specific things they need help with
 - "goals": list of strings — what they're trying to achieve
+
+IMPORTANT rules for open_questions:
+- REMOVE any question from open_questions that the user has now answered (even partially)
+- Only include questions that are truly BLOCKING — things you absolutely cannot proceed without
+- Do NOT invent nice-to-have questions. If you have enough to start working, open_questions should be EMPTY.
+- When the user selects a specific option or gives a clear direction, that resolves the question — remove it.
 
 Return ONLY the JSON object."""
 
@@ -142,8 +148,12 @@ def mediate(project_id: int, user_message: Optional[str], db: Session) -> dict:
     messages = [{"role": m.role, "content": m.content} for m in recent]
     base_prompt = build_system_prompt(user, project)
 
-    # Greeting case — no user message
+    # Greeting case — no user message, but only if no assistant message exists yet
     if not user_message:
+        if any(m["role"] == "assistant" for m in messages):
+            # Already greeted — return the last assistant message
+            last = next(m for m in reversed(messages) if m["role"] == "assistant")
+            return {"message": last["content"], "actions": [], "escalate": False, "task_description": ""}
         return _handle_greeting(project, user, messages, recent_runs, base_prompt, db)
 
     # Save user message
@@ -284,16 +294,24 @@ def _rank(signals: dict, turn_count: int, latest_message: str) -> str:
         if decisions_made or not open_questions:
             return "escalate"
 
-    # If questions remain and we haven't looped too long, keep asking
-    if open_questions and turn_count < 5:
+    # Always ask at least one follow-up on the first user message
+    if turn_count <= 1:
         return "ask_question"
 
     # If intent is clear and no open questions, propose a plan
     if signals.get("intent") and not open_questions:
         return "propose_plan"
 
-    # After 5+ turns, propose a plan anyway
-    if turn_count >= 5:
+    # If we have decisions and intent, propose even with some open questions
+    if signals.get("intent") and decisions_made and turn_count >= 3:
+        return "propose_plan"
+
+    # If questions remain and we haven't looped too long, keep asking
+    if open_questions and turn_count < 4:
+        return "ask_question"
+
+    # After 4+ turns, propose a plan anyway
+    if turn_count >= 4:
         return "propose_plan"
 
     # Default: keep asking
@@ -430,17 +448,29 @@ def synthesize_result(run: AgentRun, project: Project, user: UserProfile, db: Se
     result.setdefault("suggested_next_steps", [])
     result.setdefault("actions", [])
 
-    # Persist artifacts
+    # Persist artifacts (upsert: update existing artifact if same project + type + title)
     from backend.database import Artifact
     for art in result["artifacts"]:
-        db.add(Artifact(
-            run_id=run.run_id,
-            project_id=project.id,
-            artifact_type=art.get("type", "report"),
-            title=art.get("title", "Untitled"),
-            content=art.get("content", ""),
-            sources=[{"url": s} for s in art.get("sources", []) if isinstance(s, str)],
-        ))
+        a_type = art.get("type", "report")
+        a_title = art.get("title", "Untitled")
+        existing = db.query(Artifact).filter(
+            Artifact.project_id == project.id,
+            Artifact.artifact_type == a_type,
+            Artifact.title == a_title,
+        ).first()
+        if existing:
+            existing.content = art.get("content", "")
+            existing.sources = [{"url": s} for s in art.get("sources", []) if isinstance(s, str)]
+            existing.run_id = run.run_id
+        else:
+            db.add(Artifact(
+                run_id=run.run_id,
+                project_id=project.id,
+                artifact_type=a_type,
+                title=a_title,
+                content=art.get("content", ""),
+                sources=[{"url": s} for s in art.get("sources", []) if isinstance(s, str)],
+            ))
 
     # Save synthesis summary as assistant message
     db.add(ChatMessage(

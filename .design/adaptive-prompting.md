@@ -21,6 +21,7 @@ Personalized system prompts, proactive greetings, auto-kickoff for suggested pro
 
 1. **`mediator.py`** — removed hardcoded `model="gpt-5"` from `_generate()`, now uses default model via `chat()`.
 2. **`speech.d.ts`** — expanded from stub `Window` interface to full ambient type declarations for `SpeechRecognition`, `SpeechRecognitionEvent`, `SpeechRecognitionResultList`, `SpeechRecognitionResult`, and `SpeechRecognitionAlternative`. Fixes three TypeScript compilation errors.
+3. **`ChatPanel.tsx`** — fixed `ReactMarkdown` receiving `ArtifactContent` (which can be a structured object) instead of a string. Now coerces non-string content to JSON before rendering.
 
 ## Known limitations (not blocking)
 

@@ -6,11 +6,13 @@ import { OnboardingView } from "./components/OnboardingView";
 import { Sidebar } from "./components/Sidebar";
 import { HomeView } from "./components/HomeView";
 import { ChatPanel } from "./components/ChatPanel";
+import { ProjectWorkspace } from "./components/ProjectWorkspace";
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<number | null>(null);
+  const [workspaceRefresh, setWorkspaceRefresh] = useState(0);
   const onboardingDone = user?.onboarding_complete ?? null;
 
   const loadProjects = useCallback(async () => {
@@ -38,7 +40,22 @@ function App() {
     if (!user) return;
     const updated = await api.getUser(user.id);
     setUser(updated);
-    await loadProjects();
+    const list = await api.listProjects(updated.id);
+    setProjects(list);
+
+    // If no projects (user skipped onboarding), create one and open it
+    if (list.length === 0) {
+      try {
+        const project = await api.createProject({
+          user_id: updated.id,
+          name: "Getting Started",
+        });
+        setProjects([project]);
+        setActiveProjectId(project.id);
+      } catch (err) {
+        console.error("Failed to create starter project:", err);
+      }
+    }
   };
 
   const handleNewProject = async () => {
@@ -53,6 +70,10 @@ function App() {
     } catch (err) {
       console.error("Failed to create project:", err);
     }
+  };
+
+  const handleRunComplete = () => {
+    setWorkspaceRefresh((k) => k + 1);
   };
 
   if (!user) {
@@ -76,10 +97,17 @@ function App() {
       />
       <main className="main-content">
         {activeProject ? (
-          <ChatPanel
-            project={activeProject}
-            onProjectRenamed={loadProjects}
-          />
+          <div className="project-split">
+            <ChatPanel
+              project={activeProject}
+              onProjectRenamed={loadProjects}
+              onRunComplete={handleRunComplete}
+            />
+            <ProjectWorkspace
+              projectId={activeProject.id}
+              refreshKey={workspaceRefresh}
+            />
+          </div>
         ) : (
           <HomeView
             projects={projects}

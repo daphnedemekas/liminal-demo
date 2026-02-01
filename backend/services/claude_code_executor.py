@@ -39,7 +39,7 @@ class ClaudeCodeExecutor:
         working_dir: str = ".",
         allowed_tools: Optional[List[str]] = None,
         max_turns: Optional[int] = None,
-    ) -> AsyncIterator[ExecutorEvent]:  # type: ignore[misc]
+    ) -> AsyncIterator[ExecutorEvent]:
         """
         Run a single Claude Code instruction and yield parsed events.
 
@@ -49,6 +49,7 @@ class ClaudeCodeExecutor:
             "claude", "-p", instruction,
             "--output-format", "stream-json",
             "--verbose",
+            "--dangerously-skip-permissions",
             "--system-prompt", system_prompt or self.SYSTEM_PROMPT,
         ]
 
@@ -73,8 +74,7 @@ class ClaudeCodeExecutor:
                     continue
                 try:
                     data = json.loads(line)
-                    event = self._parse_event(data)
-                    if event:
+                    for event in self._parse_events(data):
                         yield event
                 except json.JSONDecodeError:
                     logger.warning(f"Non-JSON line from claude: {line[:200]}")
@@ -92,18 +92,19 @@ class ClaudeCodeExecutor:
                 raw={},
             )
 
-    def _parse_event(self, data: dict) -> Optional[ExecutorEvent]:
-        """Parse a stream-json line into an ExecutorEvent."""
+    def _parse_events(self, data: dict) -> List[ExecutorEvent]:
+        """Parse a stream-json line into one or more ExecutorEvents."""
         msg_type = data.get("type", "")
+        events: List[ExecutorEvent] = []
 
         if msg_type == "system":
-            return ExecutorEvent(
+            events.append(ExecutorEvent(
                 type="system",
                 content={"session_id": data.get("session_id", "")},
                 raw=data,
-            )
+            ))
 
-        if msg_type == "assistant":
+        elif msg_type == "assistant":
             message = data.get("message", {})
             text_parts = []
             tool_uses = []
@@ -118,24 +119,24 @@ class ClaudeCodeExecutor:
                         "id": block.get("id", ""),
                     })
 
-            # Yield tool uses first
-            if tool_uses:
-                return ExecutorEvent(
-                    type="tool_use",
-                    content={"tools": tool_uses},
-                    raw=data,
-                )
-
+            # Emit text first, then tool uses — so both appear in activity log
             if text_parts:
-                return ExecutorEvent(
+                events.append(ExecutorEvent(
                     type="assistant",
                     content={"text": "\n".join(text_parts)},
                     raw=data,
-                )
+                ))
+
+            if tool_uses:
+                events.append(ExecutorEvent(
+                    type="tool_use",
+                    content={"tools": tool_uses},
+                    raw=data,
+                ))
 
         elif msg_type == "result":
             usage = data.get("usage", {})
-            return ExecutorEvent(
+            events.append(ExecutorEvent(
                 type="result",
                 content={
                     "text": data.get("result", ""),
@@ -151,9 +152,12 @@ class ClaudeCodeExecutor:
                     },
                 },
                 raw=data,
-            )
+            ))
 
-        return None
+        else:
+            logger.debug(f"Unhandled stream event type: {msg_type}")
+
+        return events
 
 
 executor = ClaudeCodeExecutor()

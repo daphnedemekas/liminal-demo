@@ -200,6 +200,41 @@ async def project_chat(project_id: int, req: ChatRequest, db: Session = Depends(
     return response
 
 
+@router.get("/{project_id}/artifacts")
+def get_artifacts(project_id: int, db: Session = Depends(get_db)):
+    """Return all artifacts for a project."""
+    project = db.query(Project).filter_by(id=project_id).first()
+    if not project:
+        raise HTTPException(404, "Project not found")
+    artifacts = db.query(Artifact).filter_by(project_id=project_id).order_by(Artifact.created_at.asc()).all()
+    return [
+        {
+            "id": a.id,
+            "artifact_type": a.artifact_type,
+            "title": a.title,
+            "content": a.content,
+            "sources": a.sources,
+            "created_at": str(a.created_at),
+        }
+        for a in artifacts
+    ]
+
+
+class ArtifactUpdate(BaseModel):
+    content: dict
+
+
+@router.patch("/{project_id}/artifacts/{artifact_id}")
+def update_artifact(project_id: int, artifact_id: int, req: ArtifactUpdate, db: Session = Depends(get_db)):
+    """Update artifact content (e.g. checklist toggle)."""
+    artifact = db.query(Artifact).filter_by(id=artifact_id, project_id=project_id).first()
+    if not artifact:
+        raise HTTPException(404, "Artifact not found")
+    artifact.content = req.content
+    db.commit()
+    return {"status": "ok"}
+
+
 def _to_response(db: Session, project: Project) -> dict:
     runs = db.query(AgentRun).filter_by(project_id=project.id).all()
     latest = sorted(runs, key=lambda r: r.created_at, reverse=True)

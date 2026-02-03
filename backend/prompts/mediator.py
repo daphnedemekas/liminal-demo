@@ -168,6 +168,11 @@ Write a brief confirmation message and a detailed task_description that contains
 everything the agent needs to do the work without talking to the user again.
 Include: goal, constraints, decisions made, specific requirements.
 
+IMPORTANT: Describe WHAT to build (features, requirements, personalization) — NOT which
+tool or platform to build it with. The execution agent decides the technology. Do NOT
+prescribe Google Sheets, Notion, or any specific platform in the task_description.
+Focus on the user's actual needs and desired outcomes.
+
 Respond with JSON:
 {{"message": "your brief confirmation", "actions": [], "escalate": true, "task_description": "detailed task description here"}}
 

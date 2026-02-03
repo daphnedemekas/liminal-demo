@@ -86,24 +86,6 @@ export interface RunEvent {
   timestamp: string;
 }
 
-export interface OnboardingState {
-  phase: string;
-  gathered_signals: Record<string, unknown>;
-  pending_questions: OnboardingQuestion[];
-  suggested_projects: OnboardingSuggestion[];
-  conversation_history: { role: string; content: string }[];
-}
-
-export interface OnboardingQuestion {
-  question: string;
-  hint: string;
-}
-
-export interface OnboardingSuggestion {
-  name: string;
-  description: string;
-}
-
 // Structured artifact content types
 export interface ScheduleContent {
   entries: { day: string; time_block: string; activity: string; notes?: string }[];
@@ -294,49 +276,6 @@ export const api = {
 
   stopRun: (runId: string) =>
     request<{ status: string }>(`/api/runs/${runId}/stop`, { method: "POST" }),
-
-  // Onboarding
-  getOnboardingOptions: () =>
-    request<{ id: string; label: string; icon: string }[]>("/api/onboarding/options"),
-
-  getOnboardingState: (userId: string) =>
-    request<OnboardingState>(`/api/onboarding/state/${userId}`),
-
-  submitQuickContext: (userId: string, selectedIds: string[]) =>
-    request<{ phase: string; gathered_signals: Record<string, unknown> }>("/api/onboarding/context", {
-      method: "POST",
-      body: JSON.stringify({ user_id: userId, selected_ids: selectedIds }),
-    }),
-
-  getNextQuestion: (userId: string) =>
-    request<{ question: OnboardingQuestion }>("/api/onboarding/next-question", {
-      method: "POST",
-      body: JSON.stringify({ user_id: userId }),
-    }),
-
-  submitOnboardingAnswer: (userId: string, answer: string) =>
-    request<{ gathered_signals: Record<string, unknown>; conversation_history: { role: string; content: string }[]; ready_for_suggestions: boolean }>(
-      "/api/onboarding/answer",
-      { method: "POST", body: JSON.stringify({ user_id: userId, answer }) },
-    ),
-
-  getOnboardingSuggestions: (userId: string) =>
-    request<{ suggestions: OnboardingSuggestion[] }>("/api/onboarding/suggestions", {
-      method: "POST",
-      body: JSON.stringify({ user_id: userId }),
-    }),
-
-  acceptSuggestions: (userId: string, indices: number[]) =>
-    request<{ created_projects: { id: number; name: string; description: string }[] }>("/api/onboarding/accept", {
-      method: "POST",
-      body: JSON.stringify({ user_id: userId, indices }),
-    }),
-
-  skipOnboarding: (userId: string) =>
-    request<{ status: string }>("/api/onboarding/skip", {
-      method: "POST",
-      body: JSON.stringify({ user_id: userId }),
-    }),
 
   getArtifacts: (projectId: number) =>
     request<Artifact[]>(`/api/projects/${projectId}/artifacts`),

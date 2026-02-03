@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Envisage — Expand Human Agency</title>
+  <meta name="description" content="Envisage is a mediation layer that learns who you are and curates agentic systems fit to your needs, goals, and pain points.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0a0a0c;
+      --bg-subtle: #111114;
+      --text: #e8e8ed;
+      --text-secondary: #8a8a9a;
+      --accent: #6e6eff;
+      --accent-glow: rgba(110, 110, 255, 0.15);
+      --border: rgba(255, 255, 255, 0.06);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    /* ── Nav ──────────────────────────────────── */
+    nav {
+      position: fixed;
+      top: 0;
+      width: 100%;
+      padding: 20px 40px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 100;
+      background: rgba(10, 10, 12, 0.8);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .logo {
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+
+    .logo span {
+      color: var(--accent);
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 32px;
+      list-style: none;
+    }
+
+    .nav-links a {
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 400;
+      transition: color 0.2s;
+    }
+
+    .nav-links a:hover { color: var(--text); }
+
+    .nav-cta {
+      background: var(--accent);
+      color: #fff;
+      padding: 8px 20px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      text-decoration: none;
+      transition: opacity 0.2s;
+    }
+
+    .nav-cta:hover { opacity: 0.85; }
+
+    /* ── Hero ─────────────────────────────────── */
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      padding: 120px 24px 80px;
+      position: relative;
+    }
+
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: 20%;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .hero-badge {
+      display: inline-block;
+      padding: 6px 16px;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-bottom: 32px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      font-size: clamp(40px, 6vw, 72px);
+      font-weight: 600;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+      max-width: 800px;
+      margin-bottom: 24px;
+    }
+
+    h1 em {
+      font-style: normal;
+      background: linear-gradient(135deg, var(--accent), #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero p {
+      font-size: 18px;
+      line-height: 1.6;
+      color: var(--text-secondary);
+      max-width: 540px;
+      margin-bottom: 40px;
+      font-weight: 300;
+    }
+
+    .hero-cta {
+      display: inline-block;
+      background: var(--accent);
+      color: #fff;
+      padding: 14px 32px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-size: 15px;
+      font-weight: 500;
+      transition: opacity 0.2s, transform 0.2s;
+    }
+
+    .hero-cta:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
+    }
+
+    /* ── Sections ─────────────────────────────── */
+    section {
+      padding: 100px 24px;
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+
+    .section-label {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+      margin-bottom: 16px;
+    }
+
+    h2 {
+      font-size: clamp(28px, 4vw, 40px);
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      line-height: 1.2;
+      margin-bottom: 20px;
+    }
+
+    section > p {
+      font-size: 16px;
+      line-height: 1.7;
+      color: var(--text-secondary);
+      max-width: 640px;
+      font-weight: 300;
+    }
+
+    /* ── Problem / Thesis ─────────────────────── */
+    .thesis {
+      border-top: 1px solid var(--border);
+    }
+
+    .thesis-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 48px;
+      margin-top: 48px;
+    }
+
+    .thesis-card {
+      padding: 32px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--bg-subtle);
+    }
+
+    .thesis-card h3 {
+      font-size: 16px;
+      font-weight: 500;
+      margin-bottom: 12px;
+    }
+
+    .thesis-card p {
+      font-size: 14px;
+      line-height: 1.65;
+      color: var(--text-secondary);
+      font-weight: 300;
+    }
+
+    .thesis-card .card-icon {
+      font-size: 24px;
+      margin-bottom: 16px;
+      display: block;
+    }
+
+    /* ── How it works ─────────────────────────── */
+    .how {
+      border-top: 1px solid var(--border);
+    }
+
+    .steps {
+      margin-top: 48px;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    .step {
+      display: grid;
+      grid-template-columns: 48px 1fr;
+      gap: 24px;
+      padding: 32px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .step-num {
+      width: 36px;
+      height: 36px;
+      border: 1px solid var(--accent);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--accent);
+      flex-shrink: 0;
+    }
+
+    .step h3 {
+      font-size: 17px;
+      font-weight: 500;
+      margin-bottom: 8px;
+    }
+
+    .step p {
+      font-size: 14px;
+      line-height: 1.65;
+      color: var(--text-secondary);
+      font-weight: 300;
+    }
+
+    /* ── Domains ──────────────────────────────── */
+    .domains {
+      border-top: 1px solid var(--border);
+    }
+
+    .domain-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-top: 48px;
+    }
+
+    .domain-pill {
+      padding: 20px 24px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--bg-subtle);
+      font-size: 15px;
+      font-weight: 400;
+      transition: border-color 0.2s, background 0.2s;
+    }
+
+    .domain-pill:hover {
+      border-color: rgba(110, 110, 255, 0.3);
+      background: rgba(110, 110, 255, 0.04);
+    }
+
+    .domain-pill .domain-icon {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 20px;
+    }
+
+    .domain-pill .domain-example {
+      display: block;
+      margin-top: 6px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      font-weight: 300;
+    }
+
+    /* ── Principles ───────────────────────────── */
+    .principles {
+      border-top: 1px solid var(--border);
+    }
+
+    .principles-list {
+      margin-top: 48px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .principle {
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      gap: 24px;
+      align-items: baseline;
+    }
+
+    .principle h3 {
+      font-size: 15px;
+      font-weight: 500;
+    }
+
+    .principle p {
+      font-size: 14px;
+      line-height: 1.65;
+      color: var(--text-secondary);
+      font-weight: 300;
+    }
+
+    /* ── CTA ──────────────────────────────────── */
+    .cta-section {
+      text-align: center;
+      padding: 120px 24px;
+      border-top: 1px solid var(--border);
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+
+    .cta-section h2 {
+      margin-bottom: 16px;
+    }
+
+    .cta-section p {
+      color: var(--text-secondary);
+      font-size: 16px;
+      margin-bottom: 32px;
+      font-weight: 300;
+    }
+
+    /* ── Email form ───────────────────────────── */
+    .email-form {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      max-width: 440px;
+      margin: 0 auto;
+    }
+
+    .email-form input {
+      flex: 1;
+      padding: 12px 16px;
+      background: var(--bg-subtle);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .email-form input::placeholder { color: var(--text-secondary); }
+    .email-form input:focus { border-color: var(--accent); }
+
+    .email-form button {
+      padding: 12px 24px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      transition: opacity 0.2s;
+      white-space: nowrap;
+    }
+
+    .email-form button:hover { opacity: 0.85; }
+
+    /* ── Footer ───────────────────────────────── */
+    footer {
+      padding: 40px;
+      text-align: center;
+      font-size: 13px;
+      color: var(--text-secondary);
+      border-top: 1px solid var(--border);
+    }
+
+    /* ── Responsive ───────────────────────────── */
+    @media (max-width: 768px) {
+      nav { padding: 16px 20px; }
+      .nav-links { display: none; }
+      .thesis-grid { grid-template-columns: 1fr; gap: 16px; }
+      .principle { grid-template-columns: 1fr; gap: 8px; }
+      .step { grid-template-columns: 36px 1fr; gap: 16px; }
+      .email-form { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+
+  <nav>
+    <div class="logo">envisage<span>.</span></div>
+    <ul class="nav-links">
+      <li><a href="#thesis">Thesis</a></li>
+      <li><a href="#how">How It Works</a></li>
+      <li><a href="#domains">Domains</a></li>
+    </ul>
+    <a href="#waitlist" class="nav-cta">Join Waitlist</a>
+  </nav>
+
+  <div class="hero">
+    <span class="hero-badge">Expanding Human Agency</span>
+    <h1>Your life, <em>orchestrated</em></h1>
+    <p>
+      Envisage learns who you are and curates AI agents fit to your
+      needs, goals, and pain points &mdash; so you stay in control of the
+      things that matter.
+    </p>
+    <a href="#waitlist" class="hero-cta">Get Early Access</a>
+  </div>
+
+  <section class="thesis" id="thesis">
+    <div class="section-label">The Problem</div>
+    <h2>AI is exploding. Most people are watching from the sidelines.</h2>
+    <p>
+      The gap between what AI can do and what people actually use it for
+      is widening every day. Without a layer that understands you, the most
+      powerful tools in history remain out of reach.
+    </p>
+    <div class="thesis-grid">
+      <div class="thesis-card">
+        <span class="card-icon">&darr;</span>
+        <h3>Gradual Disempowerment</h3>
+        <p>
+          As systems grow more autonomous, people lose the muscle memory of
+          doing things themselves. Agency atrophies when decisions are
+          silently delegated.
+        </p>
+      </div>
+      <div class="thesis-card">
+        <span class="card-icon">&uarr;</span>
+        <h3>Abundance Without Access</h3>
+        <p>
+          Information and opportunity have never been more available. But
+          without personalized mediation, abundance becomes noise.
+        </p>
+      </div>
+      <div class="thesis-card">
+        <span class="card-icon">&rarr;</span>
+        <h3>Tools Without Context</h3>
+        <p>
+          AI tools are built for tasks, not for people. They don't know
+          your constraints, your goals, or what you tried last week
+          that didn't work.
+        </p>
+      </div>
+      <div class="thesis-card">
+        <span class="card-icon">&bull;</span>
+        <h3>The Missing Layer</h3>
+        <p>
+          What's needed is not another chatbot, but a mediation layer &mdash;
+          one that learns who you are and matches you with the right
+          agentic systems at the right time.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="how" id="how">
+    <div class="section-label">How It Works</div>
+    <h2>From understanding to action</h2>
+    <p>
+      Envisage runs a structured discovery process across the domains of your
+      life, then deploys agents that do real work &mdash; with you in control.
+    </p>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div>
+          <h3>Discover</h3>
+          <p>
+            A collaborative conversation maps your situation, frictions,
+            and goals across life domains. No forms, no onboarding wizards
+            &mdash; just a genuine dialogue.
+          </p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div>
+          <h3>Propose</h3>
+          <p>
+            Envisage surfaces concrete projects tailored to your words
+            &mdash; not generic templates. Research first, build only
+            when nothing existing fits.
+          </p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div>
+          <h3>Execute</h3>
+          <p>
+            AI agents do the work: research, compare, set up tools,
+            create documents, build utilities. You approve each step
+            and own the outcome.
+          </p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div>
+          <h3>Compound</h3>
+          <p>
+            The system learns from every interaction. Your context
+            deepens, proposals sharpen, and agency compounds over time
+            &mdash; not just task completion, but self-efficacy.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="domains" id="domains">
+    <div class="section-label">Life Domains</div>
+    <h2>Agency across every dimension</h2>
+    <p>
+      Envisage structures discovery around the areas that matter most,
+      each with specialized understanding of how friction shows up.
+    </p>
+    <div class="domain-grid">
+      <div class="domain-pill">
+        <span class="domain-icon">&equiv;</span>
+        Work
+        <span class="domain-example">Automate admin, reclaim deep work</span>
+      </div>
+      <div class="domain-pill">
+        <span class="domain-icon">&hearts;</span>
+        Health
+        <span class="domain-example">Habits, nutrition, exercise</span>
+      </div>
+      <div class="domain-pill">
+        <span class="domain-icon">$</span>
+        Money
+        <span class="domain-example">Budget, invest, reduce waste</span>
+      </div>
+      <div class="domain-pill">
+        <span class="domain-icon">&oplus;</span>
+        Social Life
+        <span class="domain-example">Stay connected, coordinate less</span>
+      </div>
+      <div class="domain-pill">
+        <span class="domain-icon">&Xi;</span>
+        Studies
+        <span class="domain-example">Learn faster, retain more</span>
+      </div>
+      <div class="domain-pill">
+        <span class="domain-icon">&infin;</span>
+        Hobbies
+        <span class="domain-example">Spend time creating, not planning</span>
+      </div>
+      <div class="domain-pill">
+        <span class="domain-icon">&sim;</span>
+        Mental Health
+        <span class="domain-example">Resilience, clarity, prevention</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="principles">
+    <div class="section-label">Principles</div>
+    <h2>What we believe</h2>
+    <div class="principles-list">
+      <div class="principle">
+        <h3>Agency over automation</h3>
+        <p>The goal is not to replace what you do, but to expand what you can do. Every interaction should reinforce your sense of ownership and capability.</p>
+      </div>
+      <div class="principle">
+        <h3>Understand first, act second</h3>
+        <p>No agent should execute without understanding your context, constraints, and intent. Research before building. Ask before assuming.</p>
+      </div>
+      <div class="principle">
+        <h3>Do it for them, not to them</h3>
+        <p>When the system recommends a tool, it should set it up &mdash; not hand you a guide. The agent handles the tedium; you make the decisions.</p>
+      </div>
+      <div class="principle">
+        <h3>Compounding context</h3>
+        <p>Every conversation deepens the system's understanding. Cross-domain patterns emerge. The mediation layer gets better the longer you use it.</p>
+      </div>
+      <div class="principle">
+        <h3>Human in the loop, always</h3>
+        <p>You approve every plan before execution. The system proposes, you decide. No silent delegation, no irreversible actions without consent.</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="cta-section" id="waitlist">
+    <h2>Be first in line</h2>
+    <p>We're building the mediation layer between humans and the age of agents.</p>
+    <form class="email-form" onsubmit="handleSubmit(event)">
+      <input type="email" placeholder="you@example.com" required>
+      <button type="submit">Join Waitlist</button>
+    </form>
+    <p id="form-success" style="display:none; color: var(--accent); margin-top: 16px; font-size: 14px;">
+      You're on the list. We'll be in touch.
+    </p>
+  </div>
+
+  <footer>
+    &copy; 2025 Envisage. Expanding human agency.
+  </footer>
+
+  <script>
+    // Smooth scrolling
+    document.querySelectorAll('a[href^="#"]').forEach(a => {
+      a.addEventListener('click', e => {
+        e.preventDefault();
+        const el = document.querySelector(a.getAttribute('href'));
+        if (el) el.scrollIntoView({ behavior: 'smooth' });
+      });
+    });
+
+    // Simple form handler — swap with real endpoint later
+    function handleSubmit(e) {
+      e.preventDefault();
+      const input = e.target.querySelector('input');
+      const email = input.value;
+      // TODO: POST to your backend or email service (e.g. Buttondown, Mailchimp, Supabase)
+      console.log('Waitlist signup:', email);
+      e.target.style.display = 'none';
+      document.getElementById('form-success').style.display = 'block';
+    }
+  </script>
+</body>
+</html>

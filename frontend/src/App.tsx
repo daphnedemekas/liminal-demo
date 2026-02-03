@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "./services/api";
 import type { User, Project, DiscoveryDomainState, DiscoveryProposal } from "./services/api";
+import { WelcomeScreen } from "./components/WelcomeScreen";
 import { LoginScreen } from "./components/LoginScreen";
 import { DiscoveryView } from "./components/DiscoveryView";
 import { Sidebar } from "./components/Sidebar";
@@ -11,6 +12,7 @@ import { ProjectWorkspace } from "./components/ProjectWorkspace";
 import { ProposedProjectsPanel } from "./components/ProposedProjectsPanel";
 
 function App() {
+  const [showWelcome, setShowWelcome] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [domains, setDomains] = useState<DiscoveryDomainState[]>([]);
@@ -183,6 +185,9 @@ function App() {
   }, []);
 
   if (!user) {
+    if (showWelcome) {
+      return <WelcomeScreen onContinue={() => setShowWelcome(false)} />;
+    }
     return <LoginScreen onLogin={setUser} />;
   }
 

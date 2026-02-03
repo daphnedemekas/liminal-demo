@@ -159,6 +159,82 @@ body {
 }
 
 /* ============================================= */
+/* Welcome Screen                                */
+/* ============================================= */
+
+.welcome-card {
+  width: 100%;
+  max-width: 520px;
+  padding: 48px 44px;
+  background: var(--bg-elevated);
+  border-radius: 20px;
+  border: 1px solid var(--border-hairline);
+  box-shadow: var(--shadow-float);
+  text-align: center;
+}
+
+.welcome-card h1 {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+  letter-spacing: -0.02em;
+}
+
+.welcome-tagline {
+  font-size: 16px;
+  color: var(--accent-600);
+  font-weight: 500;
+  margin-bottom: 28px;
+}
+
+.welcome-body {
+  text-align: left;
+  margin-bottom: 32px;
+}
+
+.welcome-body p {
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+
+.welcome-body p:last-child {
+  margin-bottom: 0;
+}
+
+.welcome-highlight {
+  font-weight: 600;
+  color: var(--text-primary) !important;
+  font-size: 16px !important;
+}
+
+.welcome-closing {
+  font-weight: 500;
+  color: var(--text-primary) !important;
+  margin-top: 4px;
+}
+
+.welcome-continue {
+  padding: 12px 36px;
+  background: var(--accent-600);
+  color: #ffffff;
+  border: none;
+  border-radius: 999px;
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
+  font-family: inherit;
+}
+
+.welcome-continue:hover {
+  filter: brightness(0.85);
+  box-shadow: var(--shadow-float);
+}
+
+/* ============================================= */
 /* App Shell                                     */
 /* ============================================= */
 

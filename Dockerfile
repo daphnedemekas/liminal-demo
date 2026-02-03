@@ -19,4 +19,6 @@ COPY --from=frontend-build /app/frontend/dist ./frontend/dist/
 # Ensure data directory exists (Railway volume mounts here)
 RUN mkdir -p /app/data
 
-CMD python -m uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8080}
+COPY start.sh .
+RUN chmod +x start.sh
+ENTRYPOINT ["./start.sh"]

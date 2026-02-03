@@ -17,12 +17,12 @@ interface ContextOption {
 }
 
 const ICON_MAP: Record<string, string> = {
-  briefcase: "\u{1F4BC}",
-  code: "\u{1F4BB}",
-  book: "\u{1F4DA}",
-  search: "\u{1F50D}",
-  home: "\u{1F3E0}",
-  compass: "\u{1F9ED}",
+  briefcase: "",
+  code: "",
+  book: "",
+  search: "",
+  home: "",
+  compass: "",
 };
 
 export function OnboardingView({ userId, userName, onComplete }: Props) {
@@ -199,7 +199,7 @@ export function OnboardingView({ userId, userName, onComplete }: Props) {
                   onClick={() => toggleSuggestion(i)}
                 >
                   <div className="suggestion-check">
-                    {selectedSuggestions.has(i) ? "\u2713" : ""}
+                    {selectedSuggestions.has(i) ? "Selected" : ""}
                   </div>
                   <div className="suggestion-body">
                     <h3>{s.name}</h3>

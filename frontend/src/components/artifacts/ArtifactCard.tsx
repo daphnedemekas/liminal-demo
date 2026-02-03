@@ -38,12 +38,12 @@ export function ArtifactCard({ artifact, projectId, onUpdate }: Props) {
         return <ResourceArtifact content={content as ResourceListContent} />;
       case "schedule":
         return <ScheduleArtifact content={content as ScheduleContent} />;
-      default:
-        return (
-          <MarkdownArtifact
-            content={typeof content === "string" ? content : JSON.stringify(content, null, 2)}
-          />
-        );
+      default: {
+        const md = typeof content === "string"
+          ? content
+          : ((content as Record<string, unknown>)?.markdown as string) || JSON.stringify(content, null, 2);
+        return <MarkdownArtifact content={md} />;
+      }
     }
   };
 

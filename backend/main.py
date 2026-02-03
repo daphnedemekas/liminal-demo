@@ -11,11 +11,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from backend.database import init_db
-from backend.routers import auth, projects, runs, onboarding, discovery
+from backend.database import init_db, seed_demo_data
+from backend.routers import auth, projects, runs, onboarding, discovery, context, insights
 logging.basicConfig(level=logging.INFO)
 
-app = FastAPI(title="Liminal", description="Your AI that gets things done")
+app = FastAPI(title="Liminal", description="AI for human agency")
 
 app.add_middleware(
     CORSMiddleware,
@@ -25,8 +25,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize database
+# Initialize database and seed demo data
 init_db()
+seed_demo_data()
 
 # Mount API routers
 app.include_router(auth.router)
@@ -34,6 +35,8 @@ app.include_router(projects.router)
 app.include_router(runs.router)
 app.include_router(onboarding.router)
 app.include_router(discovery.router)
+app.include_router(context.router)
+app.include_router(insights.router)
 
 # WebSocket routes
 app.add_api_websocket_route("/ws/run/{run_id}", runs.ws_run)

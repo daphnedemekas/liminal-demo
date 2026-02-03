@@ -1,9 +1,41 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import { api } from "../services/api";
-import type { Project, ChatAction, SynthesisEvent, SynthesisArtifact } from "../services/api";
+import type { Project, ChatAction, SynthesisEvent } from "../services/api";
 import { useRunStream } from "../hooks/useRunStream";
 import { useAudio } from "../hooks/useAudio";
+import { ContextUpload } from "./ContextUpload";
+
+// Smart truncation: cut at word boundary, add ellipsis
+function smartTruncate(text: string | undefined | null, maxLength: number): string {
+  if (!text) return "";
+  if (text.length <= maxLength) return text;
+  const truncated = text.slice(0, maxLength - 3);
+  const lastSpace = truncated.lastIndexOf(' ');
+  return (lastSpace > maxLength * 0.6 ? truncated.slice(0, lastSpace) : truncated) + '...';
+}
+
+const DOMAIN_LABELS: Record<string, string> = {
+  work: "Work & Career",
+  social: "Social Life",
+  studies: "Studies & Learning",
+  health: "Health & Wellness",
+  hobbies: "Hobbies & Projects",
+  money: "Money & Finances",
+  mental_health: "Mind & Mental Health",
+};
+
+function actionLabel(action: ChatAction): string {
+  if (action.label) return action.label;
+  const at = action.action_text ?? "";
+  if (at.startsWith("navigate_domain:")) {
+    const domain = at.split(":")[1];
+    return `Go to ${DOMAIN_LABELS[domain] || domain}`;
+  }
+  if (at.startsWith("navigate_project:")) return "Go to project";
+  if (at.startsWith("create_project:")) return "Create project";
+  return at;
+}
 
 interface Message {
   role: "user" | "assistant" | "system";
@@ -15,8 +47,12 @@ interface Message {
 
 interface Props {
   project: Project;
+  userId: string;
   onProjectRenamed?: () => void;
   onRunComplete?: () => void;
+  onNavigateDomain?: (domain: string) => void;
+  onNavigateProject?: (projectId: number) => void;
+  onMessageReceived?: () => void;
 }
 
 interface ActivityEntry {
@@ -52,78 +88,126 @@ function formatToolActivity(tool: string, input: Record<string, unknown>): strin
   }
 }
 
-export function ChatPanel({ project, onProjectRenamed, onRunComplete }: Props) {
+export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, onNavigateDomain, onNavigateProject, onMessageReceived }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [isChatting, setIsChatting] = useState(false);
-  const [hasAutoStarted, setHasAutoStarted] = useState(false);
-  const [greetingLoaded, setGreetingLoaded] = useState(false);
   const [activityLog, setActivityLog] = useState<ActivityEntry[]>([]);
+  const [researchingTopic, setResearchingTopic] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { events, synthesis } = useRunStream(activeRunId);
-  const [showFullOutput, setShowFullOutput] = useState(false);
   const {
     isAudioMode, isRecording, isPlaying, transcript,
     toggleAudioMode, startRecording, stopRecording, playTTS, stopAudio,
   } = useAudio();
 
-  const sendChat = useCallback(async (text: string | undefined) => {
-    if (isChatting || isRunning) return;
+  const currentProjectId = useRef(project.id);
+  const abortRef = useRef<AbortController | null>(null);
+  currentProjectId.current = project.id;
 
-    if (text) {
-      setMessages((prev) => [...prev, { role: "user", content: text }]);
-    }
+  const sendChat = useCallback(async (text: string) => {
+    if (isChatting || isRunning || !text) return;
+
+    setMessages((prev) => [...prev, { role: "user", content: text }]);
     setIsChatting(true);
 
+    // Abort any in-flight request and track this one
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const expectedProjectId = project.id;
+
     try {
-      const res = await api.sendChat(project.id, text);
-
-      if (res.message) {
-        setMessages((prev) => {
-          // Deduplicate: skip if last message is identical assistant text
-          const last = prev[prev.length - 1];
-          if (last?.role === "assistant" && last.content === res.message) {
-            return prev;
+      await api.sendChatSSE(
+        project.id,
+        text,
+        (topic) => {
+          if (currentProjectId.current !== expectedProjectId) return;
+          setResearchingTopic(topic);
+        },
+        (res) => {
+          if (currentProjectId.current !== expectedProjectId) return;
+          setResearchingTopic(null);
+          setStatusMessage(null);
+          if (res.message) {
+            setMessages((prev) => {
+              const last = prev[prev.length - 1];
+              if (last?.role === "assistant" && last.content === res.message) {
+                return prev;
+              }
+              return [
+                ...prev,
+                { role: "assistant", content: res.message, actions: res.actions },
+              ];
+            });
+            if (isAudioMode) {
+              playTTS(res.message);
+            }
           }
-          return [
+          if (res.run_id) {
+            setIsRunning(true);
+            setActiveRunId(res.run_id);
+          }
+          setIsChatting(false);
+          onMessageReceived?.();
+        },
+        (err) => {
+          if (currentProjectId.current !== expectedProjectId) return;
+          setResearchingTopic(null);
+          setStatusMessage(null);
+          setMessages((prev) => [
             ...prev,
-            { role: "assistant", content: res.message, actions: res.actions },
-          ];
-        });
-        // Auto-play TTS in audio mode
-        if (isAudioMode) {
-          playTTS(res.message);
-        }
-      }
-
-      if (res.run_id) {
-        setIsRunning(true);
-        setActiveRunId(res.run_id);
-      }
+            { role: "system", content: `Error: ${err.message}` },
+          ]);
+          setIsChatting(false);
+        },
+        (status) => {
+          if (currentProjectId.current !== expectedProjectId) return;
+          setStatusMessage(status);
+        },
+        controller.signal,
+      );
     } catch (err) {
+      if ((err as Error).name === "AbortError") return; // navigated away
+      if (currentProjectId.current !== expectedProjectId) return;
+      setResearchingTopic(null);
+      setStatusMessage(null);
       setMessages((prev) => [
         ...prev,
         { role: "system", content: `Error: ${(err as Error).message}` },
       ]);
-    } finally {
       setIsChatting(false);
     }
   }, [project.id, isChatting, isRunning]);
 
-  // Load chat history on project open, then greet if no history
+  // Initialize project: reset state, load history, then greet or auto-kickoff
   useEffect(() => {
-    if (greetingLoaded || hasAutoStarted) return;
+    // Reset all state for the new project
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setMessages([]);
+    setActiveRunId(null);
+    setIsRunning(false);
+    setIsChatting(false);
+    setActivityLog([]);
+    setResearchingTopic(null);
+    setStatusMessage(null);
 
-    // For suggested projects with no runs, kick off via chat instead
-    if (project.suggested_by_system && project.run_count === 0) return;
 
-    setGreetingLoaded(true);
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const expectedId = project.id;
 
-    const load = async () => {
+    const isSuggestedNew = project.suggested_by_system && project.run_count === 0 && project.domain !== "home";
+
+    const init = async () => {
+      // Always load history first
       try {
         const history = await api.getMessages(project.id);
+        if (controller.signal.aborted) return;
         if (history.length > 0) {
           setMessages(history.map((m) => ({
             role: m.role as Message["role"],
@@ -131,51 +215,104 @@ export function ChatPanel({ project, onProjectRenamed, onRunComplete }: Props) {
             actions: m.actions,
             timestamp: m.created_at,
           })));
-          return; // history loaded, no greeting needed
+          return; // history loaded, done
         }
       } catch {
-        // fall through to greeting
+        if (controller.signal.aborted) return;
+        // fall through
       }
-      sendChat(undefined);
+
+      // No history — either auto-kickoff or greeting
+      if (isSuggestedNew) {
+        setIsChatting(true);
+
+        const goal =
+          `You are working on the project "${project.name}". ` +
+          `Context: ${project.description} ` +
+          `Research the landscape: what existing tools, services, and approaches already address this? ` +
+          `For each, note what it does, pricing, and how well it fits my specific need. ` +
+          `End with a clear recommendation: either "I suggest we set you up with X because..." ` +
+          `or "Nothing quite fits — here's the gap, I could build something custom." ` +
+          `Be opinionated. Do NOT build anything yet — just research and recommend.`;
+
+        try {
+          await api.sendChatSSE(
+            project.id,
+            goal,
+            (topic) => { if (currentProjectId.current === expectedId) setResearchingTopic(topic); },
+            (res) => {
+              if (currentProjectId.current !== expectedId) return;
+              setResearchingTopic(null);
+              setStatusMessage(null);
+              if (res.message) {
+                setMessages((prev) => [...prev, { role: "assistant", content: res.message, actions: res.actions }]);
+              }
+              setIsChatting(false);
+              onMessageReceived?.();
+            },
+            (err) => {
+              if (currentProjectId.current !== expectedId) return;
+              setResearchingTopic(null);
+              setStatusMessage(null);
+              setMessages((prev) => [...prev, { role: "system", content: `Error: ${err}` }]);
+              setIsChatting(false);
+            },
+            (status) => { if (currentProjectId.current === expectedId) setStatusMessage(status); },
+            controller.signal,
+          );
+        } catch {
+          if (currentProjectId.current === expectedId) setIsChatting(false);
+        }
+      } else {
+        // Normal project — request a greeting
+        if (controller.signal.aborted) return;
+        setIsChatting(true);
+        try {
+          await api.sendChatSSE(
+            project.id,
+            undefined,
+            (topic) => { if (currentProjectId.current === expectedId) setResearchingTopic(topic); },
+            (res) => {
+              if (currentProjectId.current !== expectedId) return;
+              setResearchingTopic(null);
+              setStatusMessage(null);
+              if (res.message) {
+                setMessages((prev) => {
+                  const last = prev[prev.length - 1];
+                  if (last?.role === "assistant" && last.content === res.message) return prev;
+                  return [...prev, { role: "assistant", content: res.message, actions: res.actions }];
+                });
+                if (isAudioMode) playTTS(res.message);
+              }
+              if (res.run_id) {
+                setIsRunning(true);
+                setActiveRunId(res.run_id);
+              }
+              setIsChatting(false);
+              onMessageReceived?.();
+            },
+            (err) => {
+              if (currentProjectId.current !== expectedId) return;
+              setResearchingTopic(null);
+              setStatusMessage(null);
+              setMessages((prev) => [...prev, { role: "system", content: `Error: ${err.message}` }]);
+              setIsChatting(false);
+            },
+            (status) => { if (currentProjectId.current === expectedId) setStatusMessage(status); },
+            controller.signal,
+          );
+        } catch {
+          if (currentProjectId.current === expectedId) setIsChatting(false);
+        }
+      }
     };
-    load();
-  }, [project.id, greetingLoaded, hasAutoStarted, project.suggested_by_system, project.run_count, sendChat]);
+    init();
 
-  // Auto-kick-off for suggested projects that haven't been started yet
-  useEffect(() => {
-    if (hasAutoStarted) return;
-    if (!project.suggested_by_system || project.run_count > 0) return;
-
-    setHasAutoStarted(true);
-    setGreetingLoaded(true);
-
-    const kickoff = async () => {
-      setMessages([
-        { role: "system", content: `Starting: ${project.name}` },
-      ]);
-
-      const goal =
-        `You are working on the project "${project.name}". ` +
-        `Context: ${project.description} ` +
-        `Start by figuring out what you need to know to be most helpful. ` +
-        `Do some initial research or planning, then present what you've found ` +
-        `and ask the user what direction they want to go.`;
-
-      sendChat(goal);
-    };
-
-    kickoff();
-  }, [project, hasAutoStarted, sendChat]);
-
-  // Reset state when project changes
-  useEffect(() => {
-    setMessages([]);
-    setActiveRunId(null);
-    setIsRunning(false);
-    setIsChatting(false);
-    setHasAutoStarted(false);
-    setGreetingLoaded(false);
-    setActivityLog([]);
+    // Don't abort on cleanup — let SSE complete in background so backend
+    // work (LLM calls, research, agent runs) isn't interrupted.
+    // The currentProjectId guards in all callbacks prevent cross-contamination.
+    // Abort only happens at the TOP of this effect when re-initializing.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.id]);
 
   // Process streaming events into messages
@@ -223,9 +360,11 @@ export function ChatPanel({ project, onProjectRenamed, onRunComplete }: Props) {
     if (lastEvent.type === "status" && lastEvent.status === "done") {
       setActivityLog([]);
       setIsRunning(false);
-      setShowFullOutput(false);
       setActiveRunId(null);
-      onRunComplete?.();
+      // Only call onRunComplete here if there's no synthesis (synthesis handler calls it instead)
+      if (!synthesis) {
+        onRunComplete?.();
+      }
     }
 
     if (lastEvent.type === "error") {
@@ -269,7 +408,7 @@ export function ChatPanel({ project, onProjectRenamed, onRunComplete }: Props) {
   // Auto-scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, activityLog]);
+  }, [messages, activityLog, researchingTopic]);
 
   // When recording stops and we have a transcript, send it
   const lastTranscriptRef = useRef("");
@@ -309,6 +448,21 @@ export function ChatPanel({ project, onProjectRenamed, onRunComplete }: Props) {
 
   const handleActionClick = (actionText: string) => {
     if (isRunning || isChatting) return;
+
+    // Intercept navigation actions
+    if (actionText.startsWith("navigate_domain:")) {
+      const domain = actionText.split(":")[1];
+      onNavigateDomain?.(domain);
+      return;
+    }
+    if (actionText.startsWith("navigate_project:")) {
+      const id = parseInt(actionText.split(":")[1], 10);
+      if (!isNaN(id)) {
+        onNavigateProject?.(id);
+        return;
+      }
+    }
+
     sendChat(actionText);
   };
 
@@ -327,19 +481,25 @@ export function ChatPanel({ project, onProjectRenamed, onRunComplete }: Props) {
         <h3>{project.name}</h3>
         <div className="chat-header-right">
           {isRunning && <span className="running-indicator">Working...</span>}
-          {isChatting && !isRunning && <span className="running-indicator">Thinking...</span>}
+          {isChatting && !isRunning && <span className="running-indicator">{statusMessage || "Thinking…"}</span>}
           <button
             className={`audio-mode-toggle${isAudioMode ? " active" : ""}`}
             onClick={toggleAudioMode}
             title={isAudioMode ? "Disable auto-speak" : "Enable auto-speak"}
           >
-            {isAudioMode ? "🔊 Voice" : "🔇 Voice"}
+            {isAudioMode ? "Voice On" : "Voice Off"}
           </button>
         </div>
       </div>
 
       <div className="chat-messages">
-        {messages.length === 0 && !busy && greetingLoaded && (
+        {messages.length === 0 && busy && (
+          <div className="chat-loading-indicator">
+            <span className="loading-dot" />
+            <span>{statusMessage || "Getting started…"}</span>
+          </div>
+        )}
+        {messages.length === 0 && !busy && (
           <div className="empty-chat">
             <p className="prompt">What would you like help with?</p>
             <p className="hint">
@@ -357,62 +517,25 @@ export function ChatPanel({ project, onProjectRenamed, onRunComplete }: Props) {
                   <ReactMarkdown>{msg.content}</ReactMarkdown>
                 )}
               </div>
-              {msg.synthesis && (
-                <>
-                  {msg.synthesis.artifacts.length > 0 && (
-                    <div className="synthesis-artifacts">
-                      {msg.synthesis.artifacts.map((art: SynthesisArtifact, k: number) => (
-                        <div key={k} className={`synthesis-artifact artifact-${art.type}`}>
-                          <div className="artifact-header">
-                            <span className="artifact-type">{art.type.replace(/_/g, " ")}</span>
-                            <span className="artifact-title">{art.title}</span>
-                          </div>
-                          <div className="artifact-content">
-                            <ReactMarkdown>{typeof art.content === "string" ? art.content : JSON.stringify(art.content, null, 2)}</ReactMarkdown>
-                          </div>
-                          {art.sources.length > 0 && (
-                            <div className="artifact-sources">
-                              {art.sources.map((src: string, s: number) => (
-                                <a key={s} href={src} target="_blank" rel="noopener noreferrer" className="artifact-source">
-                                  {new URL(src).hostname}
-                                </a>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {msg.synthesis.full_output && (
-                    <div className="synthesis-full-output">
-                      <button
-                        className="full-output-toggle"
-                        onClick={() => setShowFullOutput(!showFullOutput)}
-                      >
-                        {showFullOutput ? "Hide full output" : "View full output"}
-                      </button>
-                      {showFullOutput && (
-                        <div className="full-output-content">
-                          <ReactMarkdown>{msg.synthesis.full_output}</ReactMarkdown>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </>
+              {msg.synthesis?.artifacts && msg.synthesis.artifacts.length > 0 && (
+                <div className="synthesis-workspace-hint">
+                  {msg.synthesis.artifacts.length} item{msg.synthesis.artifacts.length > 1 ? "s" : ""} added to workspace →
+                </div>
               )}
             </div>
             {msg.actions && msg.actions.length > 0 && (
               <div className="chat-actions">
-                {msg.actions.map((action, j) => (
+                {msg.actions.filter((a) => a.action_text || a.label).map((action, j) => (
                   <button
                     key={j}
                     className="chat-action-card"
-                    onClick={() => handleActionClick(action.action_text)}
+                    onClick={() => handleActionClick(action.action_text ?? "")}
                     disabled={busy}
+                    title={`${action.label}\n${action.description || ''}`}
                   >
-                    <span className="chat-action-label">{action.label}</span>
+                    <span className="chat-action-label">{smartTruncate(actionLabel(action), 40)}</span>
                     {action.description && (
-                      <span className="chat-action-desc">{action.description}</span>
+                      <span className="chat-action-desc">{smartTruncate(action.description, 100)}</span>
                     )}
                   </button>
                 ))}
@@ -421,6 +544,12 @@ export function ChatPanel({ project, onProjectRenamed, onRunComplete }: Props) {
             )}
           </div>
         ))}
+        {researchingTopic && (
+          <div className="researching-indicator">
+            <span className="researching-dot" />
+            Researching {researchingTopic}…
+          </div>
+        )}
         {activityLog.length > 0 && (
           <div className="activity-log">
             <div className="activity-log-header">
@@ -443,6 +572,7 @@ export function ChatPanel({ project, onProjectRenamed, onRunComplete }: Props) {
         <div ref={messagesEndRef} />
       </div>
 
+      <ContextUpload userId={userId} projectId={project.id} />
       <div className="chat-input-area">
         <textarea
           value={input}
@@ -450,7 +580,7 @@ export function ChatPanel({ project, onProjectRenamed, onRunComplete }: Props) {
           onKeyDown={handleKeyDown}
           placeholder={
             isRecording ? "Listening..." :
-            busy ? (isRunning ? "Agent is working..." : "Thinking...") :
+            busy ? (isRunning ? "Agent is working..." : (statusMessage || "Thinking…")) :
             "Tell me what you need..."
           }
           disabled={busy}
@@ -461,7 +591,7 @@ export function ChatPanel({ project, onProjectRenamed, onRunComplete }: Props) {
           onClick={handleMicClick}
           title={isRecording ? "Stop recording" : isPlaying ? "Stop playback" : "Voice input"}
         >
-          {isRecording ? "⏹" : isPlaying ? "⏸" : "🎤"}
+          {isRecording ? "Stop" : isPlaying ? "Pause" : "Mic"}
         </button>
         <button onClick={handleSend} disabled={busy || !input.trim()}>
           Send

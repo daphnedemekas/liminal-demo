@@ -13,152 +13,79 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from backend.database import ChatMessage, Project, AgentRun, UserProfile
-from backend.services.llm import chat, chat_json, parse_json
+from backend.services.llm import chat, chat_messages, parse_json, MODEL_MINI
 from backend.services.prompt_builder import build_system_prompt, build_synthesis_prompt
+from backend.services.context_service import get_context_text
+from backend.services.memory import extract_insights, retrieve_insights
+
+from backend.prompts.mediator import (
+    MEDIATOR_SIGNAL_EXTRACTION_PROMPT as SIGNAL_EXTRACTION_PROMPT,
+    MEDIATOR_ASK_QUESTION_PROMPT as ASK_QUESTION_PROMPT,
+    MEDIATOR_PROPOSE_PLAN_PROMPT as PROPOSE_PLAN_PROMPT,
+    MEDIATOR_ESCALATE_PROMPT as ESCALATE_PROMPT,
+    MEDIATOR_GREETING_PROMPT as GREETING_PROMPT,
+    APPROVAL_PHRASES,
+)
 
 logger = logging.getLogger(__name__)
-
-# ── Prompts ──────────────────────────────────────────────────────────
-
-SIGNAL_EXTRACTION_PROMPT = """\
-You are analyzing a project conversation. Extract structured signals from the latest exchange.
-
-Conversation:
-{conversation}
-
-Latest user message: {latest_message}
-
-Existing signals: {existing_signals}
-
-Extract and return a JSON object with these fields (merge with existing — keep what's there, add new):
-- "intent": string — what the user is trying to accomplish (update if clearer now)
-- "constraints": list of strings — budget, timeline, preferences, requirements mentioned
-- "decisions_made": list of strings — things the user has confirmed or chosen
-- "open_questions": list of strings — things still unclear that MUST be answered before work can begin
-- "needs": list of strings — specific things they need help with
-- "goals": list of strings — what they're trying to achieve
-
-IMPORTANT rules for open_questions:
-- REMOVE any question from open_questions that the user has now answered (even partially)
-- Only include questions that are truly BLOCKING — things you absolutely cannot proceed without
-- Do NOT invent nice-to-have questions. If you have enough to start working, open_questions should be EMPTY.
-- When the user selects a specific option or gives a clear direction, that resolves the question — remove it.
-
-Return ONLY the JSON object."""
-
-ASK_QUESTION_PROMPT = """\
-You are a conversational planning partner. Based on what you know, ask 1-2 focused follow-up questions.
-
-{base_prompt}
-
-## What we know so far
-{signals}
-
-## Open questions to resolve
-{open_questions}
-
-## Conversation so far
-{conversation}
-
-Ask 1-2 specific, focused questions to resolve the most important open questions.
-Do NOT present generic menu options. Ask real questions about THEIR situation.
-
-IMPORTANT: When you present distinct options or choices for the user to pick from, you MUST
-include them as actions so they render as clickable buttons. Each action needs:
-- "label": short button text (e.g. "Start with research")
-- "description": one-line explanation
-- "action_text": what gets sent as the user's reply if they click it
-
-If your question is open-ended with no distinct choices, use an empty actions array.
-
-Respond with JSON:
-{{"message": "your question(s)", "actions": [{{"label": "Option label", "description": "What this means", "action_text": "The reply text"}}], "escalate": false, "task_description": ""}}
-
-Return ONLY the JSON object."""
-
-PROPOSE_PLAN_PROMPT = """\
-You are a conversational planning partner. Based on what you've learned, propose a concrete plan.
-
-{base_prompt}
-
-## What we know
-{signals}
-
-## Conversation so far
-{conversation}
-
-Propose a concrete, numbered action plan based on everything you've learned.
-Be specific — reference actual details from the conversation.
-End with action buttons so the user can approve or adjust.
-
-Respond with JSON:
-{{"message": "your plan proposal", "actions": [{{"label": "Looks good, let's go", "description": "Approve this plan and start working", "action_text": "Looks good, let's go"}}, {{"label": "I want to adjust something", "description": "Modify the plan before starting", "action_text": "I want to adjust something"}}], "escalate": false, "task_description": ""}}
-
-Return ONLY the JSON object."""
-
-ESCALATE_PROMPT = """\
-You are handing off to an execution agent. Write a detailed task description.
-
-{base_prompt}
-
-## What we know
-{signals}
-
-## Conversation so far
-{conversation}
-
-Write a brief confirmation message and a detailed task_description that contains
-everything the agent needs to do the work without talking to the user again.
-Include: goal, constraints, decisions made, specific requirements.
-
-Respond with JSON:
-{{"message": "your brief confirmation", "actions": [], "escalate": true, "task_description": "detailed task description here"}}
-
-Return ONLY the JSON object."""
-
-GREETING_PROMPT = """\
-You are Liminal, a personal AI assistant.
-
-{base_prompt}
-
-{run_context}
-
-The user just opened the project "{project_name}". {greeting_instruction}
-
-Respond with JSON:
-{{"message": "your greeting", "actions": [], "escalate": false, "task_description": ""}}
-
-Return ONLY the JSON object."""
-
-APPROVAL_PHRASES = [
-    "looks good", "let's go", "go ahead", "do it", "approve", "approved",
-    "sounds good", "perfect", "yes", "yep", "yeah", "ship it", "lgtm",
-    "go for it", "start working", "let's do it", "proceed",
-]
 
 
 # ── Main entry point ─────────────────────────────────────────────────
 
 def mediate(project_id: int, user_message: Optional[str], db: Session) -> dict:
-    """Process a user message through the structured mediation pipeline.
+    """Process a user message through the full mediation pipeline (extract + generate).
 
     Returns dict with keys: message, actions, escalate, task_description
     """
+    extract_result = mediate_extract(project_id, user_message, db)
+
+    # If extract returned an early result (greeting, cached), just return it
+    if extract_result.get("_early_return"):
+        result = extract_result
+        result.pop("_early_return", None)
+        return result
+
+    return mediate_generate(extract_result, db)
+
+
+def mediate_extract(project_id: int, user_message: Optional[str], db: Session) -> dict:
+    """Extract phase: signals, action, context. Returns intermediate state for generate phase.
+
+    Returns dict with _extract_state key containing: action, signals, messages, base_prompt, project_id, user_message
+    Or returns a full result dict with _early_return=True for greeting/home cases.
+    """
+    # Home chat gets its own conversational flow — no plan/escalate pipeline
+    project = db.query(Project).filter_by(id=project_id).first()
+    if project and project.domain == "home":
+        from backend.services.home import home_chat_extract
+        return home_chat_extract(project_id, user_message, db)
+
     project, user, recent, recent_runs = _load_context(project_id, db)
     messages = [{"role": m.role, "content": m.content} for m in recent]
     base_prompt = build_system_prompt(user, project)
 
+    # Inject user-uploaded context
+    context_text = get_context_text(db, user.id, project_id=project_id)
+    if context_text:
+        base_prompt += f"\n\n{context_text}"
+
+    # Inject memory insights
+    memory = retrieve_insights(user.id, user_message or project.description, db)
+    if memory:
+        base_prompt += f"\n\n{memory}"
+
     # Greeting case — no user message, but only if no assistant message exists yet
     if not user_message:
         if any(m["role"] == "assistant" for m in messages):
-            # Already greeted — return the last assistant message
             last = next(m for m in reversed(messages) if m["role"] == "assistant")
-            return {"message": last["content"], "actions": [], "escalate": False, "task_description": ""}
-        return _handle_greeting(project, user, messages, recent_runs, base_prompt, db)
+            return {"message": last["content"], "actions": [], "escalate": False, "task_description": "", "_early_return": True}
+        result = _handle_greeting(project, user, messages, recent_runs, base_prompt, db)
+        result["_early_return"] = True
+        return result
 
     # Save user message
     db.add(ChatMessage(project_id=project_id, role="user", content=user_message))
-    db.flush()
+    db.commit()
     messages.append({"role": "user", "content": user_message})
 
     # Count user turns in this conversation
@@ -189,16 +116,69 @@ def mediate(project_id: int, user_message: Optional[str], db: Session) -> dict:
         # Step 2: Rank — decide what action to take
         action = _rank(merged, turn_count, user_message)
 
-    # Step 3: Generate response for the chosen action
-    try:
-        result = _generate(action, merged, messages, base_prompt)
-    except Exception as e:
-        logger.warning(f"Generation failed: {e}")
+    # Check for research request from signals
+    research_topic = None
+    research = merged.get("research")
+    if research and isinstance(research, str) and research.strip():
+        research_topic = research.strip()
+
+    return {
+        "_extract_state": {
+            "action": action,
+            "signals": merged,
+            "messages": messages,
+            "base_prompt": base_prompt,
+            "project_id": project_id,
+            "user_id": user.id,
+            "user_message": user_message,
+            "project_name": project.name,
+        },
+        "_pending_research": research_topic,
+    }
+
+
+def mediate_generate(extract_result: dict, db: Session) -> dict:
+    """Generate phase: produce response from extracted signals.
+
+    Takes the output of mediate_extract (must have _extract_state key).
+    Returns dict with keys: message, actions, escalate, task_description
+    """
+    state = extract_result["_extract_state"]
+
+    # Home chat has its own generate path (no action/rank pipeline)
+    if "action" not in state:
+        from backend.services.home import home_chat_generate
+        return home_chat_generate(extract_result, db)
+
+    action = state["action"]
+    signals = state["signals"]
+    messages = state["messages"]
+    base_prompt = state["base_prompt"]
+    project_id = state["project_id"]
+    user_id = state["user_id"]
+    user_message = state["user_message"]
+    project_name = state["project_name"]
+
+    # Step 3: Generate response for the chosen action (retry once on failure)
+    result = None
+    for attempt in range(2):
+        try:
+            result = _generate(action, signals, messages, base_prompt)
+            break
+        except Exception as e:
+            logger.warning(f"Generation attempt {attempt+1} failed: {e}")
+    if result is None:
         result = {
-            "message": "Let me work on that.",
+            "message": "I'll start by researching what's out there — you'll see progress below as the agent works.",
             "actions": [],
             "escalate": True,
-            "task_description": user_message or f"Get started on {project.name}",
+            "task_description": (
+                user_message or
+                f"Research the landscape for \"{project_name}\": existing tools, services, approaches, "
+                f"pricing, and how well each fits the user's specific need. End with a clear recommendation: "
+                f"either recommend the best existing tool and why, or explain the gap and offer to build custom. "
+                f"Be opinionated. Do NOT build anything yet — just research and recommend."
+            ),
         }
 
     # Normalize
@@ -206,6 +186,9 @@ def mediate(project_id: int, user_message: Optional[str], db: Session) -> dict:
     result.setdefault("actions", [])
     result.setdefault("escalate", False)
     result.setdefault("task_description", "")
+
+    # Drop research field from generation result (handled by extract phase)
+    result.pop("research", None)
 
     # Save assistant message
     db.add(ChatMessage(
@@ -215,6 +198,10 @@ def mediate(project_id: int, user_message: Optional[str], db: Session) -> dict:
         actions=result["actions"],
     ))
     db.commit()
+
+    # Extract insights from this exchange
+    if user_message:
+        extract_insights(user_id, user_message, result["message"], "project", str(project_id), db)
 
     return result
 
@@ -251,10 +238,17 @@ def _load_context(project_id: int, db: Session):
     return project, user, recent, recent_runs
 
 
+def _strip_xml_tag(text: str, tag: str) -> str:
+    """Strip an XML tag and its contents from text."""
+    import re
+    return re.sub(rf"<{tag}>.*?</{tag}>", "", text, flags=re.DOTALL).strip()
+
+
 def _extract_signals(messages: list[dict], latest_message: str, existing_signals: dict) -> dict:
     """LLM call #1: extract structured signals from the conversation.
 
     Uses mini model for speed — this is structured extraction, not creative generation.
+    Strips <analysis> CoT reasoning before parsing JSON.
     """
     conversation = "\n".join(f"{m['role']}: {m['content']}" for m in messages[-10:])
     prompt = SIGNAL_EXTRACTION_PROMPT.format(
@@ -262,7 +256,10 @@ def _extract_signals(messages: list[dict], latest_message: str, existing_signals
         latest_message=latest_message,
         existing_signals=json.dumps(existing_signals),
     )
-    return chat_json(prompt)
+    from backend.services.llm import chat, parse_json as _parse_json
+    raw = chat(prompt, model=MODEL_MINI)
+    cleaned = _strip_xml_tag(raw, "analysis")
+    return _parse_json(cleaned)
 
 
 def _merge_signals(existing: dict, new: dict) -> dict:
@@ -325,39 +322,50 @@ def _user_approved(text: str) -> bool:
 
 
 def _generate(action: str, signals: dict, messages: list[dict], base_prompt: str) -> dict:
-    """LLM call #2: generate a response for the chosen action."""
-    conversation = "\n".join(f"{m['role']}: {m['content']}" for m in messages[-10:])
+    """LLM call #2: generate a response for the chosen action.
+
+    Uses chat_messages() to pass base_prompt as system prompt and conversation
+    history as actual message turns, so the LLM sees proper role structure.
+    The action-specific instruction is appended as the final user message.
+    """
     signals_str = json.dumps(signals, indent=2)
     open_questions = "\n".join(f"- {q}" for q in signals.get("open_questions", [])) or "None identified"
 
     if action == "ask_question":
-        prompt = ASK_QUESTION_PROMPT.format(
-            base_prompt=base_prompt,
+        instruction = ASK_QUESTION_PROMPT.format(
             signals=signals_str,
             open_questions=open_questions,
-            conversation=conversation,
         )
     elif action == "propose_plan":
-        prompt = PROPOSE_PLAN_PROMPT.format(
-            base_prompt=base_prompt,
+        instruction = PROPOSE_PLAN_PROMPT.format(
             signals=signals_str,
-            conversation=conversation,
         )
     elif action == "escalate":
-        prompt = ESCALATE_PROMPT.format(
-            base_prompt=base_prompt,
+        instruction = ESCALATE_PROMPT.format(
             signals=signals_str,
-            conversation=conversation,
         )
     else:
         raise ValueError(f"Unknown action: {action}")
 
-    raw = chat(prompt)
+    # Build message list: conversation history + instruction as final user message.
+    # If last message is user role, merge instruction into it to avoid consecutive
+    # user messages (which OpenAI rejects).
+    llm_messages = [{"role": m["role"], "content": m["content"]} for m in messages[-20:]]
+    if llm_messages and llm_messages[-1]["role"] == "user":
+        llm_messages[-1] = {
+            "role": "user",
+            "content": llm_messages[-1]["content"] + "\n\n---\n\n" + instruction,
+        }
+    else:
+        llm_messages.append({"role": "user", "content": instruction})
+
+    raw = chat_messages(base_prompt, llm_messages, json_mode=True)
     return parse_json(raw)
 
 
-def _handle_greeting(project, user, messages, recent_runs, base_prompt, db) -> dict:
+def _handle_greeting(project, _user, messages, recent_runs, base_prompt, db) -> dict:  # noqa: ARG001
     """Handle the greeting case when user opens a project with no message."""
+
     run_context = ""
     if recent_runs:
         run_context = "## Recent work in this project"
@@ -369,17 +377,22 @@ def _handle_greeting(project, user, messages, recent_runs, base_prompt, db) -> d
                 run_context += f"\n  Result: {result_snippet}"
         greeting_instruction = "Welcome them back briefly, remind them where things stand, and ask what they'd like to focus on next."
     else:
-        greeting_instruction = "Greet them briefly and ask a specific question to understand what they're trying to accomplish. Don't present generic options — start a real conversation."
+        greeting_instruction = "Greet them briefly and ask what they'd like help with. Don't present generic options — start a real conversation."
 
-    prompt = GREETING_PROMPT.format(
-        base_prompt=base_prompt,
+    # Don't mention the default "New task" name — it's meaningless
+    display_name = project.name if project.name.lower() not in ("new task", "untitled") else "this new task"
+    instruction = GREETING_PROMPT.format(
         run_context=run_context,
-        project_name=project.name,
+        project_name=display_name,
         greeting_instruction=greeting_instruction,
     )
 
+    # Pass any existing conversation as message history, instruction as final user message
+    llm_messages = [{"role": m["role"], "content": m["content"]} for m in messages[-20:]]
+    llm_messages.append({"role": "user", "content": instruction})
+
     try:
-        raw = chat(prompt)
+        raw = chat_messages(base_prompt, llm_messages, json_mode=True)
         result = parse_json(raw)
     except Exception as e:
         logger.warning(f"Greeting LLM call failed: {e}")
@@ -436,9 +449,18 @@ def synthesize_result(run: AgentRun, project: Project, user: UserProfile, db: Se
         result = parse_json(raw)
     except Exception as e:
         logger.warning(f"Synthesis LLM call failed: {e}")
+        # Fallback: put the raw output into an artifact (right panel) instead of dumping it into chat
+        raw_output = run.result_summary or ""
+        # Extract a brief first line/sentence for the chat summary
+        first_line = raw_output.split("\n")[0].strip() if raw_output else "The task completed."
         result = {
-            "summary": run.result_summary or "The task completed.",
-            "artifacts": [],
+            "summary": f"{first_line}\n\nI've put the full findings on the right — take a look and let me know what direction you'd like to go.",
+            "artifacts": [{
+                "type": "report",
+                "title": f"{project.name} — Research",
+                "content": {"markdown": raw_output},
+                "sources": [],
+            }] if raw_output else [],
             "suggested_next_steps": [],
             "actions": [],
         }
@@ -481,6 +503,63 @@ def synthesize_result(run: AgentRun, project: Project, user: UserProfile, db: Se
         run_id=run.run_id,
     ))
     db.commit()
+
+    return result
+
+
+def mediate_regenerate(project_id: int, research_topic: str, research_text: str, db: Session) -> dict:
+    """Re-run generation step with research context injected. Skips signal extraction."""
+    project = db.query(Project).filter_by(id=project_id).first()
+    if not project:
+        raise ValueError(f"Project {project_id} not found")
+
+    # Home chat gets its own regeneration
+    if project and project.domain == "home":
+        from backend.services.home import home_chat_regenerate
+        return home_chat_regenerate(project_id, research_topic, research_text, db)
+
+    project, user, recent, _ = _load_context(project_id, db)
+    messages = [{"role": m.role, "content": m.content} for m in recent]
+    base_prompt = build_system_prompt(user, project)
+
+    context_text = get_context_text(db, user.id, project_id=project_id)
+    if context_text:
+        base_prompt += f"\n\n{context_text}"
+
+    memory = retrieve_insights(user.id, project.description or "", db)
+    if memory:
+        base_prompt += f"\n\n{memory}"
+
+    # Inject research context — tell the LLM the full details are in the workspace
+    base_prompt += (
+        f"\n\n## Research Results (displayed in the workspace panel on the right)\n"
+        f"Topic: {research_topic}\n\n"
+        f"The following research has been completed and is ALREADY VISIBLE to the user "
+        f"in the workspace panel on the right side of their screen. Do NOT repeat these "
+        f"details in your chat message. Instead, briefly reference what was found and "
+        f"focus your chat message on the actionable next step or question.\n\n"
+        f"{research_text[:3000]}"
+    )
+
+    existing_signals = project.conversation_signals or {}
+    turn_count = sum(1 for m in messages if m["role"] == "user")
+    action = _rank(existing_signals, turn_count, messages[-1]["content"] if messages else "")
+
+    result = _generate(action, existing_signals, messages, base_prompt)
+    result.setdefault("message", "")
+    result.setdefault("actions", [])
+
+    # Update the saved assistant message (replace the last one)
+    last_msg = (
+        db.query(ChatMessage)
+        .filter_by(project_id=project_id, role="assistant")
+        .order_by(ChatMessage.created_at.desc())
+        .first()
+    )
+    if last_msg:
+        last_msg.content = result["message"]
+        last_msg.actions = result.get("actions", [])
+        db.commit()
 
     return result
 

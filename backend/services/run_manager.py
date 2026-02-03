@@ -61,7 +61,9 @@ class RunManager:
                     .all()
                 )
                 system_prompt = build_system_prompt(user, project)
-                instruction = build_instruction(user, project, run.goal, recent_runs)
+                from backend.services.context_service import get_context_text
+                ctx = get_context_text(session, user.id, project_id=project.id)
+                instruction = build_instruction(user, project, run.goal, recent_runs, context_text=ctx)
                 run.enriched_instruction = instruction
                 run.system_prompt_hash = prompt_hash(system_prompt)
 
@@ -95,9 +97,15 @@ class RunManager:
                     })
 
                 if ev.type == "assistant":
-                    result_parts.append(ev.content.get("text", ""))
+                    # Intermediate assistant text - only add if not duplicate
+                    text = ev.content.get("text", "")
+                    if text and (not result_parts or result_parts[-1] != text):
+                        result_parts.append(text)
                 elif ev.type == "result":
-                    result_parts.append(ev.content.get("text", ""))
+                    # Final result - only add if not duplicate
+                    text = ev.content.get("text", "")
+                    if text and (not result_parts or result_parts[-1] != text):
+                        result_parts.append(text)
                     cost_usd = ev.content.get("cost_usd", 0)
                     run.cost_cents = int(float(cost_usd) * 100) if cost_usd else 0
                     run.token_usage = ev.content.get("tokens", {})
@@ -121,6 +129,8 @@ class RunManager:
                 # Synthesize results before broadcasting done
                 try:
                     synthesis = synthesize_result(run, project, user, session)
+                    # Flush artifacts to DB before broadcasting so workspace refresh finds them
+                    session.commit()
                     if on_event:
                         await on_event(run_id, {
                             "type": "synthesis",

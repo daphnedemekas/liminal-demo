@@ -20,17 +20,7 @@ class ExecutorEvent:
 class ClaudeCodeExecutor:
     """Executes instructions via Claude Code CLI and streams structured events."""
 
-    SYSTEM_PROMPT = (
-        "You are Liminal, a helpful general-purpose AI assistant. "
-        "You help users with anything they need: research, planning, analysis, "
-        "writing, organizing, learning, home projects, business tasks, and more. "
-        "You are NOT limited to software engineering. "
-        "You have access to web search, web browsing, file operations, and code execution. "
-        "Use these tools proactively to find information, compare options, "
-        "gather sources, and produce useful deliverables for the user. "
-        "Always cite your sources with URLs when doing research. "
-        "Be practical, thorough, and action-oriented."
-    )
+    from backend.prompts.executor import EXECUTOR_SYSTEM_PROMPT as SYSTEM_PROMPT
 
     async def execute(
         self,
@@ -78,6 +68,12 @@ class ClaudeCodeExecutor:
                         yield event
                 except json.JSONDecodeError:
                     logger.warning(f"Non-JSON line from claude: {line[:200]}")
+        except GeneratorExit:
+            # Generator was closed (e.g. by timeout/cancellation) — kill the process
+            logger.info("Executor generator closed, killing subprocess")
+            process.kill()
+            await process.wait()
+            return
         except Exception as e:
             yield ExecutorEvent(type="error", content={"error": str(e)}, raw={})
 

@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from backend.database import UserProfile, OnboardingState, get_db
+from backend.database import UserProfile, OnboardingState, Project, get_db
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -55,7 +55,26 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
         db.add(OnboardingState(user_id=user.id))
         db.commit()
         db.refresh(user)
+
+    # Ensure home project exists
+    _ensure_home_project(user.id, db)
+
     return user
+
+
+def _ensure_home_project(user_id: str, db: Session):
+    """Create the home chat project if it doesn't exist."""
+    home = db.query(Project).filter_by(user_id=user_id, domain="home").first()
+    if not home:
+        home = Project(
+            user_id=user_id,
+            name="Home",
+            domain="home",
+            description="Your general-purpose chat. Ask anything, explore ideas, or start new projects.",
+            suggested_by_system=True,
+        )
+        db.add(home)
+        db.commit()
 
 
 @router.get("/user/{user_id}", response_model=UserResponse)

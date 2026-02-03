@@ -27,7 +27,16 @@ You are synthesizing the results of an agent run for {user_name}.
 {raw_result}
 
 ## Your task
-Summarize this result for the user. {depth_instruction}
+Create a CONCISE chat summary and detailed workspace artifacts.
+
+**Summary rules (appears in the chat panel on the LEFT):**
+- The summary must be SHORT: 2-3 sentences max.
+- Reference what was found at a high level, then state the key actionable next step or question.
+- Do NOT repeat details that are in the artifacts — the user can see them in the workspace panel on the right.
+- Example good summary: "I've researched incorporation options and O-1 visa requirements — the details are in your workspace. You should contact immigration attorneys this week. Want me to find specific attorneys or draft outreach emails?"
+
+**Artifact rules (appear in the workspace panel on the RIGHT):**
+{depth_instruction}
 
 Extract structured artifacts from the output. Create MULTIPLE artifacts — break the content into logical pieces rather than one big blob. Each artifact must use one of these types with the specified content format:
 

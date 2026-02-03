@@ -1,5 +1,6 @@
 """Database setup and SQLAlchemy models."""
 
+import logging
 import os
 import uuid
 from datetime import datetime, timezone
@@ -9,6 +10,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.ext.mutable import MutableDict, MutableList
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
+
+logger = logging.getLogger(__name__)
 
 Base = declarative_base()
 
@@ -69,6 +72,7 @@ class DiscoveryDomain(Base):
     domain = Column(String, nullable=False)  # work|social|studies|health|hobbies|money|mental_health
     status = Column(String, default="pending")  # pending|active|explored|completed
     depth = Column(Integer, default=0)  # how many narrowing turns completed
+    schema = Column(MutableDict.as_mutable(JSON), default=dict)  # LLM-generated narrowing schema
     signals = Column(MutableDict.as_mutable(JSON), default=dict)
     conversation = Column(MutableList.as_mutable(JSON), default=list)
     proposed_projects = Column(MutableList.as_mutable(JSON), default=list)
@@ -173,6 +177,37 @@ class Artifact(Base):
     project = relationship("Project", back_populates="artifacts")
 
 
+class Insight(Base):
+    __tablename__ = "insights"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String, ForeignKey("user_profiles.id"), nullable=False, index=True)
+    source_layer = Column(String, nullable=False)   # "home" | "discovery" | "project"
+    source_id = Column(String, nullable=True)        # project_id or domain name
+    category = Column(String, nullable=False)         # bio | preference | goal | friction | value | fact | decision
+    content = Column(Text, nullable=False)
+    keywords = Column(String, default="")
+    confidence = Column(String, default="stated")     # stated | inferred
+    superseded_by = Column(Integer, ForeignKey("insights.id"), nullable=True)
+    created_at = Column(DateTime, default=utcnow)
+
+
+class ContextAttachment(Base):
+    __tablename__ = "context_attachments"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String, ForeignKey("user_profiles.id"), nullable=False, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)  # null = discovery/global
+    discovery_domain_id = Column(Integer, ForeignKey("discovery_domains.id"), nullable=True)
+
+    source_type = Column(String, nullable=False)  # "url" | "text" | "pdf"
+    source_ref = Column(String, nullable=True)     # URL or filename
+    title = Column(String, nullable=True)
+    extracted_text = Column(Text, nullable=False)
+
+    created_at = Column(DateTime, default=utcnow)
+
+
 # ── Database setup ──────────────────────────────────────────────────
 
 DB_PATH = os.environ.get("DATABASE_PATH", "data/liminal.db")
@@ -184,7 +219,19 @@ _SessionFactory = None
 def get_engine():
     global _engine
     if _engine is None:
-        _engine = create_engine(f"sqlite:///{DB_PATH}", echo=False)
+        _engine = create_engine(
+            f"sqlite:///{DB_PATH}",
+            echo=False,
+            connect_args={"timeout": 15},  # wait up to 15s for locks
+        )
+
+        # Enable WAL mode for concurrent read/write from background threads
+        @event.listens_for(_engine, "connect")
+        def _set_sqlite_pragma(dbapi_conn, connection_record):
+            cursor = dbapi_conn.cursor()
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.close()
+
     return _engine
 
 
@@ -206,5 +253,70 @@ def get_db():
     session = get_session_factory()()
     try:
         yield session
+    finally:
+        session.close()
+
+
+def seed_demo_data():
+    """Seed the database with Maria Santos demo profile and projects if empty."""
+    session = get_session_factory()()
+    try:
+        if session.query(UserProfile).count() > 0:
+            return  # already seeded
+
+        user = UserProfile(
+            id="maria-santos-demo",
+            name="Maria Santos",
+            user_type="individual",
+            onboarding_info="Product manager interested in home renovation and personal productivity.",
+            onboarding_complete=True,
+            default_involvement="check_ins",
+            explanation_preference="brief_summary",
+            known_domains={"home": True, "work": True},
+            connected_sources=[],
+            model_summary="Maria is a product manager exploring home renovation projects and productivity systems. She prefers concise summaries and periodic check-ins.",
+            discovery_complete=True,
+            selected_domains=["home", "work"],
+        )
+        session.add(user)
+
+        home_project = Project(
+            user_id=user.id,
+            name="Kitchen Renovation Research",
+            description="Research kitchen backsplash options, compare materials, and find contractors in the Austin area. Budget around $800.",
+            status="active",
+            involvement_level="check_ins",
+            budget_limit_cents=80000,
+            suggested_by_system=True,
+            domain="hobbies",
+        )
+        session.add(home_project)
+
+        work_project = Project(
+            user_id=user.id,
+            name="Productivity System Overhaul",
+            description="Evaluate and set up a personal productivity system. Compare tools like Notion, Obsidian, and Todoist. Set up weekly review workflow.",
+            status="active",
+            involvement_level="check_ins",
+            suggested_by_system=True,
+            domain="work",
+        )
+        session.add(work_project)
+
+        blank_project = Project(
+            user_id=user.id,
+            name="Home",
+            description="General assistant — ask anything or start a new project.",
+            status="active",
+            suggested_by_system=False,
+            domain="home",
+        )
+        session.add(blank_project)
+
+        session.commit()
+        logger.info("Demo data seeded: Maria Santos with 3 projects")
+    except Exception as e:
+        session.rollback()
+        logger.warning(f"Failed to seed demo data: {e}")
     finally:
         session.close()

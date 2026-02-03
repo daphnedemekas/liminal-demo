@@ -178,7 +178,9 @@ ARTIFACT_TYPE_SCHEMAS = """\
 6. **comparison_table** — side-by-side comparisons (use markdown table string)
    content: "| Column 1 | Column 2 |\\n|---|---|\\n| ... | ... |"
 
-IMPORTANT: For schedule, checklist, video_collection, and resource_list, `content` must be a JSON OBJECT (not a string). For report and comparison_table, `content` is a markdown string."""
+7. **app** — interactive HTML applications built by the agent (DO NOT create these in synthesis — they are captured automatically from .html files the agent writes during execution)
+
+IMPORTANT: For schedule, checklist, video_collection, and resource_list, `content` must be a JSON OBJECT (not a string). For report and comparison_table, `content` is a markdown string. For app, artifacts are created automatically — do NOT include app artifacts in your synthesis response."""
 
 
 def build_synthesis_prompt(
@@ -259,23 +261,60 @@ Suggest 2-3 concrete next steps the user could take based on the results.
 <example>
 <goal>Find the best project management tool for a 5-person startup using GitHub</goal>
 <raw_agent_output>Researched Linear, Asana, Shortcut, and GitHub Projects. Linear has best GitHub integration...</raw_agent_output>
-<ideal_response>{{"summary": "Linear is your best bet — it has native GitHub integration, is built for engineering teams, and at $8/user/month fits a 5-person team easily. Asana and Shortcut are decent but require more setup for GitHub sync. Want me to help you get Linear set up?", "artifacts": [{{"type": "comparison_table", "title": "PM Tool Comparison", "content": "| Tool | GitHub Integration | Price/user | Best For |\\n|---|---|---|---|\\n| Linear | Native, 2-way sync | $8/mo | Engineering teams |\\n| Shortcut | Good, via integration | $8.50/mo | Small teams |\\n| Asana | Basic, needs Zapier | $10.99/mo | Cross-functional |\\n| GitHub Projects | Built-in | Free | Simple tracking |", "sources": ["https://linear.app/pricing", "https://shortcut.com/pricing"]}}, {{"type": "report", "title": "Detailed Analysis", "content": "## Why Linear Wins\\n\\nFor a 5-person startup already on GitHub...", "sources": []}}], "suggested_next_steps": ["Sign up for Linear free trial", "Import existing GitHub issues", "Set up team workflows"], "actions": [{{"label": "Set me up with Linear", "description": "I'll help configure Linear for your team", "action_text": "Help me get set up with Linear"}}, {{"label": "Tell me more first", "description": "I have questions before deciding", "action_text": "I have some questions before we proceed"}}]}}</ideal_response>
+<ideal_response>{{"summary": "Linear is your best bet — it has native GitHub integration, is built for engineering teams, and at $8/user/month fits a 5-person team easily. Asana and Shortcut are decent but require more setup for GitHub sync. Want me to help you get Linear set up?", "artifacts": [{{"type": "comparison_table", "title": "PM Tool Comparison", "content": "| Tool | GitHub Integration | Price/user | Best For |\\n|---|---|---|---|\\n| Linear | Native, 2-way sync | $8/mo | Engineering teams |\\n| Shortcut | Good, via integration | $8.50/mo | Small teams |\\n| Asana | Basic, needs Zapier | $10.99/mo | Cross-functional |\\n| GitHub Projects | Built-in | Free | Simple tracking |", "sources": ["https://linear.app/pricing", "https://shortcut.com/pricing"]}}, {{"type": "report", "title": "Detailed Analysis", "content": "## Why Linear Wins\\n\\nFor a 5-person startup already on GitHub...", "sources": []}}], "suggested_next_steps": ["Sign up for Linear free trial", "Import existing GitHub issues", "Set up team workflows"], "actions": [{{"label": "Set me up with Linear", "task_type": "tool_setup", "description": "I'll help configure Linear for your team", "action_text": "Help me get set up with Linear"}}, {{"label": "Build custom tracker", "task_type": "app_build", "description": "I'll build a custom project tracker", "action_text": "Build me a custom project tracking app"}}, {{"label": "Tell me more first", "task_type": "research", "description": "I have questions before deciding", "action_text": "I have some questions before we proceed"}}]}}</ideal_response>
 </example>
 
 Create as many artifacts as the content warrants — e.g. a pottery workshop might produce a schedule artifact, a checklist of supplies, a video_collection of tutorials, and a resource_list of websites. Always include at least 2 suggested_next_steps and corresponding actions.
 
-**Action buttons must match your recommendation.** Examples:
-- If recommending a tool: {{"label": "Set me up with [Tool]", "description": "I'll help you get started with [Tool]", "action_text": "Help me get set up with [Tool]"}}
-- If recommending custom build: {{"label": "Build it for me", "description": "I'll create a custom solution", "action_text": "Go ahead and build a custom solution for this"}}
-- If hybrid: {{"label": "Start with [Tool]", ...}} AND {{"label": "Build the missing piece", ...}}
-- Always include an alternative: {{"label": "Tell me more first", "description": "I have questions before deciding", "action_text": "I have some questions before we proceed"}}
+**Action buttons must match your recommendation and include task_type.** Valid task_type values: research, tool_setup, app_build, content.
+Examples:
+- If recommending a tool: {{"label": "Set me up with [Tool]", "task_type": "tool_setup", "description": "I'll help you get started with [Tool]", "action_text": "Help me get set up with [Tool]"}}
+- If recommending custom build: {{"label": "Build it for me", "task_type": "app_build", "description": "I'll create a custom app", "action_text": "Go ahead and build a custom solution for this"}}
+- If hybrid: {{"label": "Start with [Tool]", "task_type": "tool_setup", ...}} AND {{"label": "Build the missing piece", "task_type": "app_build", ...}}
+- Always include an alternative: {{"label": "Tell me more first", "task_type": "research", "description": "I have questions before deciding", "action_text": "I have some questions before we proceed"}}
 
-Always include a "Refresh workspace" action as the LAST button: {{"label": "Refresh workspace", "description": "Re-run agents and update all artifacts with fresh data", "action_text": "Please refresh and update all of my workspace artifacts with the latest information."}}"""
+Always include a "Refresh workspace" action as the LAST button: {{"label": "Refresh workspace", "task_type": "research", "description": "Re-run agents and update all artifacts with fresh data", "action_text": "Please refresh and update all of my workspace artifacts with the latest information."}}"""
 
 
 def prompt_hash(prompt: str) -> str:
     """Short hash of a prompt for debugging."""
     return hashlib.sha256(prompt.encode()).hexdigest()[:12]
+
+
+def classify_task(goal: str, has_prior_runs: bool) -> str:
+    """Classify an agent run's task type from the goal text.
+
+    Returns one of: research, tool_setup, app_build, content.
+    Used by run_manager to select the appropriate task-specific prompt.
+    """
+    goal_lower = goal.lower()
+
+    # Explicit build requests
+    if any(w in goal_lower for w in [
+        "build", "create an app", "make me a", "custom solution",
+        "build a custom", "create a custom",
+    ]):
+        return "app_build"
+
+    # Tool setup / integration requests
+    if any(w in goal_lower for w in [
+        "set up", "set me up", "configure", "connect", "integrate",
+        "get started with", "help me get",
+    ]):
+        return "tool_setup"
+
+    # Explicit research requests
+    if any(w in goal_lower for w in [
+        "research", "find", "compare", "look into", "what options",
+        "what are the best", "tell me more",
+    ]):
+        return "research"
+
+    # First run of a project is always research
+    if not has_prior_runs:
+        return "research"
+
+    return "content"
 
 
 def _get_involvement(user: UserProfile, project: Project) -> str:

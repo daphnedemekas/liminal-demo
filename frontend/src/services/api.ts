@@ -157,6 +157,7 @@ export interface ChatAction {
   label: string;
   description: string;
   action_text: string;
+  task_type?: string;
 }
 
 export interface ChatResponse {

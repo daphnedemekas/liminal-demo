@@ -2,6 +2,7 @@
 
 import logging
 import asyncio
+import hashlib
 from datetime import datetime, timezone
 from typing import Callable, Awaitable, Dict, Optional
 
@@ -9,7 +10,7 @@ import os
 from backend.database import AgentRun, Artifact, UserProfile, Project, get_session_factory
 from backend.services.claude_code_executor import executor
 from backend.services.event_store import event_store
-from backend.services.prompt_builder import build_system_prompt, build_instruction, prompt_hash
+from backend.services.prompt_builder import build_system_prompt, build_instruction, prompt_hash, classify_task
 from backend.services.user_model_service import user_model_service
 from backend.services.mediator import synthesize_result
 
@@ -92,6 +93,14 @@ class RunManager:
                     .all()
                 )
                 system_prompt = build_system_prompt(user, project)
+
+                # Classify task type and append specialized prompt
+                from backend.prompts.executor import TASK_PROMPTS
+                task_type = classify_task(run.goal, has_prior_runs=len(recent_runs) > 0)
+                task_section = TASK_PROMPTS.get(task_type, TASK_PROMPTS["content"])
+                system_prompt = f"{system_prompt}\n\n{task_section}"
+                logger.info(f"Run {run_id}: task_type={task_type}")
+
                 from backend.services.context_service import get_context_text
                 ctx = get_context_text(session, user.id, project_id=project.id)
                 instruction = build_instruction(user, project, run.goal, recent_runs, context_text=ctx)
@@ -162,9 +171,16 @@ class RunManager:
             run.result_summary = "\n".join(result_parts)
             session.commit()
 
-            # Create app artifacts from captured HTML files
+            # Create app artifacts from captured HTML files (deduplicated)
             if run.status == "done" and project and written_html_files:
+                seen_hashes = set()
+                deduped = []
                 for f in written_html_files:
+                    content_hash = hashlib.sha256(f["content"].encode()).hexdigest()[:16]
+                    if content_hash not in seen_hashes:
+                        seen_hashes.add(content_hash)
+                        deduped.append(f)
+                for f in deduped:
                     title = os.path.basename(f["path"]).replace(".html", "").replace("-", " ").replace("_", " ").title()
                     artifact = Artifact(
                         run_id=run_id,
@@ -176,7 +192,7 @@ class RunManager:
                     )
                     session.add(artifact)
                 session.commit()
-                logger.info(f"Created {len(written_html_files)} app artifact(s) for run {run_id}")
+                logger.info(f"Created {len(deduped)} app artifact(s) for run {run_id} (deduped from {len(written_html_files)})")
 
             # Update user model after successful completion
             if run.status == "done" and user:

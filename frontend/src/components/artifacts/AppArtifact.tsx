@@ -7,10 +7,16 @@ export interface AppContent {
 
 interface Props {
   content: AppContent;
+  artifactId: number;
 }
 
-export function AppArtifact({ content }: Props) {
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
+export function AppArtifact({ artifactId }: Props) {
   const [expanded, setExpanded] = useState(false);
+
+  // Serve from backend so apps get the Envisage SDK injected and can use the data API
+  const appUrl = `${API_BASE}/app/${artifactId}`;
 
   return (
     <div className={`app-artifact ${expanded ? "app-expanded" : ""}`}>
@@ -23,8 +29,7 @@ export function AppArtifact({ content }: Props) {
         </button>
       </div>
       <iframe
-        srcDoc={content.html}
-        sandbox="allow-scripts"
+        src={appUrl}
         title="Custom App"
         className="app-iframe"
       />

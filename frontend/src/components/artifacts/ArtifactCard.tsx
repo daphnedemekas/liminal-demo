@@ -41,7 +41,7 @@ export function ArtifactCard({ artifact, projectId, onUpdate }: Props) {
       case "schedule":
         return <ScheduleArtifact content={content as ScheduleContent} />;
       case "app":
-        return <AppArtifact content={content as AppContent} />;
+        return <AppArtifact content={content as AppContent} artifactId={artifact.id} />;
       default: {
         const md = typeof content === "string"
           ? content

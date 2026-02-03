@@ -3,19 +3,23 @@ import { api } from "../services/api";
 import type { Artifact, ArtifactContent } from "../services/api";
 import { ArtifactCard } from "./artifacts/ArtifactCard";
 
+// Module-level cache so returning to a project shows artifacts instantly
+const artifactCache = new Map<number, Artifact[]>();
+
 interface Props {
   projectId: number;
   refreshKey?: number;
 }
 
 export function ProjectWorkspace({ projectId, refreshKey }: Props) {
-  const [artifacts, setArtifacts] = useState<Artifact[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [artifacts, setArtifacts] = useState<Artifact[]>(() => artifactCache.get(projectId) || []);
+  const [loading, setLoading] = useState(!artifactCache.has(projectId));
 
   const load = useCallback(async () => {
     try {
       const list = await api.getArtifacts(projectId);
       setArtifacts(list);
+      artifactCache.set(projectId, list);
     } catch {
       // ignore
     } finally {
@@ -24,15 +28,23 @@ export function ProjectWorkspace({ projectId, refreshKey }: Props) {
   }, [projectId]);
 
   useEffect(() => {
-    setLoading(true);
-    setArtifacts([]);
+    const cached = artifactCache.get(projectId);
+    if (cached) {
+      setArtifacts(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+      setArtifacts([]);
+    }
     load();
   }, [projectId, refreshKey, load]);
 
   const handleUpdate = (id: number, content: ArtifactContent) => {
-    setArtifacts((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, content } : a))
-    );
+    setArtifacts((prev) => {
+      const updated = prev.map((a) => (a.id === id ? { ...a, content } : a));
+      artifactCache.set(projectId, updated);
+      return updated;
+    });
   };
 
   if (loading) {

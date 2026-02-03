@@ -19,6 +19,10 @@ interface Message {
   actions?: ChatAction[];
 }
 
+// Module-level cache: persists across mount/unmount so returning to a domain is instant
+const domainMessageCache = new Map<string, Message[]>();
+const domainInputCache = new Map<string, string>();
+
 interface Props {
   userId: string;
   domain: DiscoveryDomainState;
@@ -26,18 +30,33 @@ interface Props {
 }
 
 export function DomainChat({ userId, domain, onProposalsReceived }: Props) {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
+  const [messages, setMessages] = useState<Message[]>(() => domainMessageCache.get(domain.domain) || []);
+  const [input, setInput] = useState(() => domainInputCache.get(domain.domain) || "");
   const [loading, setLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [initialized, setInitialized] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Keep caches in sync
+  useEffect(() => {
+    if (messages.length > 0) {
+      domainMessageCache.set(domain.domain, messages);
+    }
+  }, [messages, domain.domain]);
+
+  useEffect(() => {
+    domainInputCache.set(domain.domain, input);
+  }, [input, domain.domain]);
+
   // Load existing conversation or activate domain
   useEffect(() => {
     let cancelled = false;
-    setInitialized(false);
-    setMessages([]);
+
+    // Load from cache instantly (avoids loading flash), then refresh from DB
+    const cached = domainMessageCache.get(domain.domain);
+    setMessages(cached || []);
+    setInput(domainInputCache.get(domain.domain) || "");
+    setInitialized(cached ? true : false);
 
     const init = async () => {
       // Fetch fresh state to get latest conversation (props may be stale)

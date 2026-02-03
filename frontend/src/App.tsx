@@ -209,6 +209,11 @@ function App() {
   const activeDomain = domains.find((d) => d.domain === activeDomainId);
   const isHome = activeProject?.domain === "home";
 
+  // Which view is currently visible
+  const showDomain = !!activeDomain;
+  const showProject = !!activeProject && !isHome && !showDomain;
+  const showHome = !showDomain && !showProject;
+
   return (
     <div className="app-shell">
       <Sidebar
@@ -222,8 +227,9 @@ function App() {
         onGoHome={handleGoHome}
       />
       <main className="main-content">
-        {activeDomain ? (
-          <div className="project-split" ref={splitRef}>
+        {/* Domain view — mount on first use, then hide/show with CSS */}
+        {activeDomain && (
+          <div className="project-split" ref={showDomain ? splitRef : undefined} style={{ display: showDomain ? undefined : "none" }}>
             <div className="project-split-chat" style={{ width: chatPanelWidth, minWidth: chatPanelWidth }}>
               <DomainChat
                 userId={user.id}
@@ -242,8 +248,11 @@ function App() {
               loading={proposalLoading}
             />
           </div>
-        ) : activeProject && !isHome ? (
-          <div className="project-split" ref={splitRef}>
+        )}
+
+        {/* Project view — mount when a project is selected, hide/show with CSS */}
+        {activeProject && !isHome && (
+          <div className="project-split" ref={showProject ? splitRef : undefined} style={{ display: showProject ? undefined : "none" }}>
             <div className="project-split-chat" style={{ width: chatPanelWidth, minWidth: chatPanelWidth }}>
               <ChatPanel
                 project={activeProject}
@@ -261,7 +270,10 @@ function App() {
               refreshKey={workspaceRefresh}
             />
           </div>
-        ) : (
+        )}
+
+        {/* Home view — always mounted once user is logged in, hidden when on project/domain */}
+        <div style={{ display: showHome ? undefined : "none" }}>
           <HomeView
             projects={projects}
             domains={domains}
@@ -274,7 +286,7 @@ function App() {
             onRunComplete={handleRunComplete}
             userName={user.name}
           />
-        )}
+        </div>
       </main>
     </div>
   );

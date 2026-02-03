@@ -89,12 +89,13 @@ function formatToolActivity(tool: string, input: Record<string, unknown>): strin
   }
 }
 
-// Module-level cache: persists across mount/unmount so returning to a project is instant
+// Module-level caches: persist across mount/unmount so returning to a project is instant
 const messageCache = new Map<number, Message[]>();
+const inputCache = new Map<number, string>();
 
 export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, onNavigateDomain, onNavigateProject, onMessageReceived }: Props) {
   const [messages, setMessages] = useState<Message[]>(() => messageCache.get(project.id) || []);
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(() => inputCache.get(project.id) || "");
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [isChatting, setIsChatting] = useState(false);
@@ -196,12 +197,16 @@ export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, on
     }
   }, [project.id, isChatting, isRunning]);
 
-  // Keep message cache in sync whenever messages update
+  // Keep caches in sync whenever messages or input update
   useEffect(() => {
     if (messages.length > 0) {
       messageCache.set(project.id, messages);
     }
   }, [messages, project.id]);
+
+  useEffect(() => {
+    inputCache.set(project.id, input);
+  }, [input, project.id]);
 
   // Initialize project: reset state, load history, then greet or auto-kickoff
   useEffect(() => {
@@ -210,9 +215,10 @@ export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, on
     // prevent cross-contamination of state between projects.
     abortRef.current = null;
 
-    // Load cached messages for instant display (avoids loading flash)
+    // Load cached messages and input for instant display (avoids loading flash)
     const cached = messageCache.get(project.id);
     setMessages(cached || []);
+    setInput(inputCache.get(project.id) || "");
     setActiveRunId(null);
     setIsRunning(false);
     setIsChatting(false);

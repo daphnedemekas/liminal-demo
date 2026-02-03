@@ -220,6 +220,8 @@ export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, on
     setResearchingTopic(null);
     setStatusMessage(null);
 
+    // Guard against React Strict Mode double-firing this effect
+    let cancelled = false;
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -228,6 +230,7 @@ export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, on
     const isSuggestedNew = project.suggested_by_system && project.run_count === 0 && project.domain !== "home";
 
     const init = async () => {
+      if (cancelled) return;
       // Load history and check for active runs in parallel
       let hasHistory = false;
       try {
@@ -235,7 +238,7 @@ export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, on
           api.getMessages(project.id),
           api.getActiveRun(project.id),
         ]);
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted || cancelled) return;
 
         if (history.length > 0) {
           hasHistory = true;
@@ -262,6 +265,7 @@ export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, on
       }
 
       // No history and no active run — either auto-kickoff or greeting
+      if (cancelled) return;
       if (isSuggestedNew) {
         setIsChatting(true);
 
@@ -365,6 +369,7 @@ export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, on
     // work (LLM calls, research, agent runs) isn't interrupted.
     // The currentProjectId guards in all callbacks prevent cross-contamination.
     // Abort only happens at the TOP of this effect when re-initializing.
+    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.id]);
 

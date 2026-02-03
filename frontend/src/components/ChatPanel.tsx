@@ -89,8 +89,11 @@ function formatToolActivity(tool: string, input: Record<string, unknown>): strin
   }
 }
 
+// Module-level cache: persists across mount/unmount so returning to a project is instant
+const messageCache = new Map<number, Message[]>();
+
 export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, onNavigateDomain, onNavigateProject, onMessageReceived }: Props) {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>(() => messageCache.get(project.id) || []);
   const [input, setInput] = useState("");
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
@@ -193,12 +196,23 @@ export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, on
     }
   }, [project.id, isChatting, isRunning]);
 
+  // Keep message cache in sync whenever messages update
+  useEffect(() => {
+    if (messages.length > 0) {
+      messageCache.set(project.id, messages);
+    }
+  }, [messages, project.id]);
+
   // Initialize project: reset state, load history, then greet or auto-kickoff
   useEffect(() => {
-    // Reset all state for the new project
-    abortRef.current?.abort();
+    // DON'T abort in-flight SSE — let it complete so the backend saves the
+    // response to the DB. The currentProjectId guards in all callbacks
+    // prevent cross-contamination of state between projects.
     abortRef.current = null;
-    setMessages([]);
+
+    // Load cached messages for instant display (avoids loading flash)
+    const cached = messageCache.get(project.id);
+    setMessages(cached || []);
     setActiveRunId(null);
     setIsRunning(false);
     setIsChatting(false);

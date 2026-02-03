@@ -358,7 +358,8 @@ body {
 }
 
 .status-dot.active,
-.status-dot.working {
+.status-dot.working,
+.status-dot.planning {
   background: #10b981;
   animation: pulse 2s infinite;
 }

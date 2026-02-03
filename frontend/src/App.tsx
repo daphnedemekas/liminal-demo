@@ -62,6 +62,16 @@ function App() {
     return () => { cancelled = true; };
   }, [user]);
 
+  // Periodically refresh projects so background run completions are reflected
+  // in the sidebar (e.g. status changes, new artifacts).
+  useEffect(() => {
+    if (!user) return;
+    const interval = setInterval(() => {
+      api.listProjects(user.id).then(setProjects).catch(() => {});
+    }, 15_000);
+    return () => clearInterval(interval);
+  }, [user]);
+
   const handleOnboardingComplete = async () => {
     if (!user) return;
     const updated = await api.getUser(user.id);

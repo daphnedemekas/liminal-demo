@@ -1,5 +1,6 @@
 """WebSocket connection manager for broadcasting run events."""
 
+import asyncio
 import logging
 from collections import deque
 from typing import Dict, List
@@ -8,6 +9,7 @@ from fastapi import WebSocket
 logger = logging.getLogger(__name__)
 
 MAX_BUFFER_PER_RUN = 200
+BUFFER_CLEANUP_DELAY = 60.0  # Keep buffer for 60s after run completion
 
 
 class ConnectionManager:
@@ -49,9 +51,15 @@ class ConnectionManager:
         for ws in dead:
             conns.remove(ws)
 
-        # Clean up buffer when run completes
+        # Delay buffer cleanup so clients that reconnect after a run completes
+        # can still receive the final events (especially the synthesis).
         if data.get("type") == "status" and data.get("status") in ("done", "failed"):
-            self._buffers.pop(run_id, None)
+            asyncio.create_task(self._delayed_cleanup(run_id))
+
+    async def _delayed_cleanup(self, run_id: str):
+        """Clean up event buffer after a delay, allowing late reconnections."""
+        await asyncio.sleep(BUFFER_CLEANUP_DELAY)
+        self._buffers.pop(run_id, None)
 
 
 ws_manager = ConnectionManager()

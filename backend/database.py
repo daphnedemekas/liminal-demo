@@ -212,6 +212,9 @@ class ContextAttachment(Base):
 
 DB_PATH = os.environ.get("DATABASE_PATH", "data/envisage.db")
 
+# Ensure the parent directory exists (SQLite can create the file but not the directory)
+os.makedirs(os.path.dirname(DB_PATH) or ".", exist_ok=True)
+
 _engine = None
 _SessionFactory = None
 

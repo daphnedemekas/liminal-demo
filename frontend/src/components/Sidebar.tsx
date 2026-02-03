@@ -22,6 +22,15 @@ const DOMAIN_LABELS: Record<string, string> = {
   mental_health: "Mind & mental health",
 };
 
+const STATUS_DISPLAY: Record<string, string> = {
+  working: "Working...",
+  planning: "Planning...",
+  done: "Done",
+  failed: "Failed",
+  waiting_for_user: "Needs input",
+  active: "Active",
+};
+
 function useTheme() {
   const [dark, setDark] = useState(() => {
     const stored = localStorage.getItem("theme");
@@ -147,7 +156,7 @@ export function Sidebar({ projects, domains, activeProjectId, activeDomainId, on
                 <div className="project-name">{p.name}</div>
                 <div className="project-status">
                   <span className={`status-dot ${p.latest_run_status || p.status}`} />
-                  {p.latest_run_status || p.status}
+                  {STATUS_DISPLAY[p.latest_run_status || p.status] || p.latest_run_status || p.status}
                 </div>
               </div>
             ))}
@@ -171,7 +180,7 @@ export function Sidebar({ projects, domains, activeProjectId, activeDomainId, on
                 <div className="project-name">{p.name}</div>
                 <div className="project-status">
                   <span className={`status-dot ${p.latest_run_status || p.status}`} />
-                  {p.latest_run_status || p.status}
+                  {STATUS_DISPLAY[p.latest_run_status || p.status] || p.latest_run_status || p.status}
                 </div>
               </div>
             ))}

@@ -11,7 +11,7 @@ their profile summary, known domains, and preference suggestions.
 #            known_domains, run_summaries
 
 USER_MODEL_UPDATE_PROMPT = """\
-Analyze this user's interactions with Liminal (a personal AI assistant) and produce a brief profile.
+Analyze this user's interactions with Envisage (a personal AI assistant) and produce a brief profile.
 
 <user_info>
 User: {user_name}
@@ -51,7 +51,7 @@ Return ONLY the JSON object."""
 # Variables: name, existing_signals, recent_conversation
 
 ONBOARDING_SIGNAL_EXTRACTION_PROMPT = """\
-You are analyzing an onboarding conversation for Liminal, a personal AI assistant.
+You are analyzing an onboarding conversation for Envisage, a personal AI assistant.
 
 <user_info>
 User: {name}
@@ -83,7 +83,7 @@ Return ONLY a JSON object, no other text."""
 # Variables: context_parts (pre-formatted string)
 
 ONBOARDING_QUESTION_PROMPT = """\
-You are an onboarding assistant for Liminal, a personal AI assistant that helps people with anything — research, planning, business tasks, home projects, learning, organizing, and more.
+You are an onboarding assistant for Envisage, a personal AI assistant that helps people with anything — research, planning, business tasks, home projects, learning, organizing, and more.
 
 Generate exactly ONE follow-up question to learn more about what this user needs help with.
 
@@ -109,7 +109,7 @@ Return ONLY the JSON object, no other text."""
 # Variables: context_parts (pre-formatted string)
 
 ONBOARDING_SUGGESTION_PROMPT = """\
-You are Liminal, a personal AI assistant. Based on everything you know about this user, suggest 2-3 PROJECT AREAS you could help them with.
+You are Envisage, a personal AI assistant. Based on everything you know about this user, suggest 2-3 PROJECT AREAS you could help them with.
 
 <context>
 {context_parts}

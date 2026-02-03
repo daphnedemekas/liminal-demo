@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { api } from "../services/api";
 import type { Project, ChatAction, SynthesisEvent } from "../services/api";
 import { useRunStream } from "../hooks/useRunStream";
@@ -22,7 +23,7 @@ const DOMAIN_LABELS: Record<string, string> = {
   health: "Health & Wellness",
   hobbies: "Hobbies & Projects",
   money: "Money & Finances",
-  mental_health: "Mind & Mental Health",
+  mental_health: "Mind & mental health",
 };
 
 function actionLabel(action: ChatAction): string {
@@ -106,6 +107,7 @@ export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, on
 
   const currentProjectId = useRef(project.id);
   const abortRef = useRef<AbortController | null>(null);
+  const pendingResultRef = useRef<string | null>(null);
   currentProjectId.current = project.id;
 
   const sendChat = useCallback(async (text: string) => {
@@ -127,11 +129,13 @@ export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, on
         (topic) => {
           if (currentProjectId.current !== expectedProjectId) return;
           setResearchingTopic(topic);
+          setActivityLog([]); // Clear any previous activity
         },
         (res) => {
           if (currentProjectId.current !== expectedProjectId) return;
           setResearchingTopic(null);
           setStatusMessage(null);
+          setActivityLog([]); // Clear research activity when done
           if (res.message) {
             setMessages((prev) => {
               const last = prev[prev.length - 1];
@@ -158,6 +162,7 @@ export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, on
           if (currentProjectId.current !== expectedProjectId) return;
           setResearchingTopic(null);
           setStatusMessage(null);
+          setActivityLog([]);
           setMessages((prev) => [
             ...prev,
             { role: "system", content: `Error: ${err.message}` },
@@ -169,6 +174,11 @@ export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, on
           setStatusMessage(status);
         },
         controller.signal,
+        (tool, input) => {
+          if (currentProjectId.current !== expectedProjectId) return;
+          const detail = formatToolActivity(tool, input);
+          setActivityLog((prev) => [...prev, { type: "tool", tool, detail, timestamp: Date.now() }]);
+        },
       );
     } catch (err) {
       if ((err as Error).name === "AbortError") return; // navigated away
@@ -204,25 +214,40 @@ export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, on
     const isSuggestedNew = project.suggested_by_system && project.run_count === 0 && project.domain !== "home";
 
     const init = async () => {
-      // Always load history first
+      // Load history and check for active runs in parallel
+      let hasHistory = false;
       try {
-        const history = await api.getMessages(project.id);
+        const [history, activeRunResult] = await Promise.all([
+          api.getMessages(project.id),
+          api.getActiveRun(project.id),
+        ]);
         if (controller.signal.aborted) return;
+
         if (history.length > 0) {
+          hasHistory = true;
           setMessages(history.map((m) => ({
             role: m.role as Message["role"],
             content: m.content,
             actions: m.actions,
             timestamp: m.created_at,
           })));
-          return; // history loaded, done
         }
+
+        // Reconnect to active run if one exists
+        if (activeRunResult.active_run) {
+          setIsRunning(true);
+          setActiveRunId(activeRunResult.active_run.run_id);
+          setStatusMessage(`Resuming: ${activeRunResult.active_run.goal.slice(0, 50)}...`);
+          return; // WebSocket will handle updates
+        }
+
+        if (hasHistory) return; // History loaded, no active run, done
       } catch {
         if (controller.signal.aborted) return;
         // fall through
       }
 
-      // No history — either auto-kickoff or greeting
+      // No history and no active run — either auto-kickoff or greeting
       if (isSuggestedNew) {
         setIsChatting(true);
 
@@ -239,11 +264,12 @@ export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, on
           await api.sendChatSSE(
             project.id,
             goal,
-            (topic) => { if (currentProjectId.current === expectedId) setResearchingTopic(topic); },
+            (topic) => { if (currentProjectId.current === expectedId) { setResearchingTopic(topic); setActivityLog([]); } },
             (res) => {
               if (currentProjectId.current !== expectedId) return;
               setResearchingTopic(null);
               setStatusMessage(null);
+              setActivityLog([]);
               if (res.message) {
                 setMessages((prev) => [...prev, { role: "assistant", content: res.message, actions: res.actions }]);
               }
@@ -254,11 +280,17 @@ export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, on
               if (currentProjectId.current !== expectedId) return;
               setResearchingTopic(null);
               setStatusMessage(null);
+              setActivityLog([]);
               setMessages((prev) => [...prev, { role: "system", content: `Error: ${err}` }]);
               setIsChatting(false);
             },
             (status) => { if (currentProjectId.current === expectedId) setStatusMessage(status); },
             controller.signal,
+            (tool, input) => {
+              if (currentProjectId.current !== expectedId) return;
+              const detail = formatToolActivity(tool, input);
+              setActivityLog((prev) => [...prev, { type: "tool", tool, detail, timestamp: Date.now() }]);
+            },
           );
         } catch {
           if (currentProjectId.current === expectedId) setIsChatting(false);
@@ -271,11 +303,12 @@ export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, on
           await api.sendChatSSE(
             project.id,
             undefined,
-            (topic) => { if (currentProjectId.current === expectedId) setResearchingTopic(topic); },
+            (topic) => { if (currentProjectId.current === expectedId) { setResearchingTopic(topic); setActivityLog([]); } },
             (res) => {
               if (currentProjectId.current !== expectedId) return;
               setResearchingTopic(null);
               setStatusMessage(null);
+              setActivityLog([]);
               if (res.message) {
                 setMessages((prev) => {
                   const last = prev[prev.length - 1];
@@ -295,11 +328,17 @@ export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, on
               if (currentProjectId.current !== expectedId) return;
               setResearchingTopic(null);
               setStatusMessage(null);
+              setActivityLog([]);
               setMessages((prev) => [...prev, { role: "system", content: `Error: ${err.message}` }]);
               setIsChatting(false);
             },
             (status) => { if (currentProjectId.current === expectedId) setStatusMessage(status); },
             controller.signal,
+            (tool, input) => {
+              if (currentProjectId.current !== expectedId) return;
+              const detail = formatToolActivity(tool, input);
+              setActivityLog((prev) => [...prev, { type: "tool", tool, detail, timestamp: Date.now() }]);
+            },
           );
         } catch {
           if (currentProjectId.current === expectedId) setIsChatting(false);
@@ -344,27 +383,30 @@ export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, on
     }
 
     if (lastEvent.type === "event" && lastEvent.event_type === "result") {
+      // Store result for fallback if synthesis fails, but don't add to messages yet.
+      // Synthesis will add the summary; if it fails, done handler adds fallback.
       const text = (lastEvent.content as Record<string, string>)?.text;
-      if (text) {
-        setMessages((prev) => {
-          const last = prev[prev.length - 1];
-          if (last?.role === "assistant" && last.content === text) return prev;
-          return [...prev, { role: "assistant", content: text }];
-        });
-      }
-      setActivityLog([]);
-      setIsRunning(false);
-      setActiveRunId(null);
+      pendingResultRef.current = text || null;
+      // Don't clear activityLog here — run isn't done yet
     }
 
     if (lastEvent.type === "status" && lastEvent.status === "done") {
       setActivityLog([]);
       setIsRunning(false);
       setActiveRunId(null);
-      // Only call onRunComplete here if there's no synthesis (synthesis handler calls it instead)
-      if (!synthesis) {
+      // Wait briefly for synthesis to arrive before adding fallback
+      setTimeout(() => {
+        if (pendingResultRef.current) {
+          const fallbackText = pendingResultRef.current.slice(0, 500) +
+            (pendingResultRef.current.length > 500 ? "..." : "");
+          setMessages((prev) => [
+            ...prev,
+            { role: "assistant", content: `Task completed. ${fallbackText}` },
+          ]);
+          pendingResultRef.current = null;
+        }
         onRunComplete?.();
-      }
+      }, 3000);
     }
 
     if (lastEvent.type === "error") {
@@ -382,14 +424,17 @@ export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, on
   useEffect(() => {
     if (!synthesis) return;
 
-    // Add the synthesis summary as an assistant message with actions
+    // Clear pending result so the done-handler timeout won't add a duplicate fallback
+    pendingResultRef.current = null;
+
+    // Only add if not already present (prevents duplicate on reload from DB)
     setMessages((prev) => {
-      // Remove any raw result message that might have been added
-      const filtered = prev.filter(
-        (m) => !(m.role === "assistant" && m.content === synthesis.full_output)
+      const alreadyExists = prev.some(
+        (m) => m.role === "assistant" && m.content === synthesis.summary
       );
+      if (alreadyExists) return prev;
       return [
-        ...filtered,
+        ...prev,
         {
           role: "assistant",
           content: synthesis.summary,
@@ -514,7 +559,7 @@ export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, on
                 {msg.role === "system" ? (
                   <em>{msg.content}</em>
                 ) : (
-                  <ReactMarkdown>{msg.content}</ReactMarkdown>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
                 )}
               </div>
               {msg.synthesis?.artifacts && msg.synthesis.artifacts.length > 0 && (
@@ -544,17 +589,11 @@ export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, on
             )}
           </div>
         ))}
-        {researchingTopic && (
-          <div className="researching-indicator">
-            <span className="researching-dot" />
-            Researching {researchingTopic}…
-          </div>
-        )}
-        {activityLog.length > 0 && (
+        {(activityLog.length > 0 || researchingTopic) && (
           <div className="activity-log">
             <div className="activity-log-header">
               <span className="activity-pulse" />
-              Agent working
+              {researchingTopic ? `Researching: ${researchingTopic}` : "Agent working"}
             </div>
             <div className="activity-log-entries">
               {activityLog.map((entry, i) => (

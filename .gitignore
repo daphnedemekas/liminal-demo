@@ -44,7 +44,7 @@ frontend/.DS_Store
 # Project specific
 backend/data/*.db
 data/*.db
-liminal.db
+envisage.db
 *.log
 backend.log
 backend_debug.log

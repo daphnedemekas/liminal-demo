@@ -51,11 +51,14 @@ def _trace(label: str, **kwargs):
 
 _client = None
 PROVIDER = os.environ.get("LLM_PROVIDER", "openai")
-MODEL = os.environ.get("LLM_MODEL", "gpt-5")
+MODEL = os.environ.get("LLM_MODEL", "gpt-5")  # User-facing conversations
 MODEL_MINI = os.environ.get("LLM_MODEL_MINI", "gpt-4o-mini")
 
 # Models that require max_completion_tokens instead of max_tokens
 _COMPLETION_TOKENS_MODELS = {"gpt-5", "gpt-5-mini", "o1", "o1-mini", "o1-preview", "o3", "o3-mini"}
+
+# Models that support reasoning parameter (gpt-5 burns tokens on reasoning by default)
+_REASONING_MODELS = {"gpt-5", "gpt-5-mini", "gpt-5.2"}
 
 
 def _token_limit_kwargs(model: str, limit: int = 2048) -> dict:
@@ -63,6 +66,18 @@ def _token_limit_kwargs(model: str, limit: int = 2048) -> dict:
     if any(model.startswith(prefix) for prefix in _COMPLETION_TOKENS_MODELS):
         return {"max_completion_tokens": limit}
     return {"max_tokens": limit}
+
+
+def _reasoning_kwargs(model: str) -> dict:
+    """Return reasoning config for models that support it.
+
+    GPT-5 models use reasoning tokens by default which can consume the token
+    budget and return empty responses. Setting effort to 'none' disables this.
+    See: https://community.openai.com/t/gpt-5-responses-api-hundreds-of-calls-return-empty-completion-content
+    """
+    if any(model.startswith(prefix) for prefix in _REASONING_MODELS):
+        return {"reasoning": {"effort": "none"}}
+    return {}
 
 
 def _get_client():
@@ -100,6 +115,7 @@ def chat(prompt: str, model: Optional[str] = None) -> str:
                 model=m,
                 messages=[{"role": "user", "content": prompt}],
                 **_token_limit_kwargs(m),
+                **_reasoning_kwargs(m),
             )
             result = response.choices[0].message.content or ""
 
@@ -137,7 +153,7 @@ def chat_messages(system_prompt: str, messages: list[dict], model: Optional[str]
                 finish = getattr(response, "stop_reason", "unknown")
             else:
                 all_messages = [{"role": "system", "content": system_prompt}] + messages
-                kwargs = dict(model=use_model, messages=all_messages, **_token_limit_kwargs(use_model))
+                kwargs = dict(model=use_model, messages=all_messages, **_token_limit_kwargs(use_model), **_reasoning_kwargs(use_model))
                 if json_mode:
                     kwargs["response_format"] = {"type": "json_object"}
                 response = client.chat.completions.create(**kwargs)

@@ -10,7 +10,7 @@ const DOMAIN_LABELS: Record<string, string> = {
   health: "Health & Wellness",
   hobbies: "Hobbies & Projects",
   money: "Money & Finances",
-  mental_health: "Mind & Mental Health",
+  mental_health: "Mind & mental health",
 };
 
 const STATUS_LABELS: Record<string, string> = {

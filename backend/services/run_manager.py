@@ -5,7 +5,8 @@ import asyncio
 from datetime import datetime, timezone
 from typing import Callable, Awaitable, Dict, Optional
 
-from backend.database import AgentRun, UserProfile, Project, get_session_factory
+import os
+from backend.database import AgentRun, Artifact, UserProfile, Project, get_session_factory
 from backend.services.claude_code_executor import executor
 from backend.services.event_store import event_store
 from backend.services.prompt_builder import build_system_prompt, build_instruction, prompt_hash
@@ -22,6 +23,36 @@ class RunManager:
 
     def __init__(self):
         self._active_runs: Dict[str, asyncio.Task] = {}
+        self._cleanup_done = False
+
+    def cleanup_orphaned_runs(self):
+        """Mark any runs stuck in 'planning'/'working' as failed on startup.
+
+        This handles the case where the backend was restarted while runs were in progress.
+        Those runs no longer have active subprocesses, so they should be marked failed.
+        """
+        if self._cleanup_done:
+            return
+        self._cleanup_done = True
+
+        session = get_session_factory()()
+        try:
+            orphaned = (
+                session.query(AgentRun)
+                .filter(AgentRun.status.in_(["planning", "working"]))
+                .all()
+            )
+            if orphaned:
+                logger.info(f"Cleaning up {len(orphaned)} orphaned runs from previous session")
+                for run in orphaned:
+                    run.status = "failed"
+                    run.completed_at = datetime.now(timezone.utc)
+                    run.result_summary = (run.result_summary or "") + "\n[Run interrupted by server restart]"
+                session.commit()
+        except Exception as e:
+            logger.warning(f"Failed to cleanup orphaned runs: {e}")
+        finally:
+            session.close()
 
     async def start_run(self, run_id: str, on_event: Optional[EventCallback] = None):
         if run_id in self._active_runs:
@@ -75,6 +106,7 @@ class RunManager:
                 await on_event(run_id, {"type": "status", "status": "working"})
 
             result_parts = []
+            written_html_files = []
             has_error = False
             async for ev in executor.execute(
                 instruction=instruction,
@@ -101,6 +133,17 @@ class RunManager:
                     text = ev.content.get("text", "")
                     if text and (not result_parts or result_parts[-1] != text):
                         result_parts.append(text)
+                elif ev.type == "tool_use":
+                    # Capture HTML file writes for app artifacts
+                    tools = ev.content.get("tools", [])
+                    for t in tools:
+                        tool_name = t.get("tool", "")
+                        tool_input = t.get("input", {})
+                        if tool_name == "Write":
+                            file_path = tool_input.get("file_path", "") or tool_input.get("path", "")
+                            content = tool_input.get("content", "")
+                            if file_path.endswith(".html") and content:
+                                written_html_files.append({"path": file_path, "content": content})
                 elif ev.type == "result":
                     # Final result - only add if not duplicate
                     text = ev.content.get("text", "")
@@ -118,6 +161,22 @@ class RunManager:
             run.completed_at = datetime.now(timezone.utc)
             run.result_summary = "\n".join(result_parts)
             session.commit()
+
+            # Create app artifacts from captured HTML files
+            if run.status == "done" and project and written_html_files:
+                for f in written_html_files:
+                    title = os.path.basename(f["path"]).replace(".html", "").replace("-", " ").replace("_", " ").title()
+                    artifact = Artifact(
+                        run_id=run_id,
+                        project_id=project.id,
+                        artifact_type="app",
+                        title=title,
+                        content={"html": f["content"]},
+                        sources=[],
+                    )
+                    session.add(artifact)
+                session.commit()
+                logger.info(f"Created {len(written_html_files)} app artifact(s) for run {run_id}")
 
             # Update user model after successful completion
             if run.status == "done" and user:

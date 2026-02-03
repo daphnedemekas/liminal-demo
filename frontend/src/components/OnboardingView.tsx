@@ -118,7 +118,7 @@ export function OnboardingView({ userId, userName, onComplete }: Props) {
           <>
             <div className="onboarding-header">
               <h1>Hi {userName}!</h1>
-              <p>What brings you to Liminal?</p>
+              <p>What brings you to Envisage?</p>
               <p className="onboarding-hint">Select all that apply</p>
             </div>
 

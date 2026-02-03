@@ -42,6 +42,7 @@ class ActivateDomainRequest(BaseModel):
 class AcceptProjectsRequest(BaseModel):
     user_id: str
     project_indices: list[int]
+    domain: str
 
 
 class UserIdRequest(BaseModel):
@@ -114,55 +115,19 @@ async def respond(req: RespondRequest, db: Session = Depends(get_db)):
 
             result = discovery_engine.process_response(req.user_id, req.message, db, domain_name=req.domain)
 
-            # Signal-based research: proper noun lookup from signal extraction
-            pending_research = result.pop("_pending_research", None)
-            if pending_research:
-                yield _sse_event("status", {"message": f"Researching {pending_research}…"})
-                try:
-                    research_text = await asyncio.wait_for(
-                        discovery_engine.run_agent_task(req.user_id, pending_research, db),
-                        timeout=60.0,
-                    )
-                    if research_text.get("message"):
-                        from backend.services.memory import extract_research_insights
-                        user = db.query(UserProfile).filter_by(id=req.user_id).first()
-                        if user:
-                            active = db.query(DiscoveryDomain).filter_by(user_id=req.user_id, domain=req.domain).first() or \
-                                     db.query(DiscoveryDomain).filter_by(user_id=req.user_id, status="active").first()
-                            extract_research_insights(
-                                user.id, pending_research, research_text["message"],
-                                active.domain if active else None, db,
-                            )
-                except asyncio.TimeoutError:
-                    logger.warning(f"Signal-based research timed out: {pending_research[:60]}")
-                except Exception as e:
-                    logger.warning(f"Signal-based research failed: {e}")
+            # Research is accumulated during Q&A and executed in batch before proposals
+            accumulated_topics = result.pop("_accumulated_topics", None)
 
-            # If the LLM requested agent research and gating passed, run with timeout
-            pending = result.pop("_pending_agent", None)
-            if pending:
-                yield _sse_event("status", {"message": f"Researching {pending[:60]}…"})
-                try:
-                    researched = await asyncio.wait_for(
-                        discovery_engine.run_agent_task(req.user_id, pending, db),
-                        timeout=30.0,
-                    )
-                    researched["message"] = f"🔍 *Researched: {pending}*\n\n{researched['message']}"
-                    result = researched
-                except asyncio.TimeoutError:
-                    logger.warning(f"Auto-research timed out after 30s: {pending[:60]}")
-                except Exception as e:
-                    logger.warning(f"Auto-research failed: {e}")
-
-            # When proposing projects, auto-research existing solutions first
+            # When proposing projects, batch-research accumulated topics + existing solutions
             if result.get("proposed_projects"):
                 yield _sse_event("status", {"message": "Researching existing solutions…"})
                 try:
                     result = await asyncio.wait_for(
                         discovery_engine.research_and_refine_proposals(
-                            req.user_id, result, db
+                            req.user_id, result, db,
+                            accumulated_topics=accumulated_topics,
                         ),
-                        timeout=45.0,
+                        timeout=60.0,
                     )
                 except asyncio.TimeoutError:
                     logger.warning("Proposal research timed out, using unresearched proposals")
@@ -183,7 +148,7 @@ async def respond(req: RespondRequest, db: Session = Depends(get_db)):
 def accept_projects(req: AcceptProjectsRequest, db: Session = Depends(get_db)):
     """Create projects from proposals and advance to next domain."""
     try:
-        return discovery_engine.accept_projects(req.user_id, req.project_indices, db)
+        return discovery_engine.accept_projects(req.user_id, req.project_indices, db, domain=req.domain)
     except ValueError as e:
         raise HTTPException(404, str(e))
     except Exception as e:

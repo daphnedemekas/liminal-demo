@@ -169,48 +169,89 @@ class ChatRequest(BaseModel):
     message: Optional[str] = None
 
 
-async def _run_research(task: str, timeout: float = 60.0) -> str:
-    """Run a research agent and return result text. Returns empty string on failure/timeout."""
-    try:
-        from backend.services.claude_code_executor import executor as _executor
+from typing import AsyncGenerator, Tuple
 
-        instruction = (
-            f"Quick background research task.\n\n"
-            f"Task: {task}\n\n"
-            f"Return a concise summary of what you find (2-4 bullet points). "
-            f"Be specific and factual."
-        )
-        cmd = [
-            "claude", "-p", instruction,
-            "--output-format", "stream-json",
-            "--verbose",
-            "--dangerously-skip-permissions",
-            "--system-prompt", _executor.SYSTEM_PROMPT,
-            "--allowedTools", "WebSearch,WebFetch,Read,Bash",
-            "--max-turns", "3",
-        ]
+async def _run_research_streaming(task: str, timeout: float = 60.0) -> AsyncGenerator[Tuple[str, dict], None]:
+    """Run a research agent, yielding activity events and finally the result.
+
+    Yields: (event_type, data) tuples where event_type is "activity" or "result"
+    """
+    from backend.services.claude_code_executor import executor as _executor
+
+    instruction = (
+        f"Quick background research task.\n\n"
+        f"Task: {task}\n\n"
+        f"Return a concise summary of what you find (2-4 bullet points). "
+        f"Be specific and factual."
+    )
+    cmd = [
+        "claude", "-p", instruction,
+        "--output-format", "stream-json",
+        "--verbose",
+        "--dangerously-skip-permissions",
+        "--system-prompt", _executor.SYSTEM_PROMPT,
+        "--allowedTools", "WebSearch,WebFetch,Read,Bash",
+        "--max-turns", "3",
+    ]
+    try:
         process = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
-        if process.returncode != 0:
-            logger.warning(f"Research process exited {process.returncode}: {stderr.decode()[:500]}")
-            return ""
-        for line in stdout.decode().strip().split("\n"):
-            try:
-                evt = json.loads(line)
-                if evt.get("type") == "result":
-                    return evt.get("result", "")
-            except json.JSONDecodeError:
-                continue
-        logger.warning(f"Research: no result event found in output. stdout={stdout.decode()[:300]}")
-    except asyncio.TimeoutError:
-        logger.warning(f"Research timed out after {timeout}s for: {task[:100]}")
+
+        result_text = ""
+        start_time = asyncio.get_event_loop().time()
+
+        async def read_with_timeout():
+            nonlocal result_text
+            while True:
+                if asyncio.get_event_loop().time() - start_time > timeout:
+                    process.kill()
+                    logger.warning(f"Research timed out after {timeout}s")
+                    return
+                try:
+                    line = await asyncio.wait_for(process.stdout.readline(), timeout=2.0)
+                except asyncio.TimeoutError:
+                    continue
+                if not line:
+                    break
+                try:
+                    evt = json.loads(line.decode().strip())
+                    evt_type = evt.get("type", "")
+
+                    # Yield tool activity for UI
+                    if evt_type == "tool_use":
+                        tools = evt.get("tools", [])
+                        if tools:
+                            tool = tools[0].get("tool", "")
+                            tool_input = tools[0].get("input", {})
+                            yield ("activity", {"tool": tool, "input": tool_input})
+
+                    # Capture result
+                    if evt_type == "result":
+                        result_text = evt.get("result", "")
+                except json.JSONDecodeError:
+                    continue
+
+        async for item in read_with_timeout():
+            yield item
+
+        await process.wait()
+        yield ("result", {"text": result_text})
+
     except Exception as e:
         logger.warning(f"Background research failed: {type(e).__name__}: {e}")
-    return ""
+        yield ("result", {"text": ""})
+
+
+async def _run_research(task: str, timeout: float = 60.0) -> str:
+    """Run a research agent and return result text. Returns empty string on failure/timeout."""
+    result = ""
+    async for event_type, data in _run_research_streaming(task, timeout):
+        if event_type == "result":
+            result = data.get("text", "")
+    return result
 
 
 def _sse_event(event: str, data: dict) -> str:
@@ -227,13 +268,12 @@ async def project_chat(project_id: int, req: ChatRequest, db: Session = Depends(
 
     async def _chat_stream():
         # Step 1: Extract signals (mini model, ~1s) — also detects research need
-        from backend.database import get_db as _get_db
         loop = asyncio.get_event_loop()
 
         yield _sse_event("status", {"message": "Understanding your message…"})
 
         def _extract_in_thread():
-            thread_db = next(_get_db())
+            thread_db = next(get_db())
             try:
                 return mediate_extract(project_id, req.message, thread_db)
             finally:
@@ -251,71 +291,68 @@ async def project_chat(project_id: int, req: ChatRequest, db: Session = Depends(
             })
             return
 
-        research_topic = extract_result.pop("_pending_research", None)
+        # Generate response (gpt-4o detects research needs)
+        yield _sse_event("status", {"message": "Composing response…"})
+
+        def _generate_in_thread():
+            thread_db = next(get_db())
+            try:
+                return mediate_generate(extract_result, thread_db)
+            finally:
+                thread_db.close()
+
+        result = await loop.run_in_executor(None, _generate_in_thread)
+
+        # Check if generation detected a research need
+        research_topic = None
         research_text = ""
-
-        if research_topic:
-            # Emit indicator immediately — user sees it within ~1-2s (after extract only)
-            yield _sse_event("researching", {"topic": research_topic})
-
-            yield _sse_event("status", {"message": f"Researching {research_topic}…"})
-
-            # Run research (async subprocess) and generate (sync, in thread) in parallel
-            def _generate_in_thread():
-                thread_db = next(_get_db())
-                try:
-                    return mediate_generate(extract_result, thread_db)
-                finally:
-                    thread_db.close()
-
-            generate_future = loop.run_in_executor(None, _generate_in_thread)
-            research_future = asyncio.ensure_future(_run_research(research_topic))
-
-            result, research_text = await asyncio.gather(generate_future, research_future)
-        else:
-            yield _sse_event("status", {"message": "Composing response…"})
-
-            # No research — just generate
-            def _generate_in_thread():
-                thread_db = next(_get_db())
-                try:
-                    return mediate_generate(extract_result, thread_db)
-                finally:
-                    thread_db.close()
-
-            result = await loop.run_in_executor(None, _generate_in_thread)
+        gen_research = result.pop("research", None)
+        if gen_research and isinstance(gen_research, str) and gen_research.strip():
+            from backend.services.memory import already_researched
+            db_check = next(get_db())
+            try:
+                if not already_researched(project.user_id, gen_research.strip(), db_check):
+                    research_topic = gen_research.strip()
+                    yield _sse_event("researching", {"topic": research_topic})
+                    yield _sse_event("status", {"message": f"Researching {research_topic}…"})
+                    # Stream research activity events
+                    async for event_type, data in _run_research_streaming(research_topic):
+                        if event_type == "activity":
+                            yield _sse_event("research_activity", data)
+                        elif event_type == "result":
+                            research_text = data.get("text", "")
+            finally:
+                db_check.close()
 
         if research_text:
-            # Save research as system message
-            from backend.database import ChatMessage as _CM
-            _db = next(_get_db())
+            # Save research as system message and artifact
+            research_db = next(get_db())
             try:
-                _db.add(_CM(
+                research_db.add(ChatMessage(
                     project_id=project_id,
                     role="system",
                     content=f"[Background research: {research_topic}]\n\n{research_text}",
                 ))
-                _db.commit()
+                research_db.commit()
 
                 # Save research as artifact for right panel
-                from backend.database import Artifact as _Art
-                _db.add(_Art(
+                research_db.add(Artifact(
                     project_id=project_id,
                     artifact_type="research",
                     title=research_topic,
                     content={"markdown": research_text},
                     sources=[],
                 ))
-                _db.commit()
+                research_db.commit()
 
                 # Extract insights from research results
                 from backend.services.memory import extract_research_insights
                 extract_research_insights(
                     project.user_id, research_topic, research_text,
-                    str(project_id), _db,
+                    str(project_id), research_db,
                 )
             finally:
-                _db.close()
+                research_db.close()
 
             # Re-generate response with research context
             yield _sse_event("status", {"message": "Incorporating research…"})
@@ -323,6 +360,25 @@ async def project_chat(project_id: int, req: ChatRequest, db: Session = Depends(
                 regen = mediate_regenerate(project_id, research_topic, research_text, db)
                 result["message"] = regen["message"]
                 result["actions"] = regen.get("actions", result["actions"])
+                # Persist regenerated response so history matches what the user saw
+                last_assistant = (
+                    db.query(ChatMessage)
+                    .filter_by(project_id=project_id, role="assistant")
+                    .order_by(ChatMessage.created_at.desc())
+                    .first()
+                )
+                if last_assistant:
+                    last_assistant.content = result["message"]
+                    last_assistant.actions = result["actions"]
+                    db.commit()
+                else:
+                    db.add(ChatMessage(
+                        project_id=project_id,
+                        role="assistant",
+                        content=result["message"],
+                        actions=result["actions"],
+                    ))
+                    db.commit()
             except Exception as e:
                 logger.warning(f"Regeneration after research failed: {e}")
 

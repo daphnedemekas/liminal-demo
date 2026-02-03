@@ -121,7 +121,12 @@ export interface ResourceListContent {
   resources: { title: string; url: string; description: string; category?: string }[];
 }
 
-export type ArtifactContent = ScheduleContent | ChecklistContent | VideoCollectionContent | ResourceListContent | string;
+export interface AppContent {
+  html: string;
+  description?: string;
+}
+
+export type ArtifactContent = ScheduleContent | ChecklistContent | VideoCollectionContent | ResourceListContent | AppContent | string;
 
 export interface Artifact {
   id: number;
@@ -215,6 +220,7 @@ export const api = {
     onError: (err: Error) => void,
     onStatus?: (message: string) => void,
     signal?: AbortSignal,
+    onResearchActivity?: (tool: string, input: Record<string, unknown>) => void,
   ) => {
     try {
       const res = await fetch(`${BASE}/api/projects/${projectId}/chat`, {
@@ -256,6 +262,8 @@ export const api = {
               onResearching(parsed.topic);
             } else if (eventType === "status") {
               onStatus?.(parsed.message);
+            } else if (eventType === "research_activity") {
+              onResearchActivity?.(parsed.tool, parsed.input || {});
             } else if (eventType === "message") {
               onMessage(parsed as ChatResponse);
             }
@@ -277,6 +285,11 @@ export const api = {
     }),
 
   getRun: (runId: string) => request<Run>(`/api/runs/${runId}`),
+
+  getActiveRun: (projectId: number) =>
+    request<{ active_run: { run_id: string; status: string; goal: string; created_at: string } | null }>(
+      `/api/runs/active/${projectId}`
+    ),
 
   stopRun: (runId: string) =>
     request<{ status: string }>(`/api/runs/${runId}/stop`, { method: "POST" }),
@@ -417,10 +430,10 @@ export const api = {
     }
   },
 
-  acceptDiscoveryProjects: (userId: string, projectIndices: number[]) =>
+  acceptDiscoveryProjects: (userId: string, projectIndices: number[], domain: string) =>
     request<{ created_projects: { id: number; name: string; description: string }[]; next_domain: string | null; opening: DiscoveryResponse | null; all_complete: boolean }>(
       "/api/discovery/accept-projects",
-      { method: "POST", body: JSON.stringify({ user_id: userId, project_indices: projectIndices }) },
+      { method: "POST", body: JSON.stringify({ user_id: userId, project_indices: projectIndices, domain }) },
     ),
 
   skipDiscoveryDomain: (userId: string) =>

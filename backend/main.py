@@ -1,4 +1,4 @@
-"""FastAPI application — Liminal Agent Platform."""
+"""FastAPI application — Envisage Agent Platform."""
 
 import os
 import logging
@@ -15,7 +15,7 @@ from backend.database import init_db, seed_demo_data
 from backend.routers import auth, projects, runs, onboarding, discovery, context, insights
 logging.basicConfig(level=logging.INFO)
 
-app = FastAPI(title="Liminal", description="AI for human agency")
+app = FastAPI(title="Envisage", description="AI for human agency")
 
 app.add_middleware(
     CORSMiddleware,
@@ -28,6 +28,10 @@ app.add_middleware(
 # Initialize database and seed demo data
 init_db()
 seed_demo_data()
+
+# Cleanup any runs orphaned by previous server restart
+from backend.services.run_manager import run_manager
+run_manager.cleanup_orphaned_runs()
 
 # Mount API routers
 app.include_router(auth.router)

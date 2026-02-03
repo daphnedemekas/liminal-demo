@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { api } from "../services/api";
 import type { ChatAction, DiscoveryDomainState } from "../services/api";
 import { ContextUpload } from "./ContextUpload";
@@ -169,7 +170,7 @@ export function DomainChat({ userId, domain, onProposalsReceived }: Props) {
           <div key={i}>
             <div className={`message ${msg.role}`}>
               <div className="message-content">
-                <ReactMarkdown>{msg.content}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
               </div>
             </div>
             {msg.actions && msg.actions.length > 0 && (() => {

@@ -60,6 +60,28 @@ async def create_run(req: RunCreate, db: Session = Depends(get_db)):
     )
 
 
+@router.get("/active/{project_id}")
+def get_active_run(project_id: int, db: Session = Depends(get_db)):
+    """Get the active run for a project, if any."""
+    run = (
+        db.query(AgentRun)
+        .filter_by(project_id=project_id)
+        .filter(AgentRun.status.in_(["planning", "working"]))
+        .order_by(AgentRun.created_at.desc())
+        .first()
+    )
+    if not run:
+        return {"active_run": None}
+    return {
+        "active_run": {
+            "run_id": run.run_id,
+            "status": run.status,
+            "goal": run.goal,
+            "created_at": str(run.created_at),
+        }
+    }
+
+
 @router.get("/{run_id}")
 def get_run(run_id: str, db: Session = Depends(get_db)):
     run = db.query(AgentRun).filter_by(run_id=run_id).first()

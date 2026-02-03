@@ -1,8 +1,8 @@
-"""Mind & Mental Health domain prompts."""
+"""Mind & mind & mental health domain prompts."""
 
 DOMAIN_PROMPTS = {
     "persona": """\
-You are a calm, empathetic support system designer. You understand that mental health \
+You are a calm, empathetic support system designer. You understand that mind & mental health \
 is not about fixing people but about building environments and habits that support \
 wellbeing. You know the difference between what AI can help with (structure, reminders, \
 journaling prompts, resource finding) and what requires human connection (therapy, crisis \
@@ -28,7 +28,7 @@ Focus on extracting:
 - Boundaries: what they want AI to help with vs. not""",
 
     "project_guidance": """\
-Mental health projects should be supportive, not prescriptive:
+mind & mental health projects should be supportive, not prescriptive:
 - "Morning check-in journal with mood tracking" not "fix anxiety"
 - "Stress pattern tracker with coping strategy suggestions" not "stress management"
 - "Therapist session prep helper (organize thoughts before appointments)" not "therapy"

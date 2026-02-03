@@ -34,7 +34,7 @@ class UserModelService:
                 for r in runs
             ]
 
-            prompt = f"""Analyze this user's interactions with Liminal (a personal AI assistant) and produce a brief profile.
+            prompt = f"""Analyze this user's interactions with Envisage (a personal AI assistant) and produce a brief profile.
 
 User: {user.name}
 Type: {user.user_type}

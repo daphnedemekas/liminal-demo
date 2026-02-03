@@ -67,11 +67,11 @@ function App() {
     const list = await api.listProjects(updated.id);
     setProjects(list);
 
-    // Load domains
+    // Load domains (ignore errors - domains may not exist yet)
     try {
       const state = await api.getDiscoveryState(updated.id);
       setDomains(state.domains);
-    } catch {}
+    } catch { /* expected for new users */ }
 
     // Auto-select home project
     const home = list.find((p) => p.domain === "home");
@@ -127,10 +127,10 @@ function App() {
   }, [activeDomainId, domains]);
 
   const handleAcceptProject = useCallback(async (index: number) => {
-    if (!user) return;
+    if (!user || !activeDomainId) return;
     setProposalLoading(true);
     try {
-      await api.acceptDiscoveryProjects(user.id, [index]);
+      await api.acceptDiscoveryProjects(user.id, [index], activeDomainId);
       setAcceptedIndices((prev) => new Set(prev).add(index));
       await loadProjects();
       // Don't navigate away — let the user continue accepting/skipping remaining proposals
@@ -138,14 +138,14 @@ function App() {
       console.error("Failed to accept project:", err);
     }
     setProposalLoading(false);
-  }, [user, loadProjects]);
+  }, [user, activeDomainId, loadProjects]);
 
   const handleAcceptAll = useCallback(async () => {
-    if (!user) return;
+    if (!user || !activeDomainId) return;
     setProposalLoading(true);
     try {
       const indices = domainProposals.map((_, i) => i);
-      const result = await api.acceptDiscoveryProjects(user.id, indices);
+      const result = await api.acceptDiscoveryProjects(user.id, indices, activeDomainId);
       setAcceptedIndices(new Set(indices));
       await loadProjects();
       loadDomains();
@@ -157,7 +157,7 @@ function App() {
       console.error("Failed to accept all projects:", err);
     }
     setProposalLoading(false);
-  }, [user, domainProposals, loadProjects, loadDomains]);
+  }, [user, activeDomainId, domainProposals, loadProjects, loadDomains]);
 
   const handleSkipProject = useCallback((index: number) => {
     setSkippedIndices((prev) => new Set(prev).add(index));

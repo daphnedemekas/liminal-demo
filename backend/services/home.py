@@ -16,7 +16,10 @@ from backend.database import (
 from backend.services.llm import chat_messages, parse_json
 from backend.services.prompt_builder import build_system_prompt
 from backend.services.context_service import get_context_text
-from backend.prompts.home import HOME_GREETING_PROMPT, HOME_CONVERSATION_PROMPT
+from backend.prompts.home import (
+    HOME_GREETING_PROMPT, HOME_CONVERSATION_PROMPT,
+    HOME_ROUTING_CHECK, HOME_NAVIGATION_PROMPT,
+)
 from backend.services.memory import extract_insights, retrieve_insights
 
 logger = logging.getLogger(__name__)
@@ -91,6 +94,7 @@ def home_chat_extract(project_id: int, user_message: Optional[str], db: Session)
     messages.append({"role": "user", "content": user_message})
 
     # Extract and accumulate conversation signals (uses mini model, fast)
+    # Note: research detection happens in generate phase (gpt-4o), not here
     existing_signals = project.conversation_signals or {}
     try:
         from backend.services.mediator import _extract_signals, _merge_signals
@@ -100,17 +104,6 @@ def home_chat_extract(project_id: int, user_message: Optional[str], db: Session)
         db.flush()
     except Exception as e:
         logger.warning(f"Home signal extraction failed: {e}")
-        merged = existing_signals
-
-    # Check for research request from signals (skip if already researched)
-    research_topic = None
-    research = merged.get("research")
-    if research and isinstance(research, str) and research.strip():
-        from backend.services.memory import already_researched
-        if not already_researched(user.id, research.strip(), db):
-            research_topic = research.strip()
-        else:
-            logger.debug(f"Skipping already-researched topic: {research.strip()[:60]}")
 
     signals = _summarize_known(user, project, db)
     project_context = _build_project_context(user, db, project_id)
@@ -128,7 +121,6 @@ def home_chat_extract(project_id: int, user_message: Optional[str], db: Session)
             "project_context": project_context,
             "signals": signals,
         },
-        "_pending_research": research_topic,
     }
 
 
@@ -136,6 +128,7 @@ def home_chat_generate(extract_result: dict, db: Session) -> dict:
     """Generate phase for home chat: produce response from extracted state.
 
     Takes the output of home_chat_extract (must have _extract_state key).
+    Uses routing check to decide between curiosity (get to know) vs navigation.
     """
     state = extract_result["_extract_state"]
     messages = state["messages"]
@@ -144,13 +137,25 @@ def home_chat_generate(extract_result: dict, db: Session) -> dict:
     user_id = state["user_id"]
     user_message = state["user_message"]
 
-    instruction = HOME_CONVERSATION_PROMPT.format(
-        user_name=state["user_name"],
-        model_summary=state["model_summary"],
-        domain_context=state["domain_context"],
-        project_context=state["project_context"],
-        signals=state["signals"],
-    )
+    # Step 1: Check if we should suggest navigation (fast mini model)
+    nav_suggestion = _check_navigation(messages, state["domain_context"], db, user_id=user_id)
+
+    if nav_suggestion:
+        # Use navigation prompt
+        domain_id = nav_suggestion["domain"]
+        domain_label = _get_domain_label(domain_id)
+        instruction = HOME_NAVIGATION_PROMPT.format(
+            user_name=state["user_name"],
+            domain_label=domain_label,
+            domain_id=domain_id,
+        )
+    else:
+        # Use curiosity prompt (get to know them)
+        instruction = HOME_CONVERSATION_PROMPT.format(
+            user_name=state["user_name"],
+            model_summary=state["model_summary"],
+            signals=state["signals"],
+        )
 
     # Build message list for LLM
     llm_messages = [{"role": m["role"], "content": m["content"]} for m in messages[-20:]]
@@ -176,9 +181,7 @@ def home_chat_generate(extract_result: dict, db: Session) -> dict:
     result.setdefault("actions", [])
     result["escalate"] = False
     result["task_description"] = ""
-
-    # Drop research field from generation result (handled by extract phase)
-    result.pop("research", None)
+    # Keep research field — router will check it if extract phase missed it
 
     # Save assistant message
     db.add(ChatMessage(
@@ -194,6 +197,59 @@ def home_chat_generate(extract_result: dict, db: Session) -> dict:
         extract_insights(user_id, user_message, result["message"], "home", str(project_id), db)
 
     return result
+
+
+def _check_navigation(messages: list[dict], domain_context: str, db: Session, user_id: str = None) -> Optional[dict]:
+    """Check if we should suggest navigation to a domain. Uses fast mini model."""
+    from backend.services.llm import chat as llm_chat, MODEL_MINI
+
+    # Need at least 4 messages (2 turns) to consider navigation
+    if len(messages) < 4:
+        return None
+
+    # Get user's actual selected domains from DB (not hardcoded list)
+    if user_id:
+        user_domains = db.query(DiscoveryDomain).filter_by(user_id=user_id).all()
+        domain_ids = [d.domain for d in user_domains]
+        if not domain_ids:
+            return None  # User hasn't selected any domains
+        available = ", ".join(domain_ids)
+    else:
+        return None  # Can't check without user_id
+
+    # Build conversation summary (last 6 messages)
+    recent = messages[-6:]
+    summary = "\n".join(f"{m['role']}: {m['content'][:200]}" for m in recent)
+
+    prompt = HOME_ROUTING_CHECK.format(
+        conversation_summary=summary,
+        available_domains=available,
+    )
+
+    try:
+        raw = llm_chat(prompt, model=MODEL_MINI)
+        result = parse_json(raw)
+        if result.get("suggest_navigation") and result.get("domain"):
+            logger.debug(f"Navigation check: suggest {result['domain']} - {result.get('reason')}")
+            return result
+    except Exception as e:
+        logger.debug(f"Navigation check failed: {e}")
+
+    return None
+
+
+def _get_domain_label(domain_id: str) -> str:
+    """Get human-readable label for a domain."""
+    labels = {
+        "work": "Work & Career",
+        "social": "Social Life",
+        "studies": "Studies & Learning",
+        "health": "Health & Wellness",
+        "hobbies": "Hobbies & Projects",
+        "money": "Money & Finances",
+        "mental_health": "Mind & Mental Health",
+    }
+    return labels.get(domain_id, domain_id.replace("_", " ").title())
 
 
 def home_chat_regenerate(project_id: int, research_topic: str, research_text: str, db: Session) -> dict:

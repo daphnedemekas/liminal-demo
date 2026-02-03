@@ -210,7 +210,7 @@ class ContextAttachment(Base):
 
 # ── Database setup ──────────────────────────────────────────────────
 
-DB_PATH = os.environ.get("DATABASE_PATH", "data/liminal.db")
+DB_PATH = os.environ.get("DATABASE_PATH", "data/envisage.db")
 
 _engine = None
 _SessionFactory = None

@@ -27,7 +27,7 @@ export function LoginScreen({ onLogin }: Props) {
   return (
     <div className="login-screen">
       <div className="login-container">
-        <h1>Liminal</h1>
+        <h1>Envisage</h1>
         <p className="subtitle">AI for human agency</p>
         <form onSubmit={handleSubmit}>
           <input

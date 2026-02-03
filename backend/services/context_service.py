@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 def extract_text_from_url(url: str) -> tuple[str, str]:
     """Fetch a URL and return (title, extracted_text)."""
     resp = httpx.get(url, follow_redirects=True, timeout=30,
-                     headers={"User-Agent": "Mozilla/5.0 (compatible; Liminal/1.0)"})
+                     headers={"User-Agent": "Mozilla/5.0 (compatible; Envisage/1.0)"})
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, "html.parser")
 

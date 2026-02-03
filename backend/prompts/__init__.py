@@ -1,4 +1,4 @@
-"""All LLM prompts used in the Liminal backend, organized by subsystem."""
+"""All LLM prompts used in the Envisage backend, organized by subsystem."""
 
 from backend.prompts.discovery import *
 from backend.prompts.mediator import *

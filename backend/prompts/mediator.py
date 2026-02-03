@@ -12,6 +12,8 @@ is passed as actual message turns via chat_messages(). The prompt templates belo
 are appended as the final user message with context (signals, etc.).
 """
 
+from backend.prompts.shared import ENVISAGE_TONE_STYLE, REMINDER_GREETING, REMINDER_PLAN
+
 # ── Signal Extraction ───────────────────────────────────────────────
 # Used when: Every user message in a project chat (step 1 of pipeline).
 # Called by: mediator._extract_signals()
@@ -46,7 +48,6 @@ Extract and return a JSON object with these fields (merge with existing — keep
 - "open_questions": list of strings — things still unclear that MUST be answered before work can begin
 - "needs": list of strings — specific things they need help with
 - "goals": list of strings — what they're trying to achieve
-- "research": string or null — if the user mentions a proper noun (company, community, person, place, tool) you don't recognize, set this to a short research task (e.g. "Look up what South Park Commons is"). Otherwise null.
 
 If you don't have enough information to fill a field confidently, use null rather than guessing.
 Fewer accurate signals are better than hallucinated ones.
@@ -69,7 +70,7 @@ user: September next year, budget around 30k. We're doing it in Vermont.
 <analysis>
 The user answered all three open questions: timeline is September next year, budget is ~$30k, location is Vermont. All open_questions should be removed. New constraints: $30k budget, September timeline, Vermont venue.
 </analysis>
-{"intent": "plan a Vermont wedding for September next year within $30k", "constraints": ["$30k budget", "September next year", "Vermont location"], "decisions_made": ["location: Vermont", "timeline: September next year", "budget: ~$30k"], "open_questions": [], "needs": ["venue research", "vendor coordination", "timeline planning"], "goals": ["plan a wedding in Vermont"], "research": null}
+{"intent": "plan a Vermont wedding for September next year within $30k", "constraints": ["$30k budget", "September next year", "Vermont location"], "decisions_made": ["location: Vermont", "timeline: September next year", "budget: ~$30k"], "open_questions": [], "needs": ["venue research", "vendor coordination", "timeline planning"], "goals": ["plan a wedding in Vermont"]}
 </ideal_response>
 </example>
 
@@ -127,13 +128,22 @@ Propose a concrete, numbered action plan based on everything discussed.
 Be specific — reference actual details from the conversation.
 End with action buttons so the user can approve or adjust.
 
+## KEY PRINCIPLE: Do it for them
+Frame your plan around what YOU (the agent) will do for them, not what they need to do. \
+When recommending tools or services, include setting up and configuring them as part of the plan — \
+don't just deliver a guide and leave the user to figure it out.
+- BAD: "I'll research tools and give you a comparison so you can pick one"
+- GOOD: "I'll research tools, pick the best one, then set it up and configure it for you"
+
 <example>
 <signals>{{"intent": "find a CRM for a 5-person sales team", "constraints": ["under $50/user/month", "must integrate with Gmail"], "decisions_made": ["prefer cloud-based", "need mobile app"], "open_questions": []}}</signals>
-<ideal_response>{{"message": "Here's my plan:\\n\\n1. **Research top CRMs** that integrate with Gmail and have mobile apps — focusing on HubSpot, Pipedrive, and Close since they fit your budget and team size\\n2. **Compare pricing** for a 5-person team, including any hidden costs for Gmail integration\\n3. **Test the top 2** by reviewing their free trials and documenting the setup experience\\n4. **Deliver a recommendation** with a comparison table and my honest pick\\n\\nThis should give you a clear winner without wading through dozens of options yourself.", "actions": [{{"label": "Looks good, let's go", "description": "Approve this plan and start working", "action_text": "Looks good, let's go"}}, {{"label": "I want to adjust something", "description": "Modify the plan before starting", "action_text": "I want to adjust something"}}], "escalate": false, "task_description": "", "research": null}}</ideal_response>
+<ideal_response>{{"message": "Here's my plan:\\n\\n1. **Research top CRMs** that integrate with Gmail and have mobile apps — focusing on HubSpot, Pipedrive, and Close\\n2. **Compare pricing** for a 5-person team, including any hidden costs for Gmail integration\\n3. **Pick the winner** and explain why it's the best fit for your setup\\n4. **Set it up for you** — I'll create your account, configure the Gmail integration, and set up your team structure\\n\\nYou'll just need to provide your email for the account. Sound good?", "actions": [{{"label": "Looks good, let's go", "description": "Approve this plan and start working", "action_text": "Looks good, let's go"}}, {{"label": "I want to adjust something", "description": "Modify the plan before starting", "action_text": "I want to adjust something"}}], "escalate": false, "task_description": "", "research": null}}</ideal_response>
 </example>
 
 If the user mentioned something you don't recognize (a company, person, tool, etc.), include a
 "research" field with a short task description. Otherwise set it to null.
+
+""" + REMINDER_PLAN + """
 
 Respond with JSON:
 {{"message": "your plan proposal", "actions": [{{"label": "Looks good, let's go", "description": "Approve this plan and start working", "action_text": "Looks good, let's go"}}, {{"label": "I want to adjust something", "description": "Modify the plan before starting", "action_text": "I want to adjust something"}}], "escalate": false, "task_description": "", "research": null}}
@@ -180,6 +190,10 @@ The user just opened the project "{project_name}". {greeting_instruction}
 IMPORTANT: Keep your greeting brief and conversational. DO NOT include detailed research, comparisons, \
 or tool recommendations in your greeting. Save proactive research for when the user asks a question. \
 Your greeting should be warm, contextual, and focused on understanding what they want to work on.
+
+""" + REMINDER_GREETING + """
+
+""" + ENVISAGE_TONE_STYLE + """
 
 Respond with JSON:
 {{"message": "your greeting", "actions": [], "escalate": false, "task_description": ""}}

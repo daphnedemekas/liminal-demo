@@ -12,12 +12,13 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Optional
 
 from sqlalchemy.orm import Session
 
 from backend.database import ChatMessage, DiscoveryDomain, UserProfile, Project, get_session_factory
-from backend.services.llm import chat, chat_json, chat_json_parallel, MODEL_MINI
+from backend.services.llm import chat, chat_json, chat_json_parallel, parse_json, MODEL_MINI, MODEL_JSON
 from backend.services.context_service import get_context_text
 from backend.prompts.domains import get_domain_prompts
 
@@ -129,7 +130,7 @@ DOMAIN_SCHEMA_EXAMPLES = {
         "agent_capabilities": ["expense categorization", "deal finding", "subscription audit", "investment research", "budget tracking"],
     },
     "mental_health": {
-        "label": "Mind & Mental Health",
+        "label": "Mind & mental health",
         "narrowing_steps": [
             {"id": "context", "question_focus": "current emotional landscape", "examples": ["stress", "burnout", "anxiety", "life transition", "motivation"]},
             {"id": "friction", "question_focus": "what makes it hard to maintain wellbeing", "examples": ["no routine", "isolation", "imposter syndrome", "overwhelm"]},
@@ -146,7 +147,7 @@ DOMAIN_OPTIONS = [
     {"id": "health", "label": "Health & wellness", "icon": "heart"},
     {"id": "hobbies", "label": "Hobbies & projects", "icon": "palette"},
     {"id": "money", "label": "Money & finances", "icon": "dollar"},
-    {"id": "mental_health", "label": "Mental health", "icon": "brain"},
+    {"id": "mental_health", "label": "Mind & mental health", "icon": "brain"},
 ]
 
 # Map domain id → label for quick lookup
@@ -184,6 +185,10 @@ def infer_phase(signals: dict) -> str:
 class DiscoveryEngine:
     """Drives domain-based agency discovery conversations."""
 
+    def __init__(self):
+        # Accumulated research topics per user:domain, executed in batch before proposals
+        self._accumulated_research: dict[str, list[str]] = {}
+
     def select_domains(self, user_id: str, domains: list[str], db: Session) -> dict:
         """Record selected domains and generate schemas. Does NOT start conversations."""
         user = db.query(UserProfile).filter_by(id=user_id).first()
@@ -197,15 +202,16 @@ class DiscoveryEngine:
         for domain in domains:
             if domain not in DOMAIN_LABELS:
                 continue
-            dd = DiscoveryDomain(
-                user_id=user_id,
-                domain=domain,
-                status="pending",
-            )
-            db.add(dd)
-            db.flush()
-
-            # Generate personalized schema
+            dd = db.query(DiscoveryDomain).filter_by(user_id=user_id, domain=domain).first()
+            if not dd:
+                dd = DiscoveryDomain(
+                    user_id=user_id,
+                    domain=domain,
+                    status="pending",
+                )
+                db.add(dd)
+                db.flush()
+            # Generate (or refresh) personalized schema
             dd.schema = self._generate_schema(user, domain)
             domain_records.append(dd)
 
@@ -352,15 +358,14 @@ class DiscoveryEngine:
             logger.warning(f"Signal merge failed: {e}")
             merged = active.signals or {}
 
-        # Check for research request from signals (proper noun lookup, skip if already researched)
-        research_topic = None
+        # Accumulate research topics for batch execution before proposals
         research_raw = merged.pop("research", None)
         if research_raw and isinstance(research_raw, str) and research_raw.strip():
             from backend.services.memory import already_researched
             if not already_researched(user_id, research_raw.strip(), db):
-                research_topic = research_raw.strip()
-            else:
-                logger.debug(f"Skipping already-researched topic: {research_raw.strip()[:60]}")
+                key = f"{user_id}:{active.domain}"
+                self._accumulated_research.setdefault(key, []).append(research_raw.strip())
+                logger.debug(f"Accumulated research topic: {research_raw.strip()[:60]}")
 
         active.signals = dict(merged)
         active.depth = (active.depth or 0) + 1
@@ -375,20 +380,20 @@ class DiscoveryEngine:
         else:
             result = self._generate_next(user, active, schema, conv, db, parallel_analysis=parallel_analysis)
 
-            # Handle agent_task from elicitation — code-enforced gating
+            # Handle agent_task from elicitation — accumulate auto-research, keep manual button
             agent_task = result.pop("agent_task", None)
             if agent_task and isinstance(agent_task, dict) and agent_task.get("description"):
-                if self._research_allowed(active, phase):
-                    if agent_task.get("auto"):
-                        result["_pending_agent"] = agent_task["description"]
-                    else:
-                        result.setdefault("actions", []).insert(0, {
-                            "label": "Research this",
-                            "description": agent_task["description"][:80],
-                            "action_text": f"agent_run:{agent_task['description']}",
-                        })
+                if agent_task.get("auto"):
+                    # Accumulate for batch execution before proposals
+                    key = f"{user_id}:{active.domain}"
+                    self._accumulated_research.setdefault(key, []).append(agent_task["description"])
+                    logger.debug(f"Accumulated agent research: {agent_task['description'][:60]}")
                 else:
-                    logger.debug(f"Research request dropped (phase={phase}, depth={active.depth}): {agent_task['description'][:60]}")
+                    result.setdefault("actions", []).insert(0, {
+                        "label": "Research this",
+                        "description": agent_task["description"][:80],
+                        "action_text": f"agent_run:{agent_task['description']}",
+                    })
 
         # Save assistant message
         conv.append({"role": "assistant", "content": result["message"]})
@@ -402,17 +407,23 @@ class DiscoveryEngine:
         result["domain"] = active.domain
         result["depth"] = active.depth
 
-        # Signal-based research (proper noun lookup, bypasses phase gating)
-        if research_topic:
-            result["_pending_research"] = research_topic
+        # When proposing, attach accumulated research topics for batch execution
+        if action == "propose_projects":
+            key = f"{user_id}:{active.domain}"
+            accumulated = self._accumulated_research.pop(key, [])
+            if accumulated:
+                result["_accumulated_topics"] = accumulated
 
         return result
 
-    def accept_projects(self, user_id: str, project_indices: list[int], db: Session, finalize: bool = False) -> list[dict]:
+    def accept_projects(self, user_id: str, project_indices: list[int], db: Session, finalize: bool = False, domain: str | None = None) -> list[dict]:
         """Create Projects from proposals. Only advances domain when finalize=True or all proposals are accepted."""
-        active = db.query(DiscoveryDomain).filter_by(user_id=user_id, status="explored").first()
-        if not active:
-            active = db.query(DiscoveryDomain).filter_by(user_id=user_id, status="active").first()
+        if domain:
+            active = db.query(DiscoveryDomain).filter_by(user_id=user_id, domain=domain).first()
+        else:
+            active = db.query(DiscoveryDomain).filter_by(user_id=user_id, status="explored").first()
+            if not active:
+                active = db.query(DiscoveryDomain).filter_by(user_id=user_id, status="active").first()
         if not active:
             raise ValueError("No domain with proposals to accept")
 
@@ -602,8 +613,13 @@ class DiscoveryEngine:
 
         return result_text or "No results found."
 
-    async def research_and_refine_proposals(self, user_id: str, result: dict, db: Session) -> dict:
-        """Research existing tools/solutions and refine project proposals accordingly."""
+    async def research_and_refine_proposals(self, user_id: str, result: dict, db: Session,
+                                             accumulated_topics: list[str] | None = None) -> dict:
+        """Research existing tools/solutions and refine project proposals accordingly.
+
+        If accumulated_topics are provided (research noted during Q&A), they are
+        included in the research task so all research happens in a single batch.
+        """
         proposals = result.get("proposed_projects", [])
         if not proposals:
             return result
@@ -622,17 +638,42 @@ class DiscoveryEngine:
             f"- {p.get('name', 'Project')}: {p.get('description', '')}" for p in proposals
         )
 
+        # Include accumulated research topics from conversation
+        accumulated_section = ""
+        if accumulated_topics:
+            # Deduplicate
+            seen = set()
+            unique = []
+            for t in accumulated_topics:
+                if t.lower() not in seen:
+                    seen.add(t.lower())
+                    unique.append(t)
+            topics_text = "\n".join(f"- {t}" for t in unique[:5])
+            accumulated_section = (
+                f"\n\nAlso research these topics noted during our conversation:\n"
+                f"{topics_text}\n"
+            )
+            logger.info(f"Including {len(unique)} accumulated research topics in proposal research")
+
         research_task = (
             f"Research the best EXISTING tools, services, and integrations for these needs:\n"
             f"{proposal_summaries}\n\n"
             f"User's current tools: {', '.join(tools_used) if tools_used else 'not specified'}\n"
-            f"Pain points: {', '.join(frictions) if frictions else 'not specified'}\n\n"
+            f"Pain points: {', '.join(frictions) if frictions else 'not specified'}\n"
+            f"{accumulated_section}\n"
             f"Find real products/services that solve these problems. "
             f"For each, note: name, what it does, pricing (if available), and how it integrates "
             f"with the user's existing tools. Prefer solutions that integrate with what they already use."
         )
 
         research_result = await self._run_discovery_agent(research_task, user, active)
+
+        # Store research insights for memory
+        try:
+            from backend.services.memory import extract_research_insights
+            extract_research_insights(user.id, research_task, research_result, active.domain, db)
+        except Exception as e:
+            logger.warning(f"Failed to extract research insights: {e}")
 
         # Now regenerate proposals with the research context
         schema = active.schema or {}
@@ -650,11 +691,10 @@ class DiscoveryEngine:
         prompt += f"\n\n## Research on existing solutions\n{research_result}\n\nUse this research to recommend REAL tools and services, not hypothetical ones."
 
         try:
-            raw = chat(prompt)
-            import re
+            # Use gpt-4o for reliable JSON output
+            raw = chat(prompt, model=MODEL_JSON)
             cleaned = re.sub(r"<brainstorm>.*?</brainstorm>", "", raw, flags=re.DOTALL).strip()
-            from backend.services.llm import parse_json as _parse_json
-            proposals = _parse_json(cleaned)
+            proposals = parse_json(cleaned)
             if not isinstance(proposals, list):
                 proposals = [proposals]
         except Exception as e:
@@ -690,30 +730,6 @@ class DiscoveryEngine:
         }
 
     # ── Internal helpers ────────────────────────────────────────────
-
-    def _research_allowed(self, domain: DiscoveryDomain, phase: str) -> bool:
-        """Code-enforced research gating. All prerequisites must be true."""
-        # Phase must be solution_space or converging
-        if phase not in ("solution_space", "converging"):
-            return False
-
-        # Must have context + at least 1 friction + at least 1 tool
-        signals = domain.signals or {}
-        if not signals.get("context"):
-            return False
-        if not signals.get("frictions"):
-            return False
-        if not signals.get("tools_used"):
-            return False
-
-        # Cooldown: no research within last 3 user turns
-        conv = domain.conversation or []
-        recent_user_turns = [m for m in conv[-6:] if m.get("role") == "user"]
-        recent_system = [m for m in conv[-6:] if m.get("role") == "system" and "[Agent research result]" in m.get("content", "")]
-        if recent_system and len(recent_user_turns) < 3:
-            return False
-
-        return True
 
     def _analyze_parallel(self, domain: DiscoveryDomain, schema: dict, message: str, conv_text: str, user_id: str, db: Session, include: set = None) -> dict:
         """Run parallel analysis calls, filtered by `include` set."""
@@ -995,11 +1011,10 @@ class DiscoveryEngine:
         )
 
         try:
-            raw = chat(prompt)
-            import re
+            # Use gpt-4o for reliable JSON output (gpt-5 returns empty responses)
+            raw = chat(prompt, model=MODEL_JSON)
             cleaned = re.sub(r"<brainstorm>.*?</brainstorm>", "", raw, flags=re.DOTALL).strip()
-            from backend.services.llm import parse_json as _parse_json
-            proposals = _parse_json(cleaned)
+            proposals = parse_json(cleaned)
             if not isinstance(proposals, list):
                 proposals = [proposals]
         except Exception as e:

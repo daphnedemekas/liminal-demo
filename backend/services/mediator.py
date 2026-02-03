@@ -13,7 +13,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from backend.database import ChatMessage, Project, AgentRun, UserProfile
-from backend.services.llm import chat, chat_messages, parse_json, MODEL_MINI
+from backend.services.llm import chat, chat_messages, parse_json, MODEL_MINI, MODEL_JSON
 from backend.services.prompt_builder import build_system_prompt, build_synthesis_prompt
 from backend.services.context_service import get_context_text
 from backend.services.memory import extract_insights, retrieve_insights
@@ -79,7 +79,7 @@ def mediate_extract(project_id: int, user_message: Optional[str], db: Session) -
         if any(m["role"] == "assistant" for m in messages):
             last = next(m for m in reversed(messages) if m["role"] == "assistant")
             return {"message": last["content"], "actions": [], "escalate": False, "task_description": "", "_early_return": True}
-        result = _handle_greeting(project, user, messages, recent_runs, base_prompt, db)
+        result = _handle_greeting(project, messages, recent_runs, base_prompt, db)
         result["_early_return"] = True
         return result
 
@@ -116,12 +116,7 @@ def mediate_extract(project_id: int, user_message: Optional[str], db: Session) -
         # Step 2: Rank — decide what action to take
         action = _rank(merged, turn_count, user_message)
 
-    # Check for research request from signals
-    research_topic = None
-    research = merged.get("research")
-    if research and isinstance(research, str) and research.strip():
-        research_topic = research.strip()
-
+    # Note: research detection happens in generate phase (gpt-4o), not here
     return {
         "_extract_state": {
             "action": action,
@@ -133,7 +128,6 @@ def mediate_extract(project_id: int, user_message: Optional[str], db: Session) -
             "user_message": user_message,
             "project_name": project.name,
         },
-        "_pending_research": research_topic,
     }
 
 
@@ -186,9 +180,7 @@ def mediate_generate(extract_result: dict, db: Session) -> dict:
     result.setdefault("actions", [])
     result.setdefault("escalate", False)
     result.setdefault("task_description", "")
-
-    # Drop research field from generation result (handled by extract phase)
-    result.pop("research", None)
+    # Keep research field — router will check it if extract phase missed it
 
     # Save assistant message
     db.add(ChatMessage(
@@ -256,10 +248,9 @@ def _extract_signals(messages: list[dict], latest_message: str, existing_signals
         latest_message=latest_message,
         existing_signals=json.dumps(existing_signals),
     )
-    from backend.services.llm import chat, parse_json as _parse_json
     raw = chat(prompt, model=MODEL_MINI)
     cleaned = _strip_xml_tag(raw, "analysis")
-    return _parse_json(cleaned)
+    return parse_json(cleaned)
 
 
 def _merge_signals(existing: dict, new: dict) -> dict:
@@ -363,7 +354,7 @@ def _generate(action: str, signals: dict, messages: list[dict], base_prompt: str
     return parse_json(raw)
 
 
-def _handle_greeting(project, _user, messages, recent_runs, base_prompt, db) -> dict:  # noqa: ARG001
+def _handle_greeting(project, messages, recent_runs, base_prompt, db) -> dict:
     """Handle the greeting case when user opens a project with no message."""
 
     run_context = ""
@@ -445,7 +436,7 @@ def synthesize_result(run: AgentRun, project: Project, user: UserProfile, db: Se
     )
 
     try:
-        raw = chat(prompt)
+        raw = chat(prompt, model=MODEL_JSON)  # Use gpt-4o for reliable JSON
         result = parse_json(raw)
     except Exception as e:
         logger.warning(f"Synthesis LLM call failed: {e}")

@@ -1,7 +1,7 @@
 #!/bin/bash
 # Start both backend and frontend
 
-echo "Starting Liminal..."
+echo "Starting Envisage..."
 
 cd "$(dirname "$0")"
 

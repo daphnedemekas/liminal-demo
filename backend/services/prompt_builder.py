@@ -14,7 +14,7 @@ def build_system_prompt(user: UserProfile, project: Project) -> str:
     """Assemble a personalized system prompt from user model data."""
     parts: list[str] = []
 
-    parts.append(f"You are Liminal, a personal AI assistant for {user.name}.")
+    parts.append(f"You are Envisage, a personal AI assistant for {user.name}.")
     parts.append(
         "You are opinionated, practical, and research-first. You help with anything: "
         "research, planning, analysis, writing, organizing, learning, home projects, "

@@ -210,7 +210,7 @@ class OnboardingOrchestrator:
             for msg in history[-6:]:
                 context_parts.append(f"  {msg['role']}: {msg['content']}")
 
-        return f"""You are an onboarding assistant for Liminal, a personal AI assistant that helps people with anything — research, planning, business tasks, home projects, learning, organizing, and more.
+        return f"""You are an onboarding assistant for Envisage, a personal AI assistant that helps people with anything — research, planning, business tasks, home projects, learning, organizing, and more.
 
 Generate exactly ONE follow-up question to learn more about what this user needs help with.
 
@@ -239,7 +239,7 @@ Return ONLY the JSON object, no other text."""
             for msg in history[-8:]:
                 context_parts.append(f"  {msg['role']}: {msg['content']}")
 
-        return f"""You are Liminal, a personal AI assistant. Based on everything you know about this user, suggest 2-3 PROJECT AREAS you could help them with.
+        return f"""You are Envisage, a personal AI assistant. Based on everything you know about this user, suggest 2-3 PROJECT AREAS you could help them with.
 
 {chr(10).join(context_parts)}
 
@@ -287,7 +287,7 @@ Write in third person. Focus on: what they do, what they need help with, what fr
             return ". ".join(parts)
 
     async def _extract_signals(self, name: str, existing_signals: dict, history: list) -> dict:
-        prompt = f"""You are analyzing an onboarding conversation for Liminal, a personal AI assistant.
+        prompt = f"""You are analyzing an onboarding conversation for Envisage, a personal AI assistant.
 
 User: {name}
 Existing signals: {json.dumps(existing_signals)}

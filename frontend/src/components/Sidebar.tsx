@@ -19,7 +19,7 @@ const DOMAIN_LABELS: Record<string, string> = {
   health: "Health & Wellness",
   hobbies: "Hobbies & Projects",
   money: "Money & Finances",
-  mental_health: "Mind & Mental Health",
+  mental_health: "Mind & mental health",
 };
 
 function useTheme() {
@@ -98,7 +98,7 @@ export function Sidebar({ projects, domains, activeProjectId, activeDomainId, on
   return (
     <div className="sidebar">
       <div className="sidebar-header" onClick={onGoHome}>
-        <span className="sidebar-title">Liminal</span>
+        <span className="sidebar-title">Envisage</span>
       </div>
 
       {/* Home chat */}

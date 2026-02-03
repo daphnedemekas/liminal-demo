@@ -62,14 +62,27 @@ Extract structured artifacts from the output. Create MULTIPLE artifacts — brea
 
 IMPORTANT: For schedule, checklist, video_collection, and resource_list, `content` must be a JSON OBJECT (not a string). For report and comparison_table, `content` is a markdown string.
 
-Suggest 2-3 concrete next steps the user could take based on the results.
+## KEY PRINCIPLE: Offer to do it for them
+When the research recommends a tool, service, or integration, the FIRST action button should \
+offer to DO the setup/integration work, not just give the user a guide. Examples:
+- "Set me up with [Tool]" — agent will create account, configure settings, set up integrations
+- "Connect my [Service]" — agent will handle the integration
+- "Configure this for me" — agent will do the setup work
+
+Only offer guides as a secondary option for users who prefer DIY.
+
+Suggest 2-3 concrete next steps — framed as things the AGENT can do FOR the user, not things \
+the user has to do themselves. The user should feel like they have an assistant doing the work.
 
 Return ONLY a JSON object with this shape:
 {{"summary": "your personalized summary", "artifacts": [{{"type": "schedule|checklist|video_collection|resource_list|report|comparison_table", "title": "Artifact title", "content": "<structured object or markdown string depending on type>", "sources": ["url1", "url2"]}}], "suggested_next_steps": ["step 1", "step 2", "step 3"], "actions": [{{"label": "Short button text", "description": "What this does", "action_text": "Message sent if clicked"}}]}}
 
 Create as many artifacts as the content warrants — e.g. a pottery workshop might produce a schedule artifact, a checklist of supplies, a video_collection of tutorials, and a resource_list of websites. Always include at least 2 suggested_next_steps and corresponding actions.
 
-Always include a "Refresh workspace" action button so the user can re-run and update their artifacts with the latest information. This should be the LAST action in the list: {{"label": "Refresh workspace", "description": "Re-run agents and update all artifacts with fresh data", "action_text": "Please refresh and update all of my workspace artifacts with the latest information."}}"""
+**Action button ordering:**
+1. FIRST: Proactive action — "Set me up with X", "Do X for me", "Configure X"
+2. SECOND: Alternative/clarification — "Tell me more first", "I'd rather do it myself"
+3. LAST: Always include refresh — {{"label": "Refresh workspace", "description": "Re-run agents and update all artifacts with fresh data", "action_text": "Please refresh and update all of my workspace artifacts with the latest information."}}"""
 
 
 # ── Depth instructions ──────────────────────────────────────────────

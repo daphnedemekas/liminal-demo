@@ -4,6 +4,7 @@ import type {
   VideoCollectionContent,
   ResourceListContent,
   ScheduleContent,
+  AppContent,
   ArtifactContent,
 } from "../../services/api";
 import { ChecklistArtifact } from "./ChecklistArtifact";
@@ -11,6 +12,7 @@ import { VideoArtifact } from "./VideoArtifact";
 import { ResourceArtifact } from "./ResourceArtifact";
 import { ScheduleArtifact } from "./ScheduleArtifact";
 import { MarkdownArtifact } from "./MarkdownArtifact";
+import { AppArtifact } from "./AppArtifact";
 
 interface Props {
   artifact: Artifact;
@@ -38,10 +40,12 @@ export function ArtifactCard({ artifact, projectId, onUpdate }: Props) {
         return <ResourceArtifact content={content as ResourceListContent} />;
       case "schedule":
         return <ScheduleArtifact content={content as ScheduleContent} />;
+      case "app":
+        return <AppArtifact content={content as AppContent} />;
       default: {
         const md = typeof content === "string"
           ? content
-          : ((content as Record<string, unknown>)?.markdown as string) || JSON.stringify(content, null, 2);
+          : ((content as unknown as Record<string, unknown>)?.markdown as string) || JSON.stringify(content, null, 2);
         return <MarkdownArtifact content={md} />;
       }
     }

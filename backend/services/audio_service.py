@@ -16,7 +16,7 @@ class AudioService:
     """Handles text-to-speech conversion using ElevenLabs."""
 
     def __init__(self, api_key: Optional[str] = None, voice_id: Optional[str] = None):
-        self.audio_dir = Path(tempfile.gettempdir()) / "liminal_audio"
+        self.audio_dir = Path(tempfile.gettempdir()) / "envisage_audio"
         self.audio_dir.mkdir(exist_ok=True)
 
         self.api_key = api_key or os.getenv("ELEVENLABS_API_KEY")

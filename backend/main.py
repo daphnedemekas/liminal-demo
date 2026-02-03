@@ -16,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from backend.database import init_db, seed_demo_data
 from backend.routers import auth, projects, runs, onboarding, discovery, context, insights
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Envisage", description="AI for human agency")
 
@@ -199,6 +200,14 @@ async def save_app_data(artifact_id: int, request: Request):
 
 
 # Serve frontend static files if built
-frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
-if frontend_dist.exists():
+# Try multiple possible locations (handles different deployment layouts)
+_candidates = [
+    Path(__file__).parent.parent / "frontend" / "dist",  # dev: repo_root/frontend/dist
+    Path.cwd() / "frontend" / "dist",                    # Railway: /app/frontend/dist
+]
+frontend_dist = next((p for p in _candidates if p.exists() and (p / "index.html").exists()), None)
+if frontend_dist:
+    logger.info(f"Serving frontend from {frontend_dist}")
     app.mount("/", StaticFiles(directory=str(frontend_dist), html=True), name="frontend")
+else:
+    logger.warning(f"Frontend dist not found. Checked: {[str(p) for p in _candidates]}")

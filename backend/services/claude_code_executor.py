@@ -3,6 +3,10 @@
 import asyncio
 import json
 import logging
+import os
+import shutil
+import tempfile
+from pathlib import Path
 from typing import AsyncIterator, List, Optional
 from dataclasses import dataclass
 
@@ -35,6 +39,16 @@ class ClaudeCodeExecutor:
 
         Uses: claude -p "instruction" --output-format stream-json --verbose
         """
+        # Create a sandboxed HOME so the inner agent doesn't inherit
+        # user-level plugins (e.g. Playwright MCP) that can hang
+        sandbox_home = tempfile.mkdtemp(prefix="envisage-sandbox-")
+        sandbox_claude_dir = Path(sandbox_home) / ".claude"
+        sandbox_claude_dir.mkdir()
+        # Write minimal settings (no plugins, no MCP servers)
+        (sandbox_claude_dir / "settings.json").write_text(
+            json.dumps({"permissions": {"allow": []}})
+        )
+
         cmd = [
             "claude", "-p", instruction,
             "--output-format", "stream-json",
@@ -48,6 +62,10 @@ class ClaudeCodeExecutor:
         if max_turns is not None:
             cmd.extend(["--max-turns", str(max_turns)])
 
+        # Inherit current env but override HOME to sandbox
+        env = os.environ.copy()
+        env["HOME"] = sandbox_home
+
         logger.info(f"Executing claude: {instruction[:100]}...")
 
         process = await asyncio.create_subprocess_exec(
@@ -55,6 +73,7 @@ class ClaudeCodeExecutor:
             cwd=working_dir,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            env=env,
         )
 
         try:
@@ -78,6 +97,12 @@ class ClaudeCodeExecutor:
             yield ExecutorEvent(type="error", content={"error": str(e)}, raw={})
 
         await process.wait()
+
+        # Clean up sandbox HOME directory
+        try:
+            shutil.rmtree(sandbox_home, ignore_errors=True)
+        except Exception:
+            pass
 
         if process.returncode != 0:
             stderr = await process.stderr.read()

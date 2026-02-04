@@ -178,6 +178,12 @@ Set agent_task to null on most turns (which should be nearly all turns).
 
 Do NOT include mid-conversation suggestion buttons in actions. Only include actions for project proposals (accept/skip).
 
+## Rich content
+When the user shares substantial content (an article, blog post, long document, detailed data, \
+or a message much longer than a casual chat message), DO NOT give a shallow 1-line reply. \
+Engage deeply: analyze what they shared, pull out key insights, connect it to the domain \
+conversation, and give concrete observations. Match the effort they put in.
+
 """ + REMINDER_ELICITATION + """
 
 """ + ENVISAGE_TONE_STYLE + """

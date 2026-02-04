@@ -179,9 +179,14 @@ def home_chat_generate(extract_result: dict, db: Session) -> dict:
 
     result.setdefault("message", "")
     result.setdefault("actions", [])
+    result.setdefault("artifacts", [])
     result["escalate"] = False
     result["task_description"] = ""
     # Keep research field — router will check it if extract phase missed it
+
+    # Persist any artifacts the LLM created (e.g. rich content analysis)
+    from backend.services.mediator import _persist_chat_artifacts
+    _persist_chat_artifacts(result.get("artifacts", []), project_id, db)
 
     # Save assistant message
     db.add(ChatMessage(

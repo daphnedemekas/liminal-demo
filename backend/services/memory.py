@@ -128,6 +128,9 @@ Summarize the key facts from this research into concise insights.
 Research topic: {topic}
 Research results: {results}
 
+Conversation context (why the user mentioned this):
+{conversation_context}
+
 Return a JSON array. Each insight:
 {{"category": "fact", "content": "concise factual statement", "keywords": "comma,separated,keywords", "confidence": "stated"}}
 
@@ -135,6 +138,12 @@ Rules:
 - Extract 2-5 key facts about the topic
 - Be concise: "Softmax: AI alignment startup by Emmett Shear, backed by a16z"
 - Include the most useful/relevant facts, skip minor details
+- CRITICAL: If the topic is a person, company, or entity name and the research found MULTIPLE \
+different people/entities with the same name, only extract facts about the ONE that matches \
+the conversation context. Do NOT save facts about unrelated people. If you truly cannot \
+determine which one the user meant, return a single insight with category "fact" and content \
+like "George Deane — multiple people found; need to clarify which one" rather than saving \
+facts about all of them.
 - Return ONLY the JSON array."""
 
 
@@ -144,11 +153,16 @@ def _do_extract_research(
     results: str,
     source_layer: str,
     source_id: Optional[str],
+    conversation_context: str = "",
 ) -> None:
     """Run research insight extraction in a background thread with its own DB session."""
     session = get_session_factory()()
     try:
-        prompt = RESEARCH_INSIGHT_PROMPT.format(topic=topic, results=results)
+        prompt = RESEARCH_INSIGHT_PROMPT.format(
+            topic=topic,
+            results=results,
+            conversation_context=conversation_context or "No context available",
+        )
         from backend.services.llm import MODEL_MINI
         new_insights = chat_json(prompt, model=MODEL_MINI)
         if not isinstance(new_insights, list):
@@ -180,13 +194,14 @@ def extract_research_insights(
     results: str,
     source_id: Optional[str],
     db: Session,
+    conversation_context: str = "",
 ) -> None:
     """Extract and persist insights from research results (background thread)."""
     if not results or not results.strip():
         return
     t = threading.Thread(
         target=_do_extract_research,
-        args=(user_id, topic, results, "research", source_id),
+        args=(user_id, topic, results, "research", source_id, conversation_context),
         daemon=True,
     )
     t.start()

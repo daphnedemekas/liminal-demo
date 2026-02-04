@@ -1,12 +1,32 @@
 """Context extraction service — URL fetching, PDF parsing, text storage."""
 
 import logging
+import re
 from typing import Optional
 
 import httpx
 from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
+
+URL_PATTERN = re.compile(r'https?://[^\s<>"\')\]]+')
+
+
+def detect_urls(text: str) -> list[str]:
+    """Extract URLs from message text."""
+    return URL_PATTERN.findall(text)
+
+
+def generate_summary(title: str, text: str) -> str:
+    """Use mini LLM to produce a concise summary (3-5 bullet points) of long content."""
+    from backend.services.llm import chat, MODEL_MINI
+    prompt = (
+        f"Summarize the following content in 3-5 concise bullet points. "
+        f"Focus on the key ideas, claims, and takeaways.\n\n"
+        f"Title: {title}\n\n"
+        f"Content:\n{text[:10000]}"
+    )
+    return chat(prompt, model=MODEL_MINI)
 
 
 def extract_text_from_url(url: str) -> tuple[str, str]:

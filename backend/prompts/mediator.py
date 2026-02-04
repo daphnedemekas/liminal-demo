@@ -103,10 +103,23 @@ for concrete proposals the user can accept or reject (e.g. a plan to approve, a 
 action to authorize). For normal questions, always use an empty actions array.
 
 If the user mentioned something you don't recognize (a company, person, tool, etc.), include a
-"research" field with a short task description. Otherwise set it to null.
+"research" field with a specific task description that includes enough context to disambiguate. \
+For people: include how the user knows them or the context they were mentioned in. \
+Example: "Look up George Deane, mentioned as someone the user is meeting about their startup" \
+NOT just "Look up George Deane". Otherwise set research to null.
+
+## Rich content analysis
+If the user shared substantial content (an article, blog post, long document, detailed data, or a \
+message significantly longer than a casual chat message), you MUST:
+1. Deeply engage with it in your message — pull out key insights, connect to their goals, give advice
+2. Create an "artifacts" array with a structured analysis for the workspace panel (right side). \
+   Each artifact: {{"type": "report", "title": "descriptive title", "content": {{"markdown": "detailed analysis"}}}}
+3. Your chat message should reference the artifact: "I put a detailed breakdown on the right."
+
+If the user's message is short/conversational, set "artifacts" to an empty array.
 
 Respond with JSON:
-{{"message": "your question(s)", "actions": [], "escalate": false, "task_description": "", "research": null}}
+{{"message": "your question(s)", "actions": [], "escalate": false, "task_description": "", "research": null, "artifacts": []}}
 
 Return ONLY the JSON object."""
 
@@ -141,12 +154,25 @@ don't just deliver a guide and leave the user to figure it out.
 </example>
 
 If the user mentioned something you don't recognize (a company, person, tool, etc.), include a
-"research" field with a short task description. Otherwise set it to null.
+"research" field with a specific task description that includes enough context to disambiguate. \
+For people: include how the user knows them or the context they were mentioned in. \
+Example: "Look up George Deane, mentioned as someone the user is meeting about their startup" \
+NOT just "Look up George Deane". Otherwise set research to null.
+
+## Rich content analysis
+If the user shared substantial content (an article, blog post, long document, detailed data, or a \
+message significantly longer than a casual chat message), you MUST:
+1. Deeply engage with it in your message — pull out key insights, connect to their goals, give advice
+2. Create an "artifacts" array with a structured analysis for the workspace panel (right side). \
+   Each artifact: {{"type": "report", "title": "descriptive title", "content": {{"markdown": "detailed analysis"}}}}
+3. Your chat message should reference the artifact: "I put a detailed breakdown on the right."
+
+If the user's message is short/conversational, set "artifacts" to an empty array.
 
 """ + REMINDER_PLAN + """
 
 Respond with JSON:
-{{"message": "your plan proposal", "actions": [{{"label": "Looks good, let's go", "description": "Approve this plan and start working", "action_text": "Looks good, let's go"}}, {{"label": "I want to adjust something", "description": "Modify the plan before starting", "action_text": "I want to adjust something"}}], "escalate": false, "task_description": "", "research": null}}
+{{"message": "your plan proposal", "actions": [{{"label": "Looks good, let's go", "description": "Approve this plan and start working", "action_text": "Looks good, let's go"}}, {{"label": "I want to adjust something", "description": "Modify the plan before starting", "action_text": "I want to adjust something"}}], "escalate": false, "task_description": "", "research": null, "artifacts": []}}
 
 Return ONLY the JSON object."""
 
@@ -174,7 +200,7 @@ prescribe Google Sheets, Notion, or any specific platform in the task_descriptio
 Focus on the user's actual needs and desired outcomes.
 
 Respond with JSON:
-{{"message": "your brief confirmation", "actions": [], "escalate": true, "task_description": "detailed task description here"}}
+{{"message": "your brief confirmation", "actions": [], "escalate": true, "task_description": "detailed task description here", "artifacts": []}}
 
 Return ONLY the JSON object."""
 

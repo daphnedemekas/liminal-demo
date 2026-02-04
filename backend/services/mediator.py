@@ -180,7 +180,11 @@ def mediate_generate(extract_result: dict, db: Session) -> dict:
     result.setdefault("actions", [])
     result.setdefault("escalate", False)
     result.setdefault("task_description", "")
+    result.setdefault("artifacts", [])
     # Keep research field — router will check it if extract phase missed it
+
+    # Persist any artifacts the LLM created (e.g. rich content analysis)
+    _persist_chat_artifacts(result.get("artifacts", []), project_id, db)
 
     # Save assistant message
     db.add(ChatMessage(
@@ -199,6 +203,37 @@ def mediate_generate(extract_result: dict, db: Session) -> dict:
 
 
 # ── Internal helpers ─────────────────────────────────────────────────
+
+def _persist_chat_artifacts(artifacts: list, project_id: int, db: Session):
+    """Persist artifacts created by the LLM during chat (e.g. rich content analysis)."""
+    if not artifacts:
+        return
+    from backend.database import Artifact
+    for art in artifacts:
+        if not isinstance(art, dict):
+            continue
+        a_type = art.get("type", "report")
+        a_title = art.get("title", "Analysis")
+        a_content = art.get("content", "")
+        # Upsert: update existing artifact with same project + type + title
+        existing = db.query(Artifact).filter(
+            Artifact.project_id == project_id,
+            Artifact.artifact_type == a_type,
+            Artifact.title == a_title,
+        ).first()
+        if existing:
+            existing.content = a_content
+            existing.sources = [{"url": s} for s in art.get("sources", []) if isinstance(s, str)]
+        else:
+            db.add(Artifact(
+                project_id=project_id,
+                artifact_type=a_type,
+                title=a_title,
+                content=a_content,
+                sources=[{"url": s} for s in art.get("sources", []) if isinstance(s, str)],
+            ))
+    db.flush()
+
 
 def _load_context(project_id: int, db: Session):
     """Load project, user, recent messages, and recent runs."""

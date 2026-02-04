@@ -9,10 +9,11 @@ from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy.orm import Session
 
-from backend.database import Project, Artifact, AgentRun, ChatMessage, UserProfile, get_db
+from backend.database import Project, Artifact, AgentRun, ChatMessage, ContextAttachment, UserProfile, get_db
 from backend.services.prompt_builder import build_system_prompt, build_proactive_instruction
 from backend.services.llm import chat_messages
 from backend.services.mediator import mediate_extract, mediate_generate, mediate_regenerate
+from backend.services.context_service import detect_urls, extract_text_from_url, generate_summary
 
 logger = logging.getLogger(__name__)
 
@@ -171,16 +172,28 @@ class ChatRequest(BaseModel):
 
 from typing import AsyncGenerator, Tuple
 
-async def _run_research_streaming(task: str, timeout: float = 60.0) -> AsyncGenerator[Tuple[str, dict], None]:
+async def _run_research_streaming(task: str, timeout: float = 60.0, conversation_context: str = "") -> AsyncGenerator[Tuple[str, dict], None]:
     """Run a research agent, yielding activity events and finally the result.
 
     Yields: (event_type, data) tuples where event_type is "activity" or "result"
     """
     from backend.services.claude_code_executor import executor as _executor
 
+    context_block = ""
+    if conversation_context:
+        context_block = (
+            f"\nConversation context (use this to disambiguate the research target):\n"
+            f"{conversation_context}\n\n"
+        )
+
     instruction = (
         f"Quick background research task.\n\n"
         f"Task: {task}\n\n"
+        f"{context_block}"
+        f"IMPORTANT: If the topic is a person, company, or entity name, use the conversation "
+        f"context to identify the SPECIFIC one the user is talking about. Do NOT return "
+        f"information about multiple different people/entities with the same name. If you "
+        f"can't determine which one, say so.\n\n"
         f"Return a concise summary of what you find (2-4 bullet points). "
         f"Be specific and factual."
     )
@@ -267,15 +280,78 @@ async def project_chat(project_id: int, req: ChatRequest, db: Session = Depends(
         raise HTTPException(404, "Project not found")
 
     async def _chat_stream():
-        # Step 1: Extract signals (mini model, ~1s) — also detects research need
+        # Step 0: Detect URLs in the user's message and auto-fetch them
         loop = asyncio.get_event_loop()
+        message_text = req.message or ""
+        urls = detect_urls(message_text) if message_text else []
+
+        for url in urls:
+            yield _sse_event("status", {"message": f"Fetching {url}…"})
+            try:
+                title, text = await loop.run_in_executor(None, extract_text_from_url, url)
+
+                # Save as ContextAttachment so the mediator sees it
+                def _save_url_context(u=url, t=title, tx=text):
+                    url_db = next(get_db())
+                    try:
+                        att = ContextAttachment(
+                            user_id=project.user_id,
+                            project_id=project_id,
+                            source_type="url",
+                            source_ref=u,
+                            title=t,
+                            extracted_text=tx,
+                        )
+                        url_db.add(att)
+                        url_db.commit()
+                        url_db.refresh(att)
+                        return att.id
+                    finally:
+                        url_db.close()
+
+                await loop.run_in_executor(None, _save_url_context)
+
+                # Auto-summarize long content as an artifact
+                if len(text) > 500:
+                    yield _sse_event("status", {"message": f"Summarizing {title}…"})
+
+                    def _summarize_and_save(t=title, tx=text):
+                        summary = generate_summary(t, tx)
+                        s_db = next(get_db())
+                        try:
+                            artifact = Artifact(
+                                project_id=project_id,
+                                artifact_type="summary",
+                                title=f"Summary: {t}",
+                                content={"markdown": summary},
+                                sources=[url],
+                            )
+                            s_db.add(artifact)
+                            s_db.commit()
+                            s_db.refresh(artifact)
+                            return {
+                                "id": artifact.id,
+                                "artifact_type": artifact.artifact_type,
+                                "title": artifact.title,
+                            }
+                        finally:
+                            s_db.close()
+
+                    artifact_info = await loop.run_in_executor(None, _summarize_and_save)
+                    yield _sse_event("artifact_created", artifact_info)
+
+            except Exception as e:
+                logger.warning(f"Failed to fetch URL {url}: {e}")
+                message_text += f"\n\n[System: Could not fetch URL {url} — ask the user to paste the content instead]"
+
+        # Step 1: Extract signals (mini model, ~1s) — also detects research need
 
         yield _sse_event("status", {"message": "Understanding your message…"})
 
         def _extract_in_thread():
             thread_db = next(get_db())
             try:
-                return mediate_extract(project_id, req.message, thread_db)
+                return mediate_extract(project_id, message_text, thread_db)
             finally:
                 thread_db.close()
 
@@ -315,8 +391,18 @@ async def project_chat(project_id: int, req: ChatRequest, db: Session = Depends(
                     research_topic = gen_research.strip()
                     yield _sse_event("researching", {"topic": research_topic})
                     yield _sse_event("status", {"message": f"Researching {research_topic}…"})
+                    # Build conversation context for disambiguation
+                    conv_context = ""
+                    state = extract_result.get("_extract_state", {})
+                    if state.get("messages"):
+                        recent = state["messages"][-6:]
+                        conv_context = "\n".join(
+                            f"{m['role']}: {m['content'][:200]}" for m in recent
+                        )
                     # Stream research activity events
-                    async for event_type, data in _run_research_streaming(research_topic):
+                    async for event_type, data in _run_research_streaming(
+                        research_topic, conversation_context=conv_context
+                    ):
                         if event_type == "activity":
                             yield _sse_event("research_activity", data)
                         elif event_type == "result":
@@ -350,6 +436,7 @@ async def project_chat(project_id: int, req: ChatRequest, db: Session = Depends(
                 extract_research_insights(
                     project.user_id, research_topic, research_text,
                     str(project_id), research_db,
+                    conversation_context=conv_context,
                 )
             finally:
                 research_db.close()

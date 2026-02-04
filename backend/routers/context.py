@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from backend.database import get_db, ContextAttachment
+from backend.database import get_db, ContextAttachment, Artifact
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/context", tags=["context"])
@@ -34,9 +34,33 @@ class AttachmentOut(BaseModel):
     source_ref: Optional[str]
     title: Optional[str]
     created_at: str
+    artifact_id: Optional[int] = None
 
     class Config:
         from_attributes = True
+
+
+def _maybe_create_summary(db: Session, project_id: Optional[int], title: str, text: str, source_ref: Optional[str] = None) -> Optional[int]:
+    """If text is long enough and project_id is provided, create a summary artifact. Returns artifact_id or None."""
+    if not project_id or len(text) <= 500:
+        return None
+    try:
+        from backend.services.context_service import generate_summary
+        summary = generate_summary(title, text)
+        artifact = Artifact(
+            project_id=project_id,
+            artifact_type="summary",
+            title=f"Summary: {title}",
+            content={"markdown": summary},
+            sources=[source_ref] if source_ref else [],
+        )
+        db.add(artifact)
+        db.commit()
+        db.refresh(artifact)
+        return artifact.id
+    except Exception as e:
+        logger.warning(f"Auto-summary failed for '{title}': {e}")
+        return None
 
 
 @router.post("/upload-text", response_model=AttachmentOut)
@@ -55,7 +79,9 @@ def upload_text(req: TextUploadRequest, db: Session = Depends(get_db)):
     db.add(att)
     db.commit()
     db.refresh(att)
-    return _to_out(att)
+
+    artifact_id = _maybe_create_summary(db, req.project_id, att.title or "Pasted text", req.text.strip())
+    return _to_out(att, artifact_id=artifact_id)
 
 
 @router.post("/upload-url", response_model=AttachmentOut)
@@ -83,7 +109,9 @@ def upload_url(req: UrlUploadRequest, db: Session = Depends(get_db)):
     db.add(att)
     db.commit()
     db.refresh(att)
-    return _to_out(att)
+
+    artifact_id = _maybe_create_summary(db, req.project_id, title, text, source_ref=req.url)
+    return _to_out(att, artifact_id=artifact_id)
 
 
 @router.post("/upload-pdf", response_model=AttachmentOut)
@@ -121,7 +149,9 @@ async def upload_pdf(
     db.add(att)
     db.commit()
     db.refresh(att)
-    return _to_out(att)
+
+    artifact_id = _maybe_create_summary(db, project_id, title, text, source_ref=file.filename)
+    return _to_out(att, artifact_id=artifact_id)
 
 
 @router.get("/", response_model=list[AttachmentOut])
@@ -149,11 +179,12 @@ def delete_attachment(attachment_id: int, db: Session = Depends(get_db)):
     return {"status": "deleted"}
 
 
-def _to_out(att: ContextAttachment) -> dict:
+def _to_out(att: ContextAttachment, artifact_id: Optional[int] = None) -> dict:
     return {
         "id": att.id,
         "source_type": att.source_type,
         "source_ref": att.source_ref,
         "title": att.title,
         "created_at": att.created_at.isoformat() if att.created_at else "",
+        "artifact_id": artifact_id,
     }

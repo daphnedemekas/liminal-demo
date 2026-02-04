@@ -208,11 +208,11 @@ def _check_navigation(messages: list[dict], domain_context: str, db: Session, us
     """Check if we should suggest navigation to a domain. Uses fast mini model."""
     from backend.services.llm import chat as llm_chat, MODEL_MINI
 
-    # Need at least 4 messages (2 turns) to consider navigation
+    # Need at least 4 messages (2 full turns) before suggesting navigation
     if len(messages) < 4:
         return None
 
-    # Get user's actual selected domains from DB (not hardcoded list)
+    # Get user's actual selected domains from DB
     if user_id:
         user_domains = db.query(DiscoveryDomain).filter_by(user_id=user_id).all()
         domain_ids = [d.domain for d in user_domains]
@@ -238,7 +238,7 @@ def _check_navigation(messages: list[dict], domain_context: str, db: Session, us
             logger.debug(f"Navigation check: suggest {result['domain']} - {result.get('reason')}")
             return result
     except Exception as e:
-        logger.debug(f"Navigation check failed: {e}")
+        logger.warning(f"Navigation check failed: {e}")
 
     return None
 
@@ -247,12 +247,11 @@ def _get_domain_label(domain_id: str) -> str:
     """Get human-readable label for a domain."""
     labels = {
         "work": "Work & Career",
-        "social": "Social Life",
-        "studies": "Studies & Learning",
+        "learning": "Learning & Growth",
         "health": "Health & Wellness",
-        "hobbies": "Hobbies & Projects",
+        "creative": "Creative & Projects",
         "money": "Money & Finances",
-        "mental_health": "Mind & Mental Health",
+        "mind": "Mind & Wellbeing",
     }
     return labels.get(domain_id, domain_id.replace("_", " ").title())
 
@@ -351,7 +350,7 @@ def _greeting(user, project, messages, base_prompt, domain_context, model_summar
     except Exception as e:
         logger.warning(f"Home greeting failed: {e}")
         result = {
-            "message": f"Hey {user.name}! I'd love to get to know you — tell me a bit about yourself.",
+            "message": f"Hey {user.name} — tell me a bit about yourself so I can be more useful to you.",
             "actions": [],
         }
 
@@ -384,15 +383,67 @@ def _build_domain_context(user: UserProfile, db: Session) -> str:
             parts.append(json.dumps(d.signals, indent=2))
         return "\n".join(parts)
 
-    # No discovery conversations yet — list available domains so the LLM can suggest them
-    from backend.services.discovery_engine import DOMAIN_OPTIONS
-    active_ids = {d.domain for d in domains}
+    # No discovery conversations yet — use onboarding data instead
+    _DOMAIN_LABELS = {
+        "work": "Work & Career",
+        "learning": "Learning & Growth",
+        "health": "Health & Wellness",
+        "creative": "Creative & Projects",
+        "money": "Money & Finances",
+        "mind": "Mind & Wellbeing",
+    }
     parts = ["## Domain context"]
-    if active_ids:
-        parts.append(f"Active domains (selected but not yet explored): {', '.join(active_ids)}")
+
+    # Use selected_domains from user profile (set during onboarding)
+    selected = user.selected_domains or []
+    if selected:
+        domain_names = [_DOMAIN_LABELS.get(d, d) for d in selected]
+        parts.append(f"Selected domains during onboarding: {', '.join(domain_names)}")
     else:
-        parts.append("No domains set up yet.")
-    parts.append(f"Available domains: {', '.join(d['id'] + ' (' + d['label'] + ')' for d in DOMAIN_OPTIONS)}")
+        active_ids = {d.domain for d in domains}
+        if active_ids:
+            parts.append(f"Active domains (selected but not yet explored): {', '.join(active_ids)}")
+        else:
+            parts.append("No domains set up yet.")
+
+    # Include onboarding diagnostic answers if available
+    _ANSWER_LABELS = {
+        "pain_point": {
+            "label": "Biggest daily challenge",
+            "time": "Not enough time",
+            "direction": "Lack of direction",
+            "energy": "Low energy/motivation",
+            "overwhelm": "Information overload",
+        },
+        "aspiration": {
+            "label": "Top priority to change",
+            "career": "Career trajectory",
+            "skills": "Skills/knowledge",
+            "health_habits": "Health/habits",
+            "projects": "A personal project",
+            "money_clarity": "Financial clarity",
+        },
+        "timeframe": {
+            "label": "Preferred timeframe",
+            "quick": "Quick win (this week)",
+            "medium": "Next few months",
+            "long": "Long-term transformation",
+        },
+    }
+    if user.onboarding_info:
+        try:
+            info = json.loads(user.onboarding_info) if isinstance(user.onboarding_info, str) else {}
+            diag = info.get("diagnostic_answers", {})
+            if diag:
+                parts.append("\nOnboarding answers:")
+                for qid, val in diag.items():
+                    q_map = _ANSWER_LABELS.get(qid, {})
+                    q_label = q_map.get("label", qid)
+                    a_label = q_map.get(val, val)
+                    parts.append(f"- {q_label}: {a_label}")
+        except (json.JSONDecodeError, TypeError):
+            pass
+
     return "\n".join(parts)
 
 

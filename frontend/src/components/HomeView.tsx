@@ -1,16 +1,15 @@
 import { useMemo, useState, useCallback, useRef } from "react";
-import type { Project, DiscoveryDomainState } from "../services/api";
+import type { Project } from "../services/api";
 import { ChatPanel } from "./ChatPanel";
 import { InsightsPanel } from "./InsightsPanel";
 
 const DOMAIN_LABELS: Record<string, string> = {
   work: "Work & Career",
-  social: "Social Life",
-  studies: "Studies & Learning",
+  learning: "Learning & Growth",
   health: "Health & Wellness",
-  hobbies: "Hobbies & Projects",
+  creative: "Creative & Projects",
   money: "Money & Finances",
-  mental_health: "Mind & mental health",
+  mind: "Mind & Wellbeing",
 };
 
 function displayStatus(p: Project): string {
@@ -20,21 +19,13 @@ function displayStatus(p: Project): string {
   return p.status || "active";
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  pending: "Not started",
-  active: "In progress",
-  explored: "Explored",
-  completed: "Completed",
-};
-
 interface Props {
   projects: Project[];
-  domains: DiscoveryDomainState[];
   homeProject: Project | null;
   userId: string;
   onSelectProject: (id: number) => void;
-  onSelectDomain: (domain: string) => void;
   onNewProject: () => void;
+  onNavigateDomain?: (domain: string, context?: string) => void;
   onProjectRenamed: () => void;
   onRunComplete: () => void;
   userName?: string;
@@ -42,12 +33,11 @@ interface Props {
 
 export function HomeView({
   projects,
-  domains,
   homeProject,
   userId,
   onSelectProject,
-  onSelectDomain,
   onNewProject,
+  onNavigateDomain,
   onProjectRenamed,
   onRunComplete,
   userName,
@@ -96,11 +86,9 @@ export function HomeView({
   const totalProjects = nonHomeProjects.length;
 
   const summaryText =
-    domains.length === 0
-      ? "Get started by selecting life domains to explore."
-      : totalProjects > 0
-        ? `${domains.length} domain${domains.length !== 1 ? "s" : ""}, ${totalProjects} project${totalProjects !== 1 ? "s" : ""}`
-        : `${domains.length} domain${domains.length !== 1 ? "s" : ""} selected. Explore them to discover projects.`;
+    totalProjects > 0
+      ? `${totalProjects} project${totalProjects !== 1 ? "s" : ""}`
+      : "Get started by creating a new project.";
 
   return (
     <div className={`home-layout ${chatOpen ? "chat-open" : ""}`} ref={layoutRef}>
@@ -110,41 +98,6 @@ export function HomeView({
           <p className="home-summary">{summaryText}</p>
         </div>
 
-        {domains.length > 0 && (
-          <div>
-            <div className="section-title">Your domains</div>
-            <div className="cards-grid">
-              {domains.map((d) => {
-                const domainProjects = projectsByDomain[d.domain] || [];
-                const label = d.label || DOMAIN_LABELS[d.domain] || d.domain;
-                return (
-                  <div
-                    key={d.domain}
-                    className={`domain-card domain-status-${d.status}`}
-                    onClick={() => onSelectDomain(d.domain)}
-                  >
-                    <div className="domain-card-header">
-                      <h3>{label}</h3>
-                    </div>
-                    <div className="domain-card-meta">
-                      {domainProjects.length > 0
-                        ? `${domainProjects.length} project${domainProjects.length !== 1 ? "s" : ""}`
-                        : d.status === "pending"
-                          ? "Ready to explore"
-                          : "No projects yet"}
-                    </div>
-                    {d.proposed_projects && d.proposed_projects.length > 0 && (
-                      <div className="domain-card-proposals">
-                        {d.proposed_projects.length} proposed
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
         <InsightsPanel userId={userId} refreshKey={insightsRefresh} />
 
         {Object.entries(projectsByDomain).map(([domain, domainProjects]) => (
@@ -153,12 +106,6 @@ export function HomeView({
               <span className="section-title" style={{ marginBottom: 0 }}>
                 {DOMAIN_LABELS[domain] || domain}
               </span>
-              <button
-                className="domain-explore-link"
-                onClick={() => onSelectDomain(domain)}
-              >
-                Explore domain
-              </button>
             </div>
             <div className="cards-grid">
               {domainProjects.map((p) => (
@@ -221,7 +168,7 @@ export function HomeView({
 
         <div className="quick-actions">
           <button className="quick-action-btn" onClick={onNewProject}>
-            + New Task
+            + New Project
           </button>
           {homeProject && !chatOpen && (
             <button
@@ -257,7 +204,7 @@ export function HomeView({
               userId={userId}
               onProjectRenamed={onProjectRenamed}
               onRunComplete={onRunComplete}
-              onNavigateDomain={onSelectDomain}
+              onNavigateDomain={onNavigateDomain}
               onNavigateProject={onSelectProject}
               onMessageReceived={() => setInsightsRefresh((k) => k + 1)}
             />

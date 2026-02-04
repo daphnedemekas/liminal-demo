@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type {
   Artifact,
   ChecklistContent,
@@ -22,6 +23,7 @@ interface Props {
 
 export function ArtifactCard({ artifact, projectId, onUpdate }: Props) {
   const { artifact_type, title, content } = artifact;
+  const [collapsed, setCollapsed] = useState(false);
 
   const renderContent = () => {
     switch (artifact_type) {
@@ -52,20 +54,29 @@ export function ArtifactCard({ artifact, projectId, onUpdate }: Props) {
   };
 
   return (
-    <div className={`workspace-card card-${artifact_type}`}>
-      <div className="workspace-card-header">
+    <div className={`workspace-card card-${artifact_type} ${collapsed ? "collapsed" : ""}`}>
+      <div
+        className="workspace-card-header"
+        onClick={() => setCollapsed((c) => !c)}
+        style={{ cursor: "pointer" }}
+      >
         <span className="workspace-card-type">{artifact_type.replace(/_/g, " ")}</span>
         <span className="workspace-card-title">{title}</span>
+        <span className="workspace-card-toggle">{collapsed ? "\u25B8" : "\u25BE"}</span>
       </div>
-      <div className="workspace-card-body">{renderContent()}</div>
-      {artifact.sources?.length > 0 && (
-        <div className="workspace-card-sources">
-          {artifact.sources.map((s, i) => (
-            <a key={i} href={s.url} target="_blank" rel="noopener noreferrer">
-              {new URL(s.url).hostname}
-            </a>
-          ))}
-        </div>
+      {!collapsed && (
+        <>
+          <div className="workspace-card-body">{renderContent()}</div>
+          {artifact.sources?.length > 0 && (
+            <div className="workspace-card-sources">
+              {artifact.sources.map((s, i) => (
+                <a key={i} href={s.url} target="_blank" rel="noopener noreferrer">
+                  {(() => { try { return new URL(s.url).hostname; } catch { return s.url; } })()}
+                </a>
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

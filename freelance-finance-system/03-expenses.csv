@@ -1,0 +1,9 @@
+Expense Name,Amount,Date,Schedule C Category,Payment Method,Receipt Uploaded,Vendor,Tax Deductible,Business Purpose
+Adobe Creative Cloud,59.99,2026-01-15,Other Expenses (Line 27),Credit Card,Yes,Adobe,Yes,Design software for client projects
+Coworking Space - January,350.00,2026-01-01,Rent - Other Property (Line 20b),Credit Card,Yes,WeWork,Yes,Dedicated office space for client meetings
+Business Liability Insurance,125.00,2026-01-01,Insurance (Line 15),ACH,Yes,Hiscox,Yes,Professional liability coverage
+Google Workspace,14.99,2026-01-15,Other Expenses (Line 27),Credit Card,Yes,Google,Yes,Business email and cloud storage
+Internet (Business Portion 60%),48.00,2026-01-20,Utilities (Line 25),ACH,No,Comcast,Yes,Home internet - 60% business use
+Cell Phone (Business Portion 70%),63.00,2026-01-20,Utilities (Line 25),ACH,No,Verizon,Yes,Mobile phone - 70% business use
+Figma Pro,15.00,2026-01-15,Other Expenses (Line 27),Credit Card,Yes,Figma,Yes,UI design tool for client work
+Tax Preparation (2025 filing),500.00,2026-02-01,Legal & Professional Services (Line 17),Check,Yes,CPA Smith,Yes,Annual tax preparation and consultation

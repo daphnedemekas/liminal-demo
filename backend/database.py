@@ -69,7 +69,7 @@ class DiscoveryDomain(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(String, ForeignKey("user_profiles.id"), nullable=False, index=True)
-    domain = Column(String, nullable=False)  # work|social|studies|health|hobbies|money|mental_health
+    domain = Column(String, nullable=False)  # work|learning|health|creative|money|mind
     status = Column(String, default="pending")  # pending|active|explored|completed
     depth = Column(Integer, default=0)  # how many narrowing turns completed
     schema = Column(MutableDict.as_mutable(JSON), default=dict)  # LLM-generated narrowing schema
@@ -94,9 +94,11 @@ class Project(Base):
     budget_limit_cents = Column(Integer, nullable=True)
     budget_spent_cents = Column(Integer, default=0)
     conversation_signals = Column(MutableDict.as_mutable(JSON), default=dict)
+    flow_state = Column(MutableDict.as_mutable(JSON), default=dict)  # phase-based interaction state
     suggested_by_system = Column(Boolean, default=False)
     success_metric = Column(String, nullable=True)  # e.g. "workouts per week"
     metric_target = Column(String, nullable=True)  # e.g. "4"
+    metric_config = Column(MutableDict.as_mutable(JSON), default=dict)  # full metric spec: unit, cadence, source, prompt
     domain = Column(String, nullable=True)  # discovery domain that spawned this project
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
@@ -106,6 +108,8 @@ class Project(Base):
     artifacts = relationship("Artifact", back_populates="project", cascade="all, delete-orphan")
     chat_messages = relationship("ChatMessage", back_populates="project", cascade="all, delete-orphan",
                                  order_by="ChatMessage.created_at")
+    metric_entries = relationship("MetricEntry", back_populates="project", cascade="all, delete-orphan",
+                                  order_by="MetricEntry.recorded_at")
 
 
 class AgentRun(Base):
@@ -156,6 +160,8 @@ class ChatMessage(Base):
     role = Column(String, nullable=False)  # user|assistant|system
     content = Column(Text, nullable=False)
     actions = Column(MutableList.as_mutable(JSON), default=list)  # [{label, action_text}]
+    blocks = Column(MutableList.as_mutable(JSON), default=list)  # structured UI blocks
+    phase = Column(String, nullable=True)  # flow phase that produced this message
     run_id = Column(String, ForeignKey("agent_runs.run_id"), nullable=True)
     created_at = Column(DateTime, default=utcnow)
 
@@ -206,6 +212,20 @@ class ContextAttachment(Base):
     extracted_text = Column(Text, nullable=False)
 
     created_at = Column(DateTime, default=utcnow)
+
+
+class MetricEntry(Base):
+    """Time-series metric data point for tracking project progress."""
+    __tablename__ = "metric_entries"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False, index=True)
+    value = Column(String, nullable=False)  # stored as string, parsed by frontend/consumer
+    source = Column(String, nullable=False)  # self_reported | engagement | connected
+    note = Column(Text, nullable=True)  # optional context from user
+    recorded_at = Column(DateTime, default=utcnow)
+
+    project = relationship("Project", back_populates="metric_entries")
 
 
 # ── Database setup ──────────────────────────────────────────────────
@@ -310,7 +330,7 @@ def seed_demo_data():
             involvement_level="check_ins",
             budget_limit_cents=80000,
             suggested_by_system=True,
-            domain="hobbies",
+            domain="creative",
         )
         session.add(home_project)
 

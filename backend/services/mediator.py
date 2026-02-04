@@ -445,7 +445,7 @@ def _handle_greeting(project, messages, recent_runs, base_prompt, db) -> dict:
     return result
 
 
-def synthesize_result(run: AgentRun, project: Project, user: UserProfile, db: Session) -> dict:
+def synthesize_result(run: AgentRun, project: Project, user: UserProfile, db: Session, written_files: list[dict] | None = None) -> dict:
     """Synthesize raw agent output into a personalized summary with artifacts.
 
     Returns dict with keys: summary, artifacts, suggested_next_steps, actions
@@ -461,11 +461,18 @@ def synthesize_result(run: AgentRun, project: Project, user: UserProfile, db: Se
     recent.reverse()
     conversation = [{"role": m.role, "content": m.content} for m in recent]
 
+    # Build enriched raw result that includes file contents
+    raw_result = run.result_summary or ""
+    if written_files:
+        raw_result += "\n\n## Files created by the agent\n"
+        for f in written_files:
+            raw_result += f"\n### {f['path']}\n```\n{f['content']}\n```\n"
+
     prompt = build_synthesis_prompt(
         user=user,
         project=project,
         goal=run.goal,
-        raw_result=run.result_summary or "",
+        raw_result=raw_result,
         conversation=conversation,
         explanation_pref=user.explanation_preference,
     )

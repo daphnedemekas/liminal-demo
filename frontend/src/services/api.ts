@@ -52,6 +52,22 @@ export interface DiscoveryResponse {
   proposed_projects?: DiscoveryProposal[];
 }
 
+export interface MetricConfig {
+  unit: string;
+  cadence: "daily" | "weekly" | "monthly";
+  source: "self_reported" | "engagement" | "connected";
+  prompt: string | null;
+  description: string;
+}
+
+export interface MetricEntry {
+  id: number;
+  value: string;
+  source: string;
+  note: string | null;
+  recorded_at: string;
+}
+
 export interface Project {
   id: number;
   name: string;
@@ -62,6 +78,9 @@ export interface Project {
   budget_spent_cents: number;
   suggested_by_system: boolean;
   domain: string | null;
+  success_metric: string | null;
+  metric_target: string | null;
+  metric_config: MetricConfig | null;
   created_at: string;
   run_count: number;
   latest_run_status: string | null;
@@ -144,10 +163,96 @@ export interface ChatAction {
   task_type?: string;
 }
 
+// ── Structured message blocks ──────────────────────────────────────
+
+export interface SelectOption {
+  value: string;
+  label: string;
+  description?: string;
+}
+
+export interface SelectBlock {
+  type: "select";
+  id: string;
+  prompt: string;
+  options: SelectOption[];
+  multi: boolean;
+}
+
+export interface InputBlock {
+  type: "input";
+  id: string;
+  prompt: string;
+  placeholder?: string;
+}
+
+export interface ProposalItem {
+  name: string;
+  description: string;
+  tier?: string;
+  highlight?: string;
+  toggleable?: boolean;
+  details?: Record<string, string>;
+}
+
+export interface ProposalBlock {
+  type: "proposal";
+  id: string;
+  title: string;
+  items: ProposalItem[];
+}
+
+export interface GoalTreeBranch {
+  label: string;
+  items: string[];
+  flagged?: boolean;
+}
+
+export interface GoalTreeBlock {
+  type: "goal_tree";
+  id: string;
+  root: string;
+  branches: GoalTreeBranch[];
+}
+
+export interface ProgressStep {
+  label: string;
+  status: "done" | "in_progress" | "pending";
+  detail?: string;
+}
+
+export interface ProgressBlock {
+  type: "progress";
+  id: string;
+  steps: ProgressStep[];
+}
+
+export interface CtaBlock {
+  type: "cta";
+  id: string;
+  primary: { label: string; action: string };
+  secondary?: { label: string; action: string };
+  note?: string;
+}
+
+export type MessageBlock =
+  | SelectBlock
+  | InputBlock
+  | ProposalBlock
+  | GoalTreeBlock
+  | ProgressBlock
+  | CtaBlock;
+
+// ── Chat response ──────────────────────────────────────────────────
+
 export interface ChatResponse {
   message: string;
   actions: ChatAction[];
+  blocks?: MessageBlock[];
+  phase?: string;
   run_id: string | null;
+  auto_continue?: boolean;
+  nav_context?: string;
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -171,7 +276,7 @@ export const api = {
 
   getUser: (userId: string) => request<User>(`/api/auth/user/${userId}`),
 
-  createProject: (data: { user_id: string; name: string; description?: string }) =>
+  createProject: (data: { user_id: string; name: string; description?: string; domain?: string }) =>
     request<Project>("/api/projects", {
       method: "POST",
       body: JSON.stringify(data),
@@ -193,7 +298,7 @@ export const api = {
     request<{ greeting: string }>(`/api/projects/${projectId}/greeting`),
 
   getMessages: (projectId: number) =>
-    request<{ role: string; content: string; actions: ChatAction[]; created_at: string }[]>(
+    request<{ role: string; content: string; actions: ChatAction[]; blocks?: MessageBlock[]; phase?: string; created_at: string }[]>(
       `/api/projects/${projectId}/messages`,
     ),
 
@@ -282,6 +387,22 @@ export const api = {
   getArtifacts: (projectId: number) =>
     request<Artifact[]>(`/api/projects/${projectId}/artifacts`),
 
+  // Metrics
+  getMetrics: (projectId: number) =>
+    request<{
+      metric: { name: string; target: string; config: MetricConfig } | null;
+      entries: MetricEntry[];
+    }>(`/api/projects/${projectId}/metrics`),
+
+  recordMetric: (projectId: number, value: string, source?: string, note?: string) =>
+    request<{ id: number; value: string; recorded_at: string }>(
+      `/api/projects/${projectId}/metrics`,
+      {
+        method: "POST",
+        body: JSON.stringify({ value, source: source || "self_reported", note }),
+      }
+    ),
+
   updateArtifact: (projectId: number, artifactId: number, content: ArtifactContent) =>
     request<{ status: string }>(`/api/projects/${projectId}/artifacts/${artifactId}`, {
       method: "PATCH",
@@ -293,7 +414,7 @@ export const api = {
     request<DomainOption[]>("/api/discovery/options"),
 
   selectDomains: (userId: string, domains: string[]) =>
-    request<{ domains: { domain: string; label: string; status: string }[] }>("/api/discovery/select-domains", {
+    request<{ domains: { domain: string; label: string; status: string }[] }>("/api/onboarding/select-domains", {
       method: "POST",
       body: JSON.stringify({ user_id: userId, domains }),
     }),
@@ -448,10 +569,10 @@ export const api = {
       body: JSON.stringify({ user_id: userId, agent_task: agentTask }),
     }),
 
-  completeDiscovery: (userId: string) =>
-    request<{ status: string; model_summary: string }>("/api/discovery/complete", {
+  completeDiscovery: (userId: string, onboardingInfo?: { selected_domains: string[]; diagnostic_answers?: Record<string, string> }) =>
+    request<{ status: string; model_summary: string }>("/api/onboarding/complete", {
       method: "POST",
-      body: JSON.stringify({ user_id: userId }),
+      body: JSON.stringify({ user_id: userId, onboarding_info: onboardingInfo }),
     }),
 
   // Context attachments
@@ -494,6 +615,24 @@ export const api = {
   // Insights
   getInsights: (userId: string) =>
     request<InsightsData>(`/api/insights?user_id=${userId}`),
+
+  // Integrations
+  getIntegrationStatus: (userId: string) =>
+    request<IntegrationStatusResponse>(`/api/integrations/status/${userId}`),
+
+  getGoogleAuthUrl: (userId: string) =>
+    request<{ auth_url: string }>(`/api/integrations/google/auth?user_id=${userId}`),
+
+  disconnectGoogle: (userId: string) =>
+    request<{ status: string }>("/api/integrations/google/disconnect", {
+      method: "POST",
+      body: JSON.stringify({ user_id: userId }),
+    }),
+
+  getGoogleEvents: (userId: string, days?: number) =>
+    request<{ events: GoogleCalendarEvent[] }>(
+      `/api/integrations/google/events/${userId}${days ? `?days=${days}` : ""}`
+    ),
 };
 
 export interface InsightItem {
@@ -518,6 +657,25 @@ export interface ContextAttachment {
   source_ref: string | null;
   title: string | null;
   created_at: string;
+}
+
+export interface IntegrationInfo {
+  connected: boolean;
+  available: boolean;
+}
+
+export interface IntegrationStatusResponse {
+  google_calendar: IntegrationInfo;
+  oura: IntegrationInfo;
+  notion: IntegrationInfo;
+}
+
+export interface GoogleCalendarEvent {
+  summary: string;
+  start: string;
+  end: string;
+  location: string | null;
+  all_day: boolean;
 }
 
 export function createRunWebSocket(runId: string): WebSocket {

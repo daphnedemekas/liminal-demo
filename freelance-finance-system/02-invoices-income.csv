@@ -1,0 +1,3 @@
+Invoice Number,Client,Amount,Status,Date Issued,Due Date,Date Paid,Payment Method,Quarter,Tax Year,Project Description
+INV-2026-001,Example Client,4500.00,Paid,2026-01-05,2026-02-04,2026-01-28,ACH,2026 Q1,2026,January retainer - website redesign
+INV-2026-002,Example Client,4500.00,Sent,2026-02-01,2026-03-03,,ACH,2026 Q1,2026,February retainer - website redesign

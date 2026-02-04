@@ -14,7 +14,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend.database import init_db, seed_demo_data
-from backend.routers import auth, projects, runs, onboarding, discovery, context, insights
+from backend.routers import auth, projects, runs, onboarding, context, insights, integrations
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -44,9 +44,9 @@ app.include_router(auth.router)
 app.include_router(projects.router)
 app.include_router(runs.router)
 app.include_router(onboarding.router)
-app.include_router(discovery.router)
 app.include_router(context.router)
 app.include_router(insights.router)
+app.include_router(integrations.router)
 
 # WebSocket routes
 app.add_api_websocket_route("/ws/run/{run_id}", runs.ws_run)

@@ -1,0 +1,2127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Maya Chen — Freelance Portfolio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --bg-primary: #0f1219;
+  --bg-secondary: #1a1f2e;
+  --bg-tertiary: #242938;
+  --border: #2d3348;
+  --border-hover: #3d4560;
+  --text-primary: #e8eaed;
+  --text-secondary: #9aa0b0;
+  --text-tertiary: #6b7280;
+  --accent: #7c6af0;
+  --accent-hover: #8d7df5;
+  --accent-subtle: rgba(124, 106, 240, 0.12);
+  --accent-glow: rgba(124, 106, 240, 0.25);
+  --success: #34c759;
+  --warning: #f0a030;
+  --danger: #e54d4d;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 16px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 72px;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* ========== SCROLLBAR ========== */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-primary); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-hover); }
+
+/* ========== NAV ========== */
+.nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 64px;
+  background: rgba(15, 18, 25, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 clamp(20px, 5vw, 60px);
+  transition: all 0.3s ease;
+}
+.nav.scrolled {
+  background: rgba(15, 18, 25, 0.95);
+  box-shadow: 0 1px 20px rgba(0,0,0,0.3);
+}
+.nav-logo {
+  font-weight: 600;
+  font-size: 16px;
+  letter-spacing: -0.3px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: color 0.2s;
+}
+.nav-logo span { color: var(--accent); }
+.nav-logo:hover { color: var(--accent); }
+.nav-links {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.nav-links a {
+  text-decoration: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 6px 14px;
+  border-radius: var(--radius-md);
+  transition: all 0.2s;
+  position: relative;
+}
+.nav-links a:hover { color: var(--text-primary); background: var(--bg-tertiary); }
+.nav-links a.active { color: var(--accent); }
+.nav-cta {
+  background: var(--accent) !important;
+  color: #fff !important;
+  border: none;
+  padding: 7px 18px !important;
+  border-radius: var(--radius-md) !important;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-decoration: none;
+}
+.nav-cta:hover { background: var(--accent-hover) !important; transform: translateY(-1px); }
+
+.hamburger {
+  display: none;
+  flex-direction: column;
+  gap: 5px;
+  cursor: pointer;
+  padding: 4px;
+  background: none;
+  border: none;
+}
+.hamburger span {
+  width: 22px;
+  height: 2px;
+  background: var(--text-secondary);
+  border-radius: 2px;
+  transition: all 0.3s ease;
+}
+.hamburger.open span:nth-child(1) { transform: rotate(45deg) translate(5px, 5px); }
+.hamburger.open span:nth-child(2) { opacity: 0; }
+.hamburger.open span:nth-child(3) { transform: rotate(-45deg) translate(5px, -5px); }
+
+.mobile-menu {
+  display: none;
+  position: fixed;
+  top: 64px;
+  left: 0;
+  right: 0;
+  background: rgba(15, 18, 25, 0.97);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+  z-index: 99;
+  padding: 16px 24px;
+  flex-direction: column;
+  gap: 4px;
+}
+.mobile-menu.open { display: flex; }
+.mobile-menu a {
+  text-decoration: none;
+  color: var(--text-secondary);
+  font-size: 15px;
+  font-weight: 500;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  transition: all 0.2s;
+}
+.mobile-menu a:hover { color: var(--text-primary); background: var(--bg-tertiary); }
+
+/* ========== SECTION BASE ========== */
+section {
+  padding: 100px clamp(20px, 5vw, 60px);
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* ========== HERO ========== */
+.hero {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding-top: 64px;
+  position: relative;
+  overflow: hidden;
+}
+.hero-bg {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+  opacity: 0.4;
+  pointer-events: none;
+  animation: heroPulse 8s ease-in-out infinite;
+}
+@keyframes heroPulse {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.4; }
+  50% { transform: translate(-50%, -50%) scale(1.15); opacity: 0.25; }
+}
+.hero-content {
+  position: relative;
+  z-index: 1;
+  max-width: 700px;
+}
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--accent-subtle);
+  border: 1px solid rgba(124, 106, 240, 0.2);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 20px;
+  margin-bottom: 28px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.hero-badge .dot {
+  width: 6px;
+  height: 6px;
+  background: var(--success);
+  border-radius: 50%;
+  animation: blink 2s ease-in-out infinite;
+}
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+.hero h1 {
+  font-size: clamp(36px, 6vw, 64px);
+  font-weight: 700;
+  letter-spacing: -1.5px;
+  line-height: 1.1;
+  margin-bottom: 20px;
+  background: linear-gradient(135deg, var(--text-primary) 0%, var(--text-secondary) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.hero h1 em {
+  font-style: normal;
+  -webkit-text-fill-color: var(--accent);
+}
+.hero p {
+  font-size: clamp(15px, 2vw, 18px);
+  color: var(--text-secondary);
+  max-width: 520px;
+  margin: 0 auto 36px;
+  line-height: 1.7;
+}
+.hero-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 12px 24px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+}
+.btn:hover { border-color: var(--border-hover); background: #2a3040; transform: translateY(-1px); }
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+
+.hero-stats {
+  display: flex;
+  gap: 48px;
+  justify-content: center;
+  margin-top: 64px;
+  padding-top: 40px;
+  border-top: 1px solid var(--border);
+}
+.hero-stat .num {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.5px;
+}
+.hero-stat .label {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 2px;
+}
+
+/* ========== SECTION HEADERS ========== */
+.section-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--accent);
+  margin-bottom: 12px;
+}
+.section-title {
+  font-size: clamp(24px, 4vw, 36px);
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  margin-bottom: 12px;
+}
+.section-desc {
+  font-size: 15px;
+  color: var(--text-secondary);
+  max-width: 540px;
+  line-height: 1.7;
+}
+.section-header {
+  margin-bottom: 56px;
+}
+
+/* ========== PROJECTS ========== */
+.projects-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 20px;
+}
+.project-card {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+}
+.project-card:hover {
+  border-color: var(--border-hover);
+  transform: translateY(-4px);
+}
+.project-thumb {
+  width: 100%;
+  height: 200px;
+  position: relative;
+  overflow: hidden;
+}
+.project-thumb-bg {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 40px;
+  transition: transform 0.5s ease;
+}
+.project-card:hover .project-thumb-bg { transform: scale(1.05); }
+.project-thumb-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 40%, rgba(15,18,25,0.8) 100%);
+}
+.project-info {
+  padding: 20px;
+}
+.project-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.project-tag {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--accent);
+  background: var(--accent-subtle);
+  padding: 3px 10px;
+  border-radius: 12px;
+}
+.project-info h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  letter-spacing: -0.2px;
+}
+.project-info p {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+.project-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.project-role {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-weight: 500;
+}
+.project-link {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent);
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: gap 0.2s;
+}
+.project-card:hover .project-link { gap: 8px; }
+
+/* ========== PROJECT MODAL ========== */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  backdrop-filter: blur(8px);
+  z-index: 200;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.modal-overlay.open { display: flex; opacity: 1; }
+.modal {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  max-width: 720px;
+  width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
+  transform: scale(0.95) translateY(20px);
+  transition: transform 0.3s ease;
+}
+.modal-overlay.open .modal { transform: scale(1) translateY(0); }
+.modal-hero {
+  height: 240px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 60px;
+  position: relative;
+}
+.modal-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(0,0,0,0.4);
+  color: #fff;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  padding: 0;
+}
+.modal-close:hover { background: rgba(0,0,0,0.6); border-color: rgba(255,255,255,0.3); }
+.modal-body { padding: 32px; }
+.modal-body h2 {
+  font-size: 24px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  letter-spacing: -0.5px;
+}
+.modal-body .modal-subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 24px;
+}
+.modal-section {
+  margin-bottom: 24px;
+}
+.modal-section h4 {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--accent);
+  margin-bottom: 10px;
+}
+.modal-section p, .modal-section li {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+.modal-section ul {
+  list-style: none;
+  padding: 0;
+}
+.modal-section ul li {
+  padding-left: 20px;
+  position: relative;
+  margin-bottom: 6px;
+}
+.modal-section ul li::before {
+  content: '\2192';
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+}
+.modal-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-top: 20px;
+}
+.modal-metric {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  text-align: center;
+}
+.modal-metric .val {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.modal-metric .lbl {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 2px;
+}
+
+/* ========== ABOUT ========== */
+.about-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.3fr;
+  gap: 60px;
+  align-items: start;
+}
+.about-photo {
+  width: 100%;
+  aspect-ratio: 4/5;
+  background: linear-gradient(135deg, var(--accent-subtle), var(--bg-tertiary));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 80px;
+  position: relative;
+  overflow: hidden;
+}
+.about-photo::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 40%;
+  background: linear-gradient(transparent, var(--bg-tertiary));
+}
+.about-photo-label {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  z-index: 1;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.about-content h2 {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  margin-bottom: 16px;
+}
+.about-content h2 em {
+  font-style: normal;
+  color: var(--accent);
+}
+.about-content p {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.8;
+  margin-bottom: 16px;
+}
+.about-highlights {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 28px;
+}
+.about-highlight {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  transition: all 0.2s;
+}
+.about-highlight:hover { border-color: var(--border-hover); }
+.about-highlight .icon {
+  font-size: 20px;
+  margin-bottom: 8px;
+}
+.about-highlight h4 {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.about-highlight p {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-bottom: 0;
+  line-height: 1.5;
+}
+
+.skills-section {
+  margin-top: 36px;
+}
+.skills-section h4 {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-tertiary);
+  margin-bottom: 14px;
+}
+.skills-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.skill-chip {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 14px;
+  border-radius: 16px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  transition: all 0.2s;
+  cursor: default;
+}
+.skill-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-subtle);
+}
+
+/* ========== SERVICES ========== */
+.services-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+.service-card {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 32px 24px;
+  position: relative;
+  transition: all 0.3s ease;
+}
+.service-card:hover {
+  border-color: var(--border-hover);
+  transform: translateY(-2px);
+}
+.service-card.featured {
+  border-color: var(--accent);
+  background: linear-gradient(135deg, var(--bg-tertiary), rgba(124, 106, 240, 0.05));
+}
+.service-card.featured::before {
+  content: 'Most Popular';
+  position: absolute;
+  top: -1px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  padding: 4px 16px;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+}
+.service-icon {
+  font-size: 28px;
+  margin-bottom: 20px;
+}
+.service-card h3 {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.service-price {
+  font-size: 13px;
+  color: var(--accent);
+  font-weight: 600;
+  margin-bottom: 14px;
+}
+.service-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  margin-bottom: 20px;
+}
+.service-features {
+  list-style: none;
+  padding: 0;
+  margin-bottom: 24px;
+}
+.service-features li {
+  font-size: 13px;
+  color: var(--text-secondary);
+  padding: 6px 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid rgba(45, 51, 72, 0.5);
+}
+.service-features li:last-child { border-bottom: none; }
+.service-features .check {
+  color: var(--success);
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.service-cta {
+  width: 100%;
+  text-align: center;
+  padding: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+.service-cta:hover { border-color: var(--accent); color: var(--accent); }
+.service-card.featured .service-cta {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.service-card.featured .service-cta:hover { background: var(--accent-hover); }
+
+/* ========== TESTIMONIALS ========== */
+.testimonials-track {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 16px;
+  scrollbar-width: none;
+}
+.testimonials-track::-webkit-scrollbar { display: none; }
+.testimonial-card {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  min-width: 340px;
+  flex-shrink: 0;
+  scroll-snap-align: start;
+  transition: all 0.2s;
+}
+.testimonial-card:hover { border-color: var(--border-hover); }
+.testimonial-stars {
+  color: #f5c542;
+  font-size: 13px;
+  margin-bottom: 14px;
+  letter-spacing: 2px;
+}
+.testimonial-text {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  margin-bottom: 20px;
+  font-style: italic;
+}
+.testimonial-author {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.testimonial-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+}
+.testimonial-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+.testimonial-role {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+/* ========== CONTACT ========== */
+.contact-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  gap: 48px;
+  align-items: start;
+}
+.contact-info h2 {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  margin-bottom: 12px;
+}
+.contact-info p {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  margin-bottom: 28px;
+}
+.contact-methods {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.contact-method {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  transition: all 0.2s;
+}
+.contact-method:hover { border-color: var(--border-hover); }
+.contact-method-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  background: var(--accent-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.contact-method-label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.contact-method-value {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.contact-form-wrap {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 32px;
+}
+.contact-form-wrap h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.contact-form-wrap .sub {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  margin-bottom: 24px;
+}
+.form-group {
+  margin-bottom: 16px;
+}
+.form-group label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+.form-group input,
+.form-group select,
+.form-group textarea {
+  width: 100%;
+  font-family: inherit;
+  font-size: 14px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.2s;
+}
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus { border-color: var(--accent); }
+.form-group textarea { min-height: 100px; resize: vertical; }
+.form-group select option { background: var(--bg-secondary); }
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.form-submit {
+  width: 100%;
+  padding: 12px;
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius-md);
+  color: #fff;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-top: 4px;
+}
+.form-submit:hover { background: var(--accent-hover); transform: translateY(-1px); }
+.form-submit:active { transform: translateY(0); }
+.form-submit.success { background: var(--success); }
+.form-submit:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+.form-error {
+  font-size: 11px;
+  color: var(--danger);
+  margin-top: 4px;
+  display: none;
+}
+.form-group.error input,
+.form-group.error textarea { border-color: var(--danger); }
+.form-group.error .form-error { display: block; }
+
+/* ========== FOOTER ========== */
+.footer {
+  border-top: 1px solid var(--border);
+  padding: 40px clamp(20px, 5vw, 60px);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+.footer-left {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+.footer-right {
+  display: flex;
+  gap: 16px;
+}
+.footer-right a {
+  color: var(--text-tertiary);
+  text-decoration: none;
+  font-size: 13px;
+  transition: color 0.2s;
+}
+.footer-right a:hover { color: var(--accent); }
+
+/* ========== ANIMATIONS ========== */
+.reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+.reveal-delay-1 { transition-delay: 0.1s; }
+.reveal-delay-2 { transition-delay: 0.2s; }
+.reveal-delay-3 { transition-delay: 0.3s; }
+
+/* ========== ADMIN PANEL ========== */
+.admin-toggle {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: none;
+  color: #fff;
+  font-size: 20px;
+  cursor: pointer;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  box-shadow: 0 4px 20px rgba(124, 106, 240, 0.3);
+  padding: 0;
+}
+.admin-toggle:hover { transform: scale(1.1); }
+
+.admin-panel {
+  display: none;
+  position: fixed;
+  bottom: 84px;
+  right: 24px;
+  width: 380px;
+  max-height: 70vh;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  z-index: 300;
+  overflow: hidden;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.4);
+}
+.admin-panel.open { display: block; }
+.admin-panel-header {
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.admin-panel-header h3 {
+  font-size: 14px;
+  font-weight: 600;
+}
+.admin-panel-body {
+  padding: 20px;
+  overflow-y: auto;
+  max-height: calc(70vh - 60px);
+}
+.admin-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 20px;
+  background: var(--bg-primary);
+  border-radius: var(--radius-md);
+  padding: 3px;
+}
+.admin-tab {
+  flex: 1;
+  text-align: center;
+  padding: 7px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+.admin-tab.active { background: var(--bg-tertiary); color: var(--text-primary); }
+.admin-field {
+  margin-bottom: 14px;
+}
+.admin-field label {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+.admin-field input,
+.admin-field textarea {
+  width: 100%;
+  font-family: inherit;
+  font-size: 13px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.2s;
+}
+.admin-field input:focus,
+.admin-field textarea:focus { border-color: var(--accent); }
+.admin-field textarea { min-height: 60px; resize: vertical; }
+.admin-save {
+  width: 100%;
+  padding: 10px;
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius-md);
+  color: #fff;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-top: 8px;
+}
+.admin-save:hover { background: var(--accent-hover); }
+
+.admin-messages {
+  margin-top: 12px;
+}
+.admin-message {
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  margin-bottom: 10px;
+}
+.admin-message-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.admin-message-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+.admin-message-date {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+.admin-message-email {
+  font-size: 12px;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+.admin-message-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.admin-message-service {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 6px;
+  font-style: italic;
+}
+.admin-empty {
+  text-align: center;
+  padding: 24px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+/* ========== RESPONSIVE ========== */
+@media (max-width: 768px) {
+  .nav-links { display: none; }
+  .hamburger { display: flex; }
+
+  .hero-stats {
+    flex-direction: column;
+    gap: 20px;
+    align-items: center;
+  }
+
+  .projects-grid { grid-template-columns: 1fr; }
+
+  .about-grid {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+  .about-photo { max-height: 300px; }
+  .about-highlights { grid-template-columns: 1fr; }
+
+  .services-grid { grid-template-columns: 1fr; }
+
+  .contact-grid {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+
+  .form-row { grid-template-columns: 1fr; }
+
+  .modal-metrics { grid-template-columns: 1fr; }
+
+  .footer {
+    flex-direction: column;
+    gap: 16px;
+    text-align: center;
+  }
+
+  .admin-panel {
+    right: 12px;
+    left: 12px;
+    width: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal { opacity: 1; transform: none; transition: none; }
+  .hero-bg { animation: none; }
+  .dot { animation: none; }
+  * { transition-duration: 0.01ms !important; }
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav" id="nav">
+  <div class="nav-logo" onclick="scrollToSection('hero')">maya<span>.</span>chen</div>
+  <div class="nav-links">
+    <a href="#work" onclick="navClick(event, 'work')">Work</a>
+    <a href="#about" onclick="navClick(event, 'about')">About</a>
+    <a href="#services" onclick="navClick(event, 'services')">Services</a>
+    <a href="#testimonials" onclick="navClick(event, 'testimonials')">Testimonials</a>
+    <a href="#contact" class="nav-cta" onclick="navClick(event, 'contact')">Let's Talk</a>
+  </div>
+  <button class="hamburger" id="hamburger" onclick="toggleMobile()">
+    <span></span><span></span><span></span>
+  </button>
+</nav>
+<div class="mobile-menu" id="mobileMenu">
+  <a href="#work" onclick="mobileNav('work')">Work</a>
+  <a href="#about" onclick="mobileNav('about')">About</a>
+  <a href="#services" onclick="mobileNav('services')">Services</a>
+  <a href="#testimonials" onclick="mobileNav('testimonials')">Testimonials</a>
+  <a href="#contact" onclick="mobileNav('contact')">Contact</a>
+</div>
+
+<!-- HERO -->
+<section class="hero" id="hero">
+  <div class="hero-bg"></div>
+  <div class="hero-content">
+    <div class="hero-badge reveal"><span class="dot"></span> Available for new projects</div>
+    <h1 class="reveal reveal-delay-1">I design digital<br>experiences that <em>convert</em></h1>
+    <p class="reveal reveal-delay-2">Freelance designer & developer crafting clean, purposeful websites and applications for startups and growing businesses.</p>
+    <div class="hero-actions reveal reveal-delay-3">
+      <a href="#work" class="btn btn-primary" onclick="navClick(event, 'work')">View My Work &#8594;</a>
+      <a href="#contact" class="btn" onclick="navClick(event, 'contact')">Get in Touch</a>
+    </div>
+    <div class="hero-stats reveal reveal-delay-3">
+      <div class="hero-stat">
+        <div class="num" id="statProjects">0</div>
+        <div class="label">Projects Delivered</div>
+      </div>
+      <div class="hero-stat">
+        <div class="num" id="statClients">0</div>
+        <div class="label">Happy Clients</div>
+      </div>
+      <div class="hero-stat">
+        <div class="num" id="statYears">0</div>
+        <div class="label">Years Experience</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- WORK -->
+<section id="work">
+  <div class="section-header reveal">
+    <div class="section-label">Selected Work</div>
+    <div class="section-title">Projects I'm Proud Of</div>
+    <div class="section-desc">Each project is a journey from problem to solution. Click any card to see the full case study.</div>
+  </div>
+  <div class="projects-grid" id="projectsGrid"></div>
+</section>
+
+<!-- ABOUT -->
+<section id="about">
+  <div class="about-grid">
+    <div class="about-photo reveal">
+      <div style="font-size:80px">&#x1F469;&#x200D;&#x1F4BB;</div>
+      <div class="about-photo-label">Maya Chen</div>
+    </div>
+    <div class="about-content">
+      <div class="section-label reveal">About Me</div>
+      <h2 class="reveal">Designer, developer,<br><em>problem solver</em></h2>
+      <p class="reveal">I'm Maya &#8212; a freelance designer and developer who believes great digital products start with understanding people. I combine clean aesthetics with strategic thinking to build websites and apps that don't just look good, but actually work for your business.</p>
+      <p class="reveal">My approach is collaborative and transparent. I'll walk you through every decision, from the initial wireframes to the final pixel. No black boxes, no surprises &#8212; just honest, thoughtful work.</p>
+
+      <div class="about-highlights reveal">
+        <div class="about-highlight">
+          <div class="icon">&#127919;</div>
+          <h4>Strategy First</h4>
+          <p>Every design decision is backed by a clear business rationale</p>
+        </div>
+        <div class="about-highlight">
+          <div class="icon">&#9889;</div>
+          <h4>Fast Turnaround</h4>
+          <p>Efficient process without cutting corners on quality</p>
+        </div>
+        <div class="about-highlight">
+          <div class="icon">&#128172;</div>
+          <h4>Clear Communication</h4>
+          <p>Regular updates and check-ins at every milestone</p>
+        </div>
+        <div class="about-highlight">
+          <div class="icon">&#128200;</div>
+          <h4>Results-Driven</h4>
+          <p>Success is measured by your business outcomes, not just aesthetics</p>
+        </div>
+      </div>
+
+      <div class="skills-section reveal">
+        <h4>Tools & Technologies</h4>
+        <div class="skills-list">
+          <span class="skill-chip">Figma</span>
+          <span class="skill-chip">HTML/CSS</span>
+          <span class="skill-chip">JavaScript</span>
+          <span class="skill-chip">React</span>
+          <span class="skill-chip">Next.js</span>
+          <span class="skill-chip">Tailwind</span>
+          <span class="skill-chip">Node.js</span>
+          <span class="skill-chip">WordPress</span>
+          <span class="skill-chip">Shopify</span>
+          <span class="skill-chip">Framer Motion</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SERVICES -->
+<section id="services">
+  <div class="section-header reveal">
+    <div class="section-label">Services & Pricing</div>
+    <div class="section-title">How I Can Help</div>
+    <div class="section-desc">Transparent pricing with no hidden fees. Every package includes revisions and post-launch support.</div>
+  </div>
+  <div class="services-grid" id="servicesGrid"></div>
+</section>
+
+<!-- TESTIMONIALS -->
+<section id="testimonials">
+  <div class="section-header reveal">
+    <div class="section-label">Client Feedback</div>
+    <div class="section-title">What People Say</div>
+  </div>
+  <div class="testimonials-track reveal" id="testimonialsTrack"></div>
+</section>
+
+<!-- CONTACT -->
+<section id="contact">
+  <div class="contact-grid">
+    <div class="contact-info reveal">
+      <div class="section-label">Get In Touch</div>
+      <h2>Let's build something great together</h2>
+      <p>Have a project in mind? I'd love to hear about it. Fill out the form and I'll get back to you within one business day.</p>
+      <div class="contact-methods">
+        <div class="contact-method">
+          <div class="contact-method-icon">&#128231;</div>
+          <div>
+            <div class="contact-method-label">Email</div>
+            <div class="contact-method-value" id="contactEmail">hello@mayachen.dev</div>
+          </div>
+        </div>
+        <div class="contact-method">
+          <div class="contact-method-icon">&#128205;</div>
+          <div>
+            <div class="contact-method-label">Location</div>
+            <div class="contact-method-value" id="contactLocation">Available Worldwide &#183; Remote</div>
+          </div>
+        </div>
+        <div class="contact-method">
+          <div class="contact-method-icon">&#9200;</div>
+          <div>
+            <div class="contact-method-label">Response Time</div>
+            <div class="contact-method-value">Within 24 hours</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="contact-form-wrap reveal reveal-delay-1">
+      <h3>Send a message</h3>
+      <div class="sub">I'll respond within 1 business day.</div>
+      <form id="contactForm" onsubmit="handleSubmit(event)">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Name *</label>
+            <input type="text" id="formName" placeholder="Your name" required>
+            <div class="form-error">Please enter your name</div>
+          </div>
+          <div class="form-group">
+            <label>Email *</label>
+            <input type="email" id="formEmail" placeholder="you@company.com" required>
+            <div class="form-error">Please enter a valid email</div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Service Interested In</label>
+          <select id="formService">
+            <option value="">Select a service...</option>
+            <option value="Landing Page">Landing Page</option>
+            <option value="Full Website">Full Website</option>
+            <option value="Web Application">Web Application</option>
+            <option value="Other">Other / Not Sure</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Tell me about your project *</label>
+          <textarea id="formMessage" placeholder="What are you building? What's the goal? Any timeline?" required></textarea>
+          <div class="form-error">Please describe your project</div>
+        </div>
+        <div style="position:absolute;left:-9999px;"><input type="text" name="website" id="honeypot" tabindex="-1" autocomplete="off"></div>
+        <button type="submit" class="form-submit" id="submitBtn">Send Message</button>
+      </form>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer class="footer">
+  <div class="footer-left">&copy; 2026 Maya Chen. Built with care.</div>
+  <div class="footer-right">
+    <a href="#" id="footerGithub">GitHub</a>
+    <a href="#" id="footerLinkedin">LinkedIn</a>
+    <a href="#" id="footerDribbble">Dribbble</a>
+  </div>
+</footer>
+
+<!-- PROJECT MODAL -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-hero" id="modalHero">
+      <button class="modal-close" onclick="closeModal()">&#10005;</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<!-- ADMIN TOGGLE -->
+<button class="admin-toggle" id="adminToggle" onclick="toggleAdmin()" title="Edit Portfolio">&#9998;</button>
+
+<!-- ADMIN PANEL -->
+<div class="admin-panel" id="adminPanel">
+  <div class="admin-panel-header">
+    <h3>Portfolio Editor</h3>
+    <button onclick="toggleAdmin()" style="background:none;border:none;color:var(--text-tertiary);cursor:pointer;font-size:16px;padding:4px;font-family:inherit;">&#10005;</button>
+  </div>
+  <div class="admin-panel-body">
+    <div class="admin-tabs">
+      <button class="admin-tab active" onclick="switchAdminTab('profile', this)">Profile</button>
+      <button class="admin-tab" onclick="switchAdminTab('content', this)">Links</button>
+      <button class="admin-tab" onclick="switchAdminTab('messages', this)">Inbox</button>
+    </div>
+
+    <div id="adminProfile">
+      <div class="admin-field">
+        <label>Email</label>
+        <input type="text" id="adminEmail" placeholder="your@email.com">
+      </div>
+      <div class="admin-field">
+        <label>Location</label>
+        <input type="text" id="adminLocation" placeholder="City, Country">
+      </div>
+      <div class="admin-field">
+        <label>Projects Completed</label>
+        <input type="number" id="adminProjects" placeholder="0">
+      </div>
+      <div class="admin-field">
+        <label>Happy Clients</label>
+        <input type="number" id="adminClients" placeholder="0">
+      </div>
+      <div class="admin-field">
+        <label>Years Experience</label>
+        <input type="number" id="adminYears" placeholder="0">
+      </div>
+      <button class="admin-save" onclick="saveProfile()">Save Changes</button>
+    </div>
+
+    <div id="adminContent" style="display:none">
+      <div class="admin-field">
+        <label>GitHub URL</label>
+        <input type="text" id="adminGithub" placeholder="https://github.com/...">
+      </div>
+      <div class="admin-field">
+        <label>LinkedIn URL</label>
+        <input type="text" id="adminLinkedin" placeholder="https://linkedin.com/in/...">
+      </div>
+      <div class="admin-field">
+        <label>Dribbble URL</label>
+        <input type="text" id="adminDribbble" placeholder="https://dribbble.com/...">
+      </div>
+      <button class="admin-save" onclick="saveContent()">Save Links</button>
+    </div>
+
+    <div id="adminMessages" style="display:none">
+      <div id="messagesList"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ==================== DATA ====================
+const PROJECTS = [
+  {
+    title: 'Bloom \u2014 Wellness Platform',
+    description: 'A holistic wellness app connecting users with meditation guides, yoga instructors, and nutrition plans.',
+    tags: ['UI/UX Design', 'React', 'Full Stack'],
+    role: 'Lead Designer & Developer',
+    color: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    emoji: '\uD83C\uDF38',
+    details: {
+      challenge: 'Bloom needed to differentiate in a crowded wellness market. Users were overwhelmed by existing apps that tried to do everything at once.',
+      solution: 'I designed a progressive onboarding flow that personalizes the experience based on user goals. The UI uses calming visual hierarchy and micro-interactions that encourage daily engagement.',
+      results: [
+        'Onboarding completion increased from 34% to 78%',
+        'Daily active users grew 3.2\u00D7 in first quarter',
+        'App Store rating: 4.8 stars with 2,400+ reviews'
+      ],
+      metrics: [
+        { val: '78%', label: 'Onboarding Rate' },
+        { val: '3.2\u00D7', label: 'DAU Growth' },
+        { val: '4.8\u2605', label: 'App Rating' }
+      ]
+    }
+  },
+  {
+    title: 'Velo \u2014 Cycling Analytics',
+    description: 'Performance dashboard for competitive cyclists with real-time data visualization and route planning.',
+    tags: ['Data Viz', 'Dashboard', 'D3.js'],
+    role: 'UI Designer & Frontend Dev',
+    color: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+    emoji: '\uD83D\uDEB4',
+    details: {
+      challenge: 'Cyclists needed a way to analyze their performance data that was more intuitive than spreadsheets but more detailed than basic fitness apps.',
+      solution: 'Built a dashboard with interactive D3.js charts, heat maps for effort zones, and a route comparison tool. The interface adapts complexity to user skill level.',
+      results: [
+        'Used by 12,000+ cyclists in first 6 months',
+        'Average session duration: 8.5 minutes (3\u00D7 industry avg)',
+        'Featured in CyclingTips and BikeRadar'
+      ],
+      metrics: [
+        { val: '12K+', label: 'Active Users' },
+        { val: '8.5m', label: 'Avg Session' },
+        { val: '2', label: 'Press Features' }
+      ]
+    }
+  },
+  {
+    title: 'Nook \u2014 Local Bookshop',
+    description: 'E-commerce redesign for an independent bookshop, boosting online sales while preserving their cozy brand identity.',
+    tags: ['E-Commerce', 'Shopify', 'Branding'],
+    role: 'Full Redesign & Development',
+    color: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+    emoji: '\uD83D\uDCDA',
+    details: {
+      challenge: 'Nook\'s existing website felt generic and didn\'t reflect the warmth of their physical store. Online sales were stagnant at 8% of total revenue.',
+      solution: 'Redesigned on Shopify with custom theme development. Introduced staff picks, reading lists, and a "shelfie" feature where customers share their home libraries.',
+      results: [
+        'Online revenue increased 156% in 3 months',
+        'Cart abandonment dropped from 72% to 41%',
+        'Email newsletter signups grew 4\u00D7 with new landing page'
+      ],
+      metrics: [
+        { val: '+156%', label: 'Revenue' },
+        { val: '41%', label: 'Cart Abandon' },
+        { val: '4\u00D7', label: 'Email Signups' }
+      ]
+    }
+  },
+  {
+    title: 'Aura \u2014 SaaS Dashboard',
+    description: 'Analytics platform helping small businesses understand their customer data without needing a data team.',
+    tags: ['SaaS', 'React', 'Product Design'],
+    role: 'Product Designer',
+    color: 'linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)',
+    emoji: '\uD83D\uDCCA',
+    details: {
+      challenge: 'Small business owners were drowning in data from multiple tools but couldn\'t extract actionable insights. They didn\'t have the budget for a dedicated analyst.',
+      solution: 'Designed an AI-powered dashboard that auto-generates weekly insights in plain language. Created a "metrics that matter" system that highlights only the most relevant KPIs.',
+      results: [
+        'Beta waitlist grew to 3,200 users before launch',
+        'Net Promoter Score of 72 in first quarter',
+        'Reduced average decision-making time by 60%'
+      ],
+      metrics: [
+        { val: '3.2K', label: 'Waitlist' },
+        { val: '72', label: 'NPS Score' },
+        { val: '-60%', label: 'Decision Time' }
+      ]
+    }
+  },
+  {
+    title: 'Terrace \u2014 Restaurant Group',
+    description: 'Multi-location restaurant website with online ordering, reservations, and event management.',
+    tags: ['Web Design', 'Next.js', 'CMS'],
+    role: 'Design & Full Stack Dev',
+    color: 'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)',
+    emoji: '\uD83C\uDF7D\uFE0F',
+    details: {
+      challenge: 'A restaurant group with 4 locations needed a unified web presence that handled reservations, online ordering, and private event bookings \u2014 without requiring staff training.',
+      solution: 'Built a Next.js site with a headless CMS so managers can update menus and events themselves. Integrated directly with their POS system for real-time menu availability.',
+      results: [
+        'Online reservations increased 210% vs previous system',
+        'Staff save 12+ hours/week on phone orders',
+        'Private event inquiries up 85% from web form'
+      ],
+      metrics: [
+        { val: '+210%', label: 'Reservations' },
+        { val: '12h', label: 'Saved/Week' },
+        { val: '+85%', label: 'Event Leads' }
+      ]
+    }
+  },
+  {
+    title: 'Pixel \u2014 Design Agency',
+    description: 'Brand identity and portfolio website for a boutique design agency launching their new creative direction.',
+    tags: ['Branding', 'Animation', 'Figma'],
+    role: 'Brand & Web Designer',
+    color: 'linear-gradient(135deg, #89f7fe 0%, #66a6ff 100%)',
+    emoji: '\u2728',
+    details: {
+      challenge: 'Pixel was pivoting from general design services to focus on tech startups. They needed a brand refresh and website that signaled this new direction.',
+      solution: 'Developed a bold visual identity system with a custom type treatment, motion guidelines, and a portfolio site with scroll-driven storytelling that showcases their best startup work.',
+      results: [
+        'Inbound inquiries from tech companies increased 340%',
+        'Featured on Awwwards Honorable Mention',
+        'Team grew from 4 to 9 designers in 6 months'
+      ],
+      metrics: [
+        { val: '+340%', label: 'Tech Inquiries' },
+        { val: '\uD83C\uDFC6', label: 'Awwwards HM' },
+        { val: '2.25\u00D7', label: 'Team Growth' }
+      ]
+    }
+  }
+];
+
+const SERVICES = [
+  {
+    icon: '\uD83D\uDDA5\uFE0F',
+    title: 'Landing Page',
+    price: 'From $2,499',
+    description: 'A high-converting single-page site perfect for launches, products, or lead generation.',
+    features: [
+      'Custom design in Figma',
+      'Responsive development',
+      'Basic SEO optimization',
+      'Contact form integration',
+      '2 rounds of revisions',
+      '30 days post-launch support'
+    ],
+    featured: false
+  },
+  {
+    icon: '\uD83C\uDF10',
+    title: 'Full Website',
+    price: 'From $4,999',
+    description: 'A complete multi-page website with CMS, designed to grow with your business.',
+    features: [
+      'Up to 8 custom pages',
+      'Content management system',
+      'Advanced SEO & analytics',
+      'Blog or portfolio section',
+      '3 rounds of revisions',
+      '60 days post-launch support'
+    ],
+    featured: true
+  },
+  {
+    icon: '\u2699\uFE0F',
+    title: 'Web Application',
+    price: 'From $8,999',
+    description: 'A custom web app with user accounts, dashboards, and complex functionality.',
+    features: [
+      'Full product design',
+      'Frontend & backend development',
+      'User authentication system',
+      'Database architecture',
+      'API integrations',
+      '90 days post-launch support'
+    ],
+    featured: false
+  }
+];
+
+const TESTIMONIALS = [
+  {
+    text: 'Maya transformed our online presence completely. Our bookshop\'s revenue grew 156% in three months \u2014 numbers we never thought possible for a small independent store.',
+    name: 'Sarah Mitchell',
+    role: 'Owner, Nook Bookshop',
+    color: '#667eea'
+  },
+  {
+    text: 'Working with Maya was refreshingly straightforward. No jargon, no fluff \u2014 just clear communication and excellent design work. She delivered ahead of schedule.',
+    name: 'Alex Rivera',
+    role: 'CTO, Aura Analytics',
+    color: '#f093fb'
+  },
+  {
+    text: 'Maya\'s strategic approach to our restaurant website saved our staff 12+ hours a week on phone orders alone. The ROI was visible within the first month.',
+    name: 'James Park',
+    role: 'Managing Partner, Terrace Group',
+    color: '#4facfe'
+  },
+  {
+    text: 'She doesn\'t just make things look pretty \u2014 she thinks deeply about how users will interact with every element. Our onboarding completion rate doubled.',
+    name: 'Priya Sharma',
+    role: 'Founder, Bloom Wellness',
+    color: '#a18cd1'
+  },
+  {
+    text: 'The best investment we made this year. Maya redesigned our brand and site, and we\'ve seen a 340% increase in qualified leads from our target market.',
+    name: 'Tom Varga',
+    role: 'Creative Director, Pixel Agency',
+    color: '#89f7fe'
+  }
+];
+
+// ==================== STATE ====================
+let state = {
+  profile: {
+    email: 'hello@mayachen.dev',
+    location: 'Available Worldwide \u00B7 Remote',
+    projectsCount: 48,
+    clientsCount: 32,
+    yearsExp: 5,
+    github: '#',
+    linkedin: '#',
+    dribbble: '#'
+  },
+  messages: [],
+  initialized: false
+};
+
+// ==================== INIT ====================
+async function init() {
+  try {
+    const saved = await window.envisage.store.load();
+    if (saved && saved.profile) {
+      state = { ...state, ...saved, initialized: true };
+    }
+  } catch(e) {
+    // No saved state yet, that's fine
+  }
+
+  renderProjects();
+  renderServices();
+  renderTestimonials();
+  applyState();
+  setupScrollReveal();
+  setupNavScroll();
+  animateCounters();
+  renderMessages();
+}
+
+function applyState() {
+  var p = state.profile;
+  document.getElementById('contactEmail').textContent = p.email;
+  document.getElementById('contactLocation').textContent = p.location;
+
+  // Admin fields
+  document.getElementById('adminEmail').value = p.email;
+  document.getElementById('adminLocation').value = p.location;
+  document.getElementById('adminProjects').value = p.projectsCount;
+  document.getElementById('adminClients').value = p.clientsCount;
+  document.getElementById('adminYears').value = p.yearsExp;
+  document.getElementById('adminGithub').value = p.github || '#';
+  document.getElementById('adminLinkedin').value = p.linkedin || '#';
+  document.getElementById('adminDribbble').value = p.dribbble || '#';
+
+  // Footer links
+  document.getElementById('footerGithub').href = p.github || '#';
+  document.getElementById('footerLinkedin').href = p.linkedin || '#';
+  document.getElementById('footerDribbble').href = p.dribbble || '#';
+}
+
+// ==================== RENDER ====================
+function renderProjects() {
+  var grid = document.getElementById('projectsGrid');
+  grid.innerHTML = PROJECTS.map(function(proj, i) {
+    return '<div class="project-card reveal reveal-delay-' + ((i % 3) + 1) + '" onclick="openProject(' + i + ')">' +
+      '<div class="project-thumb">' +
+        '<div class="project-thumb-bg" style="background:' + proj.color + '">' + proj.emoji + '</div>' +
+        '<div class="project-thumb-overlay"></div>' +
+      '</div>' +
+      '<div class="project-info">' +
+        '<div class="project-tags">' + proj.tags.map(function(t) { return '<span class="project-tag">' + t + '</span>'; }).join('') + '</div>' +
+        '<h3>' + proj.title + '</h3>' +
+        '<p>' + proj.description + '</p>' +
+        '<div class="project-meta">' +
+          '<span class="project-role">' + proj.role + '</span>' +
+          '<span class="project-link">View Case Study \u2192</span>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function renderServices() {
+  var grid = document.getElementById('servicesGrid');
+  grid.innerHTML = SERVICES.map(function(svc, i) {
+    return '<div class="service-card ' + (svc.featured ? 'featured' : '') + ' reveal reveal-delay-' + (i + 1) + '">' +
+      '<div class="service-icon">' + svc.icon + '</div>' +
+      '<h3>' + svc.title + '</h3>' +
+      '<div class="service-price">' + svc.price + '</div>' +
+      '<div class="service-desc">' + svc.description + '</div>' +
+      '<ul class="service-features">' +
+        svc.features.map(function(f) { return '<li><span class="check">\u2713</span>' + f + '</li>'; }).join('') +
+      '</ul>' +
+      '<button class="service-cta" onclick="scrollToSection(\'contact\')">Get Started</button>' +
+    '</div>';
+  }).join('');
+}
+
+function renderTestimonials() {
+  var track = document.getElementById('testimonialsTrack');
+  track.innerHTML = TESTIMONIALS.map(function(t) {
+    var initials = t.name.split(' ').map(function(n) { return n[0]; }).join('');
+    return '<div class="testimonial-card">' +
+      '<div class="testimonial-stars">\u2605\u2605\u2605\u2605\u2605</div>' +
+      '<div class="testimonial-text">\u201C' + t.text + '\u201D</div>' +
+      '<div class="testimonial-author">' +
+        '<div class="testimonial-avatar" style="background:' + t.color + '">' + initials + '</div>' +
+        '<div>' +
+          '<div class="testimonial-name">' + t.name + '</div>' +
+          '<div class="testimonial-role">' + t.role + '</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function renderMessages() {
+  var list = document.getElementById('messagesList');
+  if (!state.messages.length) {
+    list.innerHTML = '<div class="admin-empty">No messages yet.<br>Messages from the contact form will appear here.</div>';
+    return;
+  }
+  list.innerHTML = state.messages.map(function(m) {
+    return '<div class="admin-message">' +
+      '<div class="admin-message-header">' +
+        '<span class="admin-message-name">' + m.name + '</span>' +
+        '<span class="admin-message-date">' + m.date + '</span>' +
+      '</div>' +
+      '<div class="admin-message-email">' + m.email + '</div>' +
+      '<div class="admin-message-text">' + m.message + '</div>' +
+      (m.service ? '<div class="admin-message-service">Interested in: ' + m.service + '</div>' : '') +
+    '</div>';
+  }).join('');
+}
+
+// ==================== MODAL ====================
+function openProject(index) {
+  var proj = PROJECTS[index];
+  var overlay = document.getElementById('modalOverlay');
+  var hero = document.getElementById('modalHero');
+  var body = document.getElementById('modalBody');
+
+  hero.style.background = proj.color;
+  hero.innerHTML = '<button class="modal-close" onclick="closeModal()">\u2715</button><span style="font-size:60px">' + proj.emoji + '</span>';
+
+  body.innerHTML =
+    '<div class="project-tags" style="margin-bottom:16px">' + proj.tags.map(function(t) { return '<span class="project-tag">' + t + '</span>'; }).join('') + '</div>' +
+    '<h2>' + proj.title + '</h2>' +
+    '<div class="modal-subtitle">' + proj.role + '</div>' +
+    '<div class="modal-section">' +
+      '<h4>The Challenge</h4>' +
+      '<p>' + proj.details.challenge + '</p>' +
+    '</div>' +
+    '<div class="modal-section">' +
+      '<h4>The Solution</h4>' +
+      '<p>' + proj.details.solution + '</p>' +
+    '</div>' +
+    '<div class="modal-section">' +
+      '<h4>Key Results</h4>' +
+      '<ul>' + proj.details.results.map(function(r) { return '<li>' + r + '</li>'; }).join('') + '</ul>' +
+    '</div>' +
+    '<div class="modal-metrics">' +
+      proj.details.metrics.map(function(m) {
+        return '<div class="modal-metric"><div class="val">' + m.val + '</div><div class="lbl">' + m.label + '</div></div>';
+      }).join('') +
+    '</div>';
+
+  // Force reflow then add open class for animation
+  overlay.style.display = 'flex';
+  requestAnimationFrame(function() {
+    overlay.classList.add('open');
+  });
+  document.body.style.overflow = 'hidden';
+}
+
+function closeModal(e) {
+  if (e && e.target !== e.currentTarget && !e.target.classList.contains('modal-close')) return;
+  var overlay = document.getElementById('modalOverlay');
+  overlay.classList.remove('open');
+  setTimeout(function() {
+    overlay.style.display = 'none';
+  }, 300);
+  document.body.style.overflow = '';
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeModal();
+});
+
+// ==================== NAVIGATION ====================
+function navClick(e, id) {
+  e.preventDefault();
+  scrollToSection(id);
+}
+
+function scrollToSection(id) {
+  var el = document.getElementById(id);
+  if (el) {
+    var offset = id === 'hero' ? 0 : 80;
+    var top = el.getBoundingClientRect().top + window.scrollY - offset;
+    window.scrollTo({ top: top, behavior: 'smooth' });
+  }
+}
+
+function toggleMobile() {
+  document.getElementById('hamburger').classList.toggle('open');
+  document.getElementById('mobileMenu').classList.toggle('open');
+}
+
+function mobileNav(id) {
+  toggleMobile();
+  setTimeout(function() { scrollToSection(id); }, 100);
+}
+
+function setupNavScroll() {
+  var nav = document.getElementById('nav');
+  var links = document.querySelectorAll('.nav-links a:not(.nav-cta)');
+  var sections = ['work', 'about', 'services', 'testimonials', 'contact'];
+
+  window.addEventListener('scroll', function() {
+    nav.classList.toggle('scrolled', window.scrollY > 50);
+
+    var current = '';
+    for (var i = 0; i < sections.length; i++) {
+      var el = document.getElementById(sections[i]);
+      if (el && el.getBoundingClientRect().top <= 150) current = sections[i];
+    }
+    links.forEach(function(link) {
+      link.classList.toggle('active', link.getAttribute('href') === '#' + current);
+    });
+  });
+}
+
+// ==================== SCROLL REVEAL ====================
+function setupScrollReveal() {
+  var observer = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+        observer.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+  document.querySelectorAll('.reveal').forEach(function(el) { observer.observe(el); });
+}
+
+// ==================== COUNTER ANIMATION ====================
+function animateCounters() {
+  var p = state.profile;
+  var counters = [
+    { el: 'statProjects', target: p.projectsCount, suffix: '+' },
+    { el: 'statClients', target: p.clientsCount, suffix: '+' },
+    { el: 'statYears', target: p.yearsExp, suffix: '+' }
+  ];
+
+  var observer = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      if (entry.isIntersecting) {
+        counters.forEach(function(c) {
+          var el = document.getElementById(c.el);
+          animateValue(el, 0, c.target, 1500, c.suffix);
+        });
+        observer.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.5 });
+
+  var heroStats = document.querySelector('.hero-stats');
+  if (heroStats) observer.observe(heroStats);
+}
+
+function animateValue(el, start, end, duration, suffix) {
+  var startTime = performance.now();
+  function update(currentTime) {
+    var elapsed = currentTime - startTime;
+    var progress = Math.min(elapsed / duration, 1);
+    var eased = 1 - Math.pow(1 - progress, 3);
+    var value = Math.floor(start + (end - start) * eased);
+    el.textContent = value + suffix;
+    if (progress < 1) requestAnimationFrame(update);
+  }
+  requestAnimationFrame(update);
+}
+
+// ==================== CONTACT FORM ====================
+function handleSubmit(e) {
+  e.preventDefault();
+
+  // Honeypot check
+  if (document.getElementById('honeypot').value) return;
+
+  var name = document.getElementById('formName');
+  var email = document.getElementById('formEmail');
+  var message = document.getElementById('formMessage');
+  var service = document.getElementById('formService');
+  var btn = document.getElementById('submitBtn');
+
+  // Clear errors
+  document.querySelectorAll('.form-group').forEach(function(g) { g.classList.remove('error'); });
+  var valid = true;
+
+  if (!name.value.trim()) { name.closest('.form-group').classList.add('error'); valid = false; }
+  if (!email.value.trim() || !email.value.includes('@')) { email.closest('.form-group').classList.add('error'); valid = false; }
+  if (!message.value.trim()) { message.closest('.form-group').classList.add('error'); valid = false; }
+
+  if (!valid) return;
+
+  // Save message
+  var msg = {
+    name: name.value.trim(),
+    email: email.value.trim(),
+    message: message.value.trim(),
+    service: service.value || null,
+    date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  };
+
+  state.messages.unshift(msg);
+  saveState();
+  renderMessages();
+
+  // Button feedback
+  btn.textContent = '\u2713 Message Sent!';
+  btn.classList.add('success');
+  btn.disabled = true;
+
+  setTimeout(function() {
+    btn.textContent = 'Send Message';
+    btn.classList.remove('success');
+    btn.disabled = false;
+    e.target.reset();
+  }, 3000);
+}
+
+// ==================== ADMIN ====================
+function toggleAdmin() {
+  document.getElementById('adminPanel').classList.toggle('open');
+}
+
+function switchAdminTab(tab, el) {
+  document.querySelectorAll('.admin-tab').forEach(function(t) { t.classList.remove('active'); });
+  el.classList.add('active');
+  document.getElementById('adminProfile').style.display = tab === 'profile' ? 'block' : 'none';
+  document.getElementById('adminContent').style.display = tab === 'content' ? 'block' : 'none';
+  document.getElementById('adminMessages').style.display = tab === 'messages' ? 'block' : 'none';
+}
+
+function saveProfile() {
+  state.profile.email = document.getElementById('adminEmail').value;
+  state.profile.location = document.getElementById('adminLocation').value;
+  state.profile.projectsCount = parseInt(document.getElementById('adminProjects').value) || 0;
+  state.profile.clientsCount = parseInt(document.getElementById('adminClients').value) || 0;
+  state.profile.yearsExp = parseInt(document.getElementById('adminYears').value) || 0;
+
+  // Update visible elements
+  document.getElementById('contactEmail').textContent = state.profile.email;
+  document.getElementById('contactLocation').textContent = state.profile.location;
+
+  // Update counters
+  var p = state.profile;
+  document.getElementById('statProjects').textContent = p.projectsCount + '+';
+  document.getElementById('statClients').textContent = p.clientsCount + '+';
+  document.getElementById('statYears').textContent = p.yearsExp + '+';
+
+  saveState();
+  showSaveConfirm(event.target);
+}
+
+function saveContent() {
+  state.profile.github = document.getElementById('adminGithub').value;
+  state.profile.linkedin = document.getElementById('adminLinkedin').value;
+  state.profile.dribbble = document.getElementById('adminDribbble').value;
+
+  document.getElementById('footerGithub').href = state.profile.github;
+  document.getElementById('footerLinkedin').href = state.profile.linkedin;
+  document.getElementById('footerDribbble').href = state.profile.dribbble;
+
+  saveState();
+  showSaveConfirm(event.target);
+}
+
+function showSaveConfirm(btn) {
+  var orig = btn.textContent;
+  btn.textContent = '\u2713 Saved!';
+  btn.style.background = 'var(--success)';
+  setTimeout(function() {
+    btn.textContent = orig;
+    btn.style.background = '';
+  }, 1500);
+}
+
+async function saveState() {
+  try {
+    await window.envisage.store.save(state);
+  } catch(e) {
+    // Fallback: store in localStorage
+    try { localStorage.setItem('portfolio_state', JSON.stringify(state)); } catch(e2) {}
+  }
+}
+
+// ==================== START ====================
+init();
+</script>
+</body>
+</html>

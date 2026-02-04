@@ -1,25 +1,23 @@
 import { useState, useEffect, useMemo } from "react";
-import type { Project, DiscoveryDomainState } from "../services/api";
+import type { Project } from "../services/api";
 
 interface Props {
   projects: Project[];
-  domains: DiscoveryDomainState[];
   activeProjectId: number | null;
-  activeDomainId: string | null;
   onSelectProject: (id: number) => void;
-  onSelectDomain: (domain: string) => void;
   onNewProject: () => void;
   onGoHome: () => void;
+  userName: string;
+  onLogout: () => void;
 }
 
 const DOMAIN_LABELS: Record<string, string> = {
   work: "Work & Career",
-  social: "Social Life",
-  studies: "Studies & Learning",
+  learning: "Learning & Growth",
   health: "Health & Wellness",
-  hobbies: "Hobbies & Projects",
+  creative: "Creative & Projects",
   money: "Money & Finances",
-  mental_health: "Mind & mental health",
+  mind: "Mind & Wellbeing",
 };
 
 const STATUS_DISPLAY: Record<string, string> = {
@@ -56,7 +54,7 @@ function useTheme() {
   return { dark, toggle: () => setDark((d) => !d) };
 }
 
-export function Sidebar({ projects, domains, activeProjectId, activeDomainId, onSelectProject, onSelectDomain, onNewProject, onGoHome }: Props) {
+export function Sidebar({ projects, activeProjectId, onSelectProject, onNewProject, onGoHome, userName, onLogout }: Props) {
   const theme = useTheme();
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
@@ -84,36 +82,14 @@ export function Sidebar({ projects, domains, activeProjectId, activeDomainId, on
     setCollapsed((prev) => ({ ...prev, [domain]: !prev[domain] }));
   };
 
-  // Build domain sections: each domain gets a header (clickable for domain chat),
-  // with projects nested underneath
+  // Build domain sections from project groupings
   const domainSections = useMemo(() => {
-    const seen = new Set<string>();
-    const sections: { domain: string; label: string; domainState?: DiscoveryDomainState; projects: Project[] }[] = [];
-
-    // Include all domains from discovery
-    for (const d of domains) {
-      seen.add(d.domain);
-      sections.push({
-        domain: d.domain,
-        label: d.label || DOMAIN_LABELS[d.domain] || d.domain,
-        domainState: d,
-        projects: projectsByDomain.groups[d.domain] || [],
-      });
-    }
-
-    // Include any domains from projects not in discovery
-    for (const domainKey of Object.keys(projectsByDomain.groups)) {
-      if (!seen.has(domainKey)) {
-        sections.push({
-          domain: domainKey,
-          label: DOMAIN_LABELS[domainKey] || domainKey,
-          projects: projectsByDomain.groups[domainKey],
-        });
-      }
-    }
-
-    return sections;
-  }, [domains, projectsByDomain]);
+    return Object.entries(projectsByDomain.groups).map(([domain, domainProjects]) => ({
+      domain,
+      label: DOMAIN_LABELS[domain] || domain,
+      projects: domainProjects,
+    }));
+  }, [projectsByDomain]);
 
   return (
     <div className="sidebar">
@@ -124,7 +100,7 @@ export function Sidebar({ projects, domains, activeProjectId, activeDomainId, on
       {/* Home chat */}
       {homeProject && (
         <div
-          className={`sidebar-home ${homeProject.id === activeProjectId && !activeDomainId ? "active" : ""}`}
+          className={`sidebar-home ${homeProject.id === activeProjectId ? "active" : ""}`}
           onClick={() => onSelectProject(homeProject.id)}
         >
           Home
@@ -132,7 +108,7 @@ export function Sidebar({ projects, domains, activeProjectId, activeDomainId, on
       )}
 
       <button className="sidebar-new-btn" onClick={onNewProject}>
-        + New Task
+        + New Project
       </button>
 
       <div className="project-list">
@@ -140,28 +116,21 @@ export function Sidebar({ projects, domains, activeProjectId, activeDomainId, on
         {domainSections.map((section) => (
           <div key={section.domain} className="sidebar-domain-section">
             <div className="sidebar-domain-header">
-              {section.projects.length > 0 && (
-                <span
-                  className="sidebar-domain-arrow"
-                  onClick={() => toggleDomain(section.domain)}
-                >
-                  {collapsed[section.domain] ? "\u25B8" : "\u25BE"}
-                </span>
-              )}
               <span
-                className={`sidebar-domain-label ${activeDomainId === section.domain ? "active" : ""}`}
-                onClick={() => onSelectDomain(section.domain)}
+                className="sidebar-domain-arrow"
+                onClick={() => toggleDomain(section.domain)}
               >
+                {collapsed[section.domain] ? "\u25B8" : "\u25BE"}
+              </span>
+              <span className="sidebar-domain-label">
                 {section.label}
               </span>
-              {section.projects.length > 0 && (
-                <span className="sidebar-domain-count">{section.projects.length}</span>
-              )}
+              <span className="sidebar-domain-count">{section.projects.length}</span>
             </div>
             {!collapsed[section.domain] && section.projects.map((p) => (
               <div
                 key={p.id}
-                className={`project-item domain-child ${p.id === activeProjectId && !activeDomainId ? "active" : ""}`}
+                className={`project-item domain-child ${p.id === activeProjectId ? "active" : ""}`}
                 onClick={() => onSelectProject(p.id)}
               >
                 <div className="project-name">{p.name}</div>
@@ -185,7 +154,7 @@ export function Sidebar({ projects, domains, activeProjectId, activeDomainId, on
             {projectsByDomain.ungrouped.map((p) => (
               <div
                 key={p.id}
-                className={`project-item ${p.id === activeProjectId && !activeDomainId ? "active" : ""}`}
+                className={`project-item ${p.id === activeProjectId ? "active" : ""}`}
                 onClick={() => onSelectProject(p.id)}
               >
                 <div className="project-name">{p.name}</div>
@@ -198,16 +167,22 @@ export function Sidebar({ projects, domains, activeProjectId, activeDomainId, on
           </>
         )}
 
-        {otherProjects.length === 0 && domains.length === 0 && (
+        {otherProjects.length === 0 && (
           <div style={{ padding: "24px 16px", textAlign: "center", color: "var(--text-muted)", fontSize: "13px" }}>
             No projects yet
           </div>
         )}
       </div>
 
-      <button className="theme-toggle" onClick={theme.toggle}>
-        {theme.dark ? "Light mode" : "Dark mode"}
-      </button>
+      <div className="sidebar-footer">
+        <div className="sidebar-user">
+          <span className="sidebar-user-name">{userName}</span>
+          <button className="sidebar-logout" onClick={onLogout}>Log out</button>
+        </div>
+        <button className="theme-toggle" onClick={theme.toggle}>
+          {theme.dark ? "Light mode" : "Dark mode"}
+        </button>
+      </div>
     </div>
   );
 }

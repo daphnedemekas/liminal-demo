@@ -5,21 +5,19 @@ guidance that gets injected into the generic discovery prompts.
 """
 
 from backend.prompts.domains.work import DOMAIN_PROMPTS as WORK_PROMPTS
-from backend.prompts.domains.social import DOMAIN_PROMPTS as SOCIAL_PROMPTS
-from backend.prompts.domains.studies import DOMAIN_PROMPTS as STUDIES_PROMPTS
+from backend.prompts.domains.studies import DOMAIN_PROMPTS as LEARNING_PROMPTS
 from backend.prompts.domains.health import DOMAIN_PROMPTS as HEALTH_PROMPTS
-from backend.prompts.domains.hobbies import DOMAIN_PROMPTS as HOBBIES_PROMPTS
+from backend.prompts.domains.hobbies import DOMAIN_PROMPTS as CREATIVE_PROMPTS
 from backend.prompts.domains.money import DOMAIN_PROMPTS as MONEY_PROMPTS
-from backend.prompts.domains.mental_health import DOMAIN_PROMPTS as MENTAL_HEALTH_PROMPTS
+from backend.prompts.domains.mental_health import DOMAIN_PROMPTS as MIND_PROMPTS
 
 DOMAIN_PROMPT_REGISTRY: dict[str, dict] = {
     "work": WORK_PROMPTS,
-    "social": SOCIAL_PROMPTS,
-    "studies": STUDIES_PROMPTS,
+    "learning": LEARNING_PROMPTS,
     "health": HEALTH_PROMPTS,
-    "hobbies": HOBBIES_PROMPTS,
+    "creative": CREATIVE_PROMPTS,
     "money": MONEY_PROMPTS,
-    "mental_health": MENTAL_HEALTH_PROMPTS,
+    "mind": MIND_PROMPTS,
 }
 
 

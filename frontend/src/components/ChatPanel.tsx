@@ -2,7 +2,8 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { api } from "../services/api";
-import type { Project, ChatAction, SynthesisEvent } from "../services/api";
+import type { Project, ChatAction, SynthesisEvent, MessageBlock } from "../services/api";
+import { BlockRenderer } from "./blocks/BlockRenderer";
 import { useRunStream } from "../hooks/useRunStream";
 import { useAudio } from "../hooks/useAudio";
 import { ContextUpload } from "./ContextUpload";
@@ -18,12 +19,11 @@ function smartTruncate(text: string | undefined | null, maxLength: number): stri
 
 const DOMAIN_LABELS: Record<string, string> = {
   work: "Work & Career",
-  social: "Social Life",
-  studies: "Studies & Learning",
+  learning: "Learning & Growth",
   health: "Health & Wellness",
-  hobbies: "Hobbies & Projects",
+  creative: "Creative & Projects",
   money: "Money & Finances",
-  mental_health: "Mind & mental health",
+  mind: "Mind & Wellbeing",
 };
 
 function actionLabel(action: ChatAction): string {
@@ -42,8 +42,11 @@ interface Message {
   role: "user" | "assistant" | "system";
   content: string;
   actions?: ChatAction[];
+  blocks?: MessageBlock[];
+  phase?: string;
   timestamp?: string;
   synthesis?: SynthesisEvent;
+  nav_context?: string;
 }
 
 interface Props {
@@ -51,7 +54,7 @@ interface Props {
   userId: string;
   onProjectRenamed?: () => void;
   onRunComplete?: () => void;
-  onNavigateDomain?: (domain: string) => void;
+  onNavigateDomain?: (domain: string, context?: string) => void;
   onNavigateProject?: (projectId: number) => void;
   onMessageReceived?: () => void;
 }
@@ -110,15 +113,18 @@ export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, on
     toggleAudioMode, startRecording, stopRecording, playTTS, stopAudio,
   } = useAudio();
 
+  const [blockSelections, setBlockSelections] = useState<Record<string, string[]>>({});
+  const [blockSubmitted, setBlockSubmitted] = useState<Set<string>>(new Set());
+
   const currentProjectId = useRef(project.id);
   const abortRef = useRef<AbortController | null>(null);
   const pendingResultRef = useRef<string | null>(null);
   currentProjectId.current = project.id;
 
-  const sendChat = useCallback(async (text: string) => {
+  const sendChat = useCallback(async (text: string, silent = false) => {
     if (isChatting || isRunning || !text) return;
 
-    setMessages((prev) => [...prev, { role: "user", content: text }]);
+    if (!silent) setMessages((prev) => [...prev, { role: "user", content: text }]);
     setIsChatting(true);
 
     // Abort any in-flight request and track this one
@@ -149,7 +155,7 @@ export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, on
               }
               return [
                 ...prev,
-                { role: "assistant", content: res.message, actions: res.actions },
+                { role: "assistant", content: res.message, actions: res.actions, blocks: res.blocks, phase: res.phase },
               ];
             });
             if (isAudioMode) {
@@ -162,6 +168,14 @@ export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, on
           }
           setIsChatting(false);
           onMessageReceived?.();
+          // Auto-continue: backend signals the next phase should run without user input
+          if (res.auto_continue) {
+            setTimeout(() => {
+              if (currentProjectId.current === expectedProjectId) {
+                sendChat("continue", true);
+              }
+            }, 1500);
+          }
         },
         (err) => {
           if (currentProjectId.current !== expectedProjectId) return;
@@ -253,6 +267,8 @@ export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, on
             role: m.role as Message["role"],
             content: m.content,
             actions: m.actions,
+            blocks: m.blocks,
+            phase: m.phase,
             timestamp: m.created_at,
           })));
         }
@@ -296,7 +312,7 @@ export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, on
               setStatusMessage(null);
               setActivityLog([]);
               if (res.message) {
-                setMessages((prev) => [...prev, { role: "assistant", content: res.message, actions: res.actions }]);
+                setMessages((prev) => [...prev, { role: "assistant", content: res.message, actions: res.actions, blocks: res.blocks, phase: res.phase, nav_context: res.nav_context }]);
               }
               setIsChatting(false);
               onMessageReceived?.();
@@ -338,7 +354,7 @@ export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, on
                 setMessages((prev) => {
                   const last = prev[prev.length - 1];
                   if (last?.role === "assistant" && last.content === res.message) return prev;
-                  return [...prev, { role: "assistant", content: res.message, actions: res.actions }];
+                  return [...prev, { role: "assistant", content: res.message, actions: res.actions, blocks: res.blocks, phase: res.phase }];
                 });
                 if (isAudioMode) playTTS(res.message);
               }
@@ -517,13 +533,25 @@ export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, on
     sendChat(text);
   };
 
+  const handleBlockSelect = (blockId: string, values: string[]) => {
+    setBlockSelections((prev) => ({ ...prev, [blockId]: values }));
+  };
+
+  const handleBlockSubmit = (blockId: string, text: string) => {
+    setBlockSubmitted((prev) => new Set(prev).add(blockId));
+    sendChat(text);
+  };
+
   const handleActionClick = (actionText: string) => {
     if (isRunning || isChatting) return;
 
-    // Intercept navigation actions
+    // Intercept navigation actions — pass context from home chat
     if (actionText.startsWith("navigate_domain:")) {
       const domain = actionText.split(":")[1];
-      onNavigateDomain?.(domain);
+      const msgWithAction = [...messages].reverse().find(m =>
+        m.actions?.some((a: { action_text?: string }) => a.action_text === actionText)
+      );
+      onNavigateDomain?.(domain, msgWithAction?.nav_context);
       return;
     }
     if (actionText.startsWith("navigate_project:")) {
@@ -594,6 +622,22 @@ export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, on
                 </div>
               )}
             </div>
+            {msg.blocks && msg.blocks.length > 0 && (
+              <div className="message-blocks">
+                {msg.blocks.map((block) => (
+                  <BlockRenderer
+                    key={block.id}
+                    block={block}
+                    selection={blockSelections[block.id] || []}
+                    submitted={blockSubmitted.has(block.id)}
+                    submittedText={undefined}
+                    disabled={busy}
+                    onSelect={(values) => handleBlockSelect(block.id, values)}
+                    onSubmit={(text) => handleBlockSubmit(block.id, text)}
+                  />
+                ))}
+              </div>
+            )}
             {msg.actions && msg.actions.length > 0 && (
               <div className="chat-actions">
                 {msg.actions.filter((a) => a.action_text || a.label).map((action, j) => (

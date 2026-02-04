@@ -1,0 +1,23 @@
+Category Name,Schedule C Line,Typical Examples,Notes
+Advertising,Line 8,"Business cards, online ads, website hosting, marketing materials",Fully deductible
+Car & Truck Expenses,Line 9,"Mileage ($0.725/mile in 2026), gas, repairs, parking, tolls",Choose standard mileage OR actual expenses - not both
+Commissions & Fees,Line 10,"Platform fees, PayPal/Stripe processing fees, agent commissions",Fully deductible
+Contract Labor,Line 11,"Subcontractors, virtual assistants, freelance help",Issue 1099-NEC if paying $600+ to any contractor
+Depreciation / Section 179,Line 13,"Computers, equipment, furniture, cameras",Can expense immediately under Section 179 up to $1.25M (2026)
+Insurance (non-health),Line 15,"Business liability, E&O, professional indemnity",Health insurance goes on Form 1040 Line 17 instead
+Interest (Mortgage),Line 16a,Business portion of mortgage,Only if you have a dedicated business property
+Interest (Other),Line 16b,"Business credit card interest, business loan interest",Must be for business purchases only
+Legal & Professional Services,Line 17,"CPA/accountant fees, attorney fees, business consulting",Tax prep fees are deductible here
+Office Expenses,Line 18,"Office supplies, postage, shipping, printer ink/toner",Day-to-day consumable office items
+Rent - Vehicles/Equipment,Line 20a,"Leased equipment, rented tools",Not for coworking - that goes on Line 20b
+Rent - Other Property,Line 20b,"Office rent, coworking space, studio rental",Fully deductible
+Repairs & Maintenance,Line 21,"Equipment repairs, computer repairs",Must not substantially improve the asset
+Supplies,Line 22,"Materials consumed in business, project materials",Distinct from office expenses
+Taxes & Licenses,Line 23,"Business licenses, state/local business taxes, permits",State income tax goes on Schedule A instead
+Travel,Line 24a,"Flights, hotels, ground transportation, conference travel",Must be primarily for business; keep detailed records
+Meals (50% deductible),Line 24b,"Client meals, business meals while traveling",Only 50% deductible; document who/what/where/business purpose
+Utilities,Line 25,"Business phone, internet, electricity for office",If shared personal/business use - deduct only business %
+Other Expenses,Line 27,"Software subscriptions, education, professional development, books, web hosting, bank fees",Catch-all for legitimate business expenses not listed above
+Home Office,Form 8829,"Rent/mortgage, utilities, insurance proportional to office space",Simplified: $5/sq ft up to 300 sq ft ($1,500 max)
+Health Insurance (Self-Employed),Form 1040 Line 17,"Medical, dental, vision premiums for you + family",100% deductible above-the-line; NOT on Schedule C
+Retirement Contributions,Schedule 1,"SEP-IRA, Solo 401(k) contributions",SEP: up to 25% of net SE income (max $72K in 2026)

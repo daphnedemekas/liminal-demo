@@ -30,7 +30,7 @@ export function ResourceArtifact({ content }: Props) {
             >
               <div className="resource-title">{r.title}</div>
               <div className="resource-desc">{r.description}</div>
-              <div className="resource-url">{new URL(r.url).hostname}</div>
+              <div className="resource-url">{(() => { try { return new URL(r.url).hostname; } catch { return r.url; } })()}</div>
             </a>
           ))}
         </div>

@@ -1,83 +1,67 @@
-"""Onboarding routes: quick context, Q&A, suggestions."""
-from __future__ import annotations
+"""Onboarding routes — domain selection and discovery completion."""
+
+import json
+import logging
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from backend.database import get_db
-from backend.services.onboarding_orchestrator import onboarding, QUICK_CONTEXT_OPTIONS
+from backend.database import UserProfile, DiscoveryDomain, get_db
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/onboarding", tags=["onboarding"])
 
 
-class QuickContextRequest(BaseModel):
+class SelectDomainsRequest(BaseModel):
     user_id: str
-    selected_ids: list[str]
+    domains: list[str]
 
 
-class AnswerRequest(BaseModel):
+class CompleteRequest(BaseModel):
     user_id: str
-    answer: str
+    onboarding_info: Optional[dict] = None
 
 
-class AcceptSuggestionsRequest(BaseModel):
-    user_id: str
-    indices: list[int]
+@router.post("/select-domains")
+def select_domains(req: SelectDomainsRequest, db: Session = Depends(get_db)):
+    """Save the domains the user selected during onboarding."""
+    user = db.query(UserProfile).filter_by(id=req.user_id).first()
+    if not user:
+        raise HTTPException(404, "User not found")
+
+    user.selected_domains = req.domains
+
+    # Also create DiscoveryDomain records so navigation routing can reference them
+    for domain in req.domains:
+        existing = db.query(DiscoveryDomain).filter_by(user_id=req.user_id, domain=domain).first()
+        if not existing:
+            db.add(DiscoveryDomain(user_id=req.user_id, domain=domain, status="pending"))
+
+    db.commit()
+
+    return {
+        "domains": [
+            {"domain": d, "label": d, "status": "pending"}
+            for d in req.domains
+        ]
+    }
 
 
-class SkipRequest(BaseModel):
-    user_id: str
+@router.post("/complete")
+def complete_discovery(req: CompleteRequest, db: Session = Depends(get_db)):
+    """Mark onboarding/discovery as complete for a user."""
+    user = db.query(UserProfile).filter_by(id=req.user_id).first()
+    if not user:
+        raise HTTPException(404, "User not found")
 
+    user.discovery_complete = True
 
-@router.get("/options")
-def get_options():
-    """Return the quick-context multiple-choice options."""
-    return QUICK_CONTEXT_OPTIONS
+    if req.onboarding_info:
+        user.onboarding_info = json.dumps(req.onboarding_info)
 
+    db.commit()
 
-@router.get("/state/{user_id}")
-def get_state(user_id: str):
-    """Get current onboarding state."""
-    return onboarding.get_state(user_id)
-
-
-@router.post("/context")
-def submit_context(req: QuickContextRequest):
-    """Submit quick-context selections."""
-    return onboarding.submit_quick_context(req.user_id, req.selected_ids)
-
-
-@router.post("/next-question")
-async def get_next_question(req: SkipRequest):
-    """Generate a single adaptive follow-up question."""
-    question = await onboarding.generate_next_question(req.user_id)
-    return {"question": question}
-
-
-@router.post("/answer")
-async def submit_answer(req: AnswerRequest):
-    """Process a user's answer and extract signals."""
-    result = await onboarding.process_answer(req.user_id, req.answer)
-    return result
-
-
-@router.post("/suggestions")
-async def get_suggestions(req: SkipRequest):
-    """Generate project suggestions from gathered signals."""
-    suggestions = await onboarding.generate_suggestions(req.user_id)
-    return {"suggestions": suggestions}
-
-
-@router.post("/accept")
-def accept_suggestions(req: AcceptSuggestionsRequest):
-    """Accept selected suggestions and complete onboarding."""
-    created = onboarding.accept_suggestions(req.user_id, req.indices)
-    return {"created_projects": created}
-
-
-@router.post("/skip")
-def skip(req: SkipRequest):
-    """Skip onboarding entirely."""
-    onboarding.skip_onboarding(req.user_id)
-    return {"status": "skipped"}
+    return {"status": "ok", "model_summary": user.model_summary or ""}

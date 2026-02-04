@@ -116,6 +116,7 @@ class RunManager:
 
             result_parts = []
             written_html_files = []
+            written_other_files = []
             has_error = False
             async for ev in executor.execute(
                 instruction=instruction,
@@ -143,7 +144,7 @@ class RunManager:
                     if text and (not result_parts or result_parts[-1] != text):
                         result_parts.append(text)
                 elif ev.type == "tool_use":
-                    # Capture HTML file writes for app artifacts
+                    # Capture file writes — HTML for app artifacts, others for synthesis
                     tools = ev.content.get("tools", [])
                     for t in tools:
                         tool_name = t.get("tool", "")
@@ -151,8 +152,11 @@ class RunManager:
                         if tool_name == "Write":
                             file_path = tool_input.get("file_path", "") or tool_input.get("path", "")
                             content = tool_input.get("content", "")
-                            if file_path.endswith(".html") and content:
-                                written_html_files.append({"path": file_path, "content": content})
+                            if file_path and content:
+                                if file_path.endswith(".html"):
+                                    written_html_files.append({"path": file_path, "content": content})
+                                else:
+                                    written_other_files.append({"path": file_path, "content": content[:5000]})
                 elif ev.type == "result":
                     # Final result - only add if not duplicate
                     text = ev.content.get("text", "")
@@ -203,7 +207,7 @@ class RunManager:
 
                 # Synthesize results before broadcasting done
                 try:
-                    synthesis = synthesize_result(run, project, user, session)
+                    synthesis = synthesize_result(run, project, user, session, written_files=written_other_files)
                     # Flush artifacts to DB before broadcasting so workspace refresh finds them
                     session.commit()
                     if on_event:

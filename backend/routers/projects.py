@@ -9,10 +9,11 @@ from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy.orm import Session
 
-from backend.database import Project, Artifact, AgentRun, ChatMessage, ContextAttachment, UserProfile, get_db
+from backend.database import Project, Artifact, AgentRun, ChatMessage, ContextAttachment, UserProfile, MetricEntry, get_db
 from backend.services.prompt_builder import build_system_prompt, build_proactive_instruction
 from backend.services.llm import chat_messages
 from backend.services.mediator import mediate_extract, mediate_generate, mediate_regenerate
+from backend.services.flow_engine import flow_engine
 from backend.services.context_service import detect_urls, extract_text_from_url, generate_summary
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,7 @@ class ProjectCreate(BaseModel):
     description: str = ""
     involvement_level: Optional[str] = None
     budget_limit_cents: Optional[int] = None
+    domain: Optional[str] = None
 
 
 class ProjectResponse(BaseModel):
@@ -59,6 +61,7 @@ def create_project(req: ProjectCreate, db: Session = Depends(get_db)):
         description=req.description,
         involvement_level=req.involvement_level,
         budget_limit_cents=req.budget_limit_cents,
+        domain=req.domain,
     )
     db.add(project)
     db.commit()
@@ -159,6 +162,8 @@ def get_messages(project_id: int, db: Session = Depends(get_db)):
             "role": m.role,
             "content": m.content,
             "actions": m.actions or [],
+            "blocks": m.blocks or [],
+            "phase": m.phase,
             "created_at": str(m.created_at),
         }
         for m in msgs
@@ -344,155 +349,206 @@ async def project_chat(project_id: int, req: ChatRequest, db: Session = Depends(
                 logger.warning(f"Failed to fetch URL {url}: {e}")
                 message_text += f"\n\n[System: Could not fetch URL {url} — ask the user to paste the content instead]"
 
-        # Step 1: Extract signals (mini model, ~1s) — also detects research need
+        # Branch: FlowEngine for non-home projects, mediator for home/legacy
+        use_flow_engine = project.domain != "home"
 
-        yield _sse_event("status", {"message": "Understanding your message…"})
+        if use_flow_engine:
+            # ── FlowEngine path ─────────────────────────────────────
+            yield _sse_event("status", {"message": "Thinking…"})
 
-        def _extract_in_thread():
-            thread_db = next(get_db())
-            try:
-                return mediate_extract(project_id, message_text, thread_db)
-            finally:
-                thread_db.close()
+            def _flow_in_thread():
+                thread_db = next(get_db())
+                try:
+                    return flow_engine.process_message(project_id, message_text or None, thread_db)
+                finally:
+                    thread_db.close()
 
-        extract_result = await loop.run_in_executor(None, _extract_in_thread)
+            result = await loop.run_in_executor(None, _flow_in_thread)
 
-        # Early return (greeting, cached)
-        if extract_result.get("_early_return"):
-            extract_result.pop("_early_return", None)
+            # Handle escalation from commit phase
+            run_id = None
+            if result.get("escalate") and (result.get("task_description") or project.description):
+                task_desc = result["task_description"] or f"Work on: {project.description or project.name}"
+                from backend.services.run_manager import run_manager
+                from backend.services.ws_manager import ws_manager
+
+                run = AgentRun(
+                    project_id=project_id,
+                    user_id=project.user_id,
+                    goal=task_desc,
+                )
+                db.add(run)
+                db.commit()
+                db.refresh(run)
+
+                await run_manager.start_run(run.run_id, on_event=ws_manager.broadcast)
+                run_id = run.run_id
+
             yield _sse_event("message", {
-                "message": extract_result.get("message", ""),
-                "actions": extract_result.get("actions", []),
-                "run_id": None,
+                "message": result.get("message", ""),
+                "actions": result.get("actions", []),
+                "blocks": result.get("blocks", []),
+                "phase": result.get("phase"),
+                "run_id": run_id,
+                "auto_continue": result.get("auto_continue", False),
             })
-            return
 
-        # Generate response (gpt-4o detects research needs)
-        yield _sse_event("status", {"message": "Composing response…"})
+        else:
+            # ── Legacy mediator path (home domain) ──────────────────
+            # Step 1: Extract signals (mini model, ~1s) — also detects research need
 
-        def _generate_in_thread():
-            thread_db = next(get_db())
-            try:
-                return mediate_generate(extract_result, thread_db)
-            finally:
-                thread_db.close()
+            yield _sse_event("status", {"message": "Understanding your message…"})
 
-        result = await loop.run_in_executor(None, _generate_in_thread)
+            def _extract_in_thread():
+                thread_db = next(get_db())
+                try:
+                    return mediate_extract(project_id, message_text, thread_db)
+                finally:
+                    thread_db.close()
 
-        # Check if generation detected a research need
-        research_topic = None
-        research_text = ""
-        gen_research = result.pop("research", None)
-        if gen_research and isinstance(gen_research, str) and gen_research.strip():
-            from backend.services.memory import already_researched
-            db_check = next(get_db())
-            try:
-                if not already_researched(project.user_id, gen_research.strip(), db_check):
-                    research_topic = gen_research.strip()
-                    yield _sse_event("researching", {"topic": research_topic})
-                    yield _sse_event("status", {"message": f"Researching {research_topic}…"})
-                    # Build conversation context for disambiguation
-                    conv_context = ""
-                    state = extract_result.get("_extract_state", {})
-                    if state.get("messages"):
-                        recent = state["messages"][-6:]
-                        conv_context = "\n".join(
-                            f"{m['role']}: {m['content'][:200]}" for m in recent
-                        )
-                    # Stream research activity events
-                    async for event_type, data in _run_research_streaming(
-                        research_topic, conversation_context=conv_context
-                    ):
-                        if event_type == "activity":
-                            yield _sse_event("research_activity", data)
-                        elif event_type == "result":
-                            research_text = data.get("text", "")
-            finally:
-                db_check.close()
+            extract_result = await loop.run_in_executor(None, _extract_in_thread)
 
-        if research_text:
-            # Save research as system message and artifact
-            research_db = next(get_db())
-            try:
-                research_db.add(ChatMessage(
-                    project_id=project_id,
-                    role="system",
-                    content=f"[Background research: {research_topic}]\n\n{research_text}",
-                ))
-                research_db.commit()
+            # Early return (greeting, cached)
+            if extract_result.get("_early_return"):
+                extract_result.pop("_early_return", None)
+                yield _sse_event("message", {
+                    "message": extract_result.get("message", ""),
+                    "actions": extract_result.get("actions", []),
+                    "blocks": extract_result.get("blocks", []),
+                    "phase": extract_result.get("phase"),
+                    "run_id": None,
+                })
+                return
 
-                # Save research as artifact for right panel
-                research_db.add(Artifact(
-                    project_id=project_id,
-                    artifact_type="research",
-                    title=research_topic,
-                    content={"markdown": research_text},
-                    sources=[],
-                ))
-                research_db.commit()
+            # Generate response (gpt-4o detects research needs)
+            yield _sse_event("status", {"message": "Composing response…"})
 
-                # Extract insights from research results
-                from backend.services.memory import extract_research_insights
-                extract_research_insights(
-                    project.user_id, research_topic, research_text,
-                    str(project_id), research_db,
-                    conversation_context=conv_context,
-                )
-            finally:
-                research_db.close()
+            def _generate_in_thread():
+                thread_db = next(get_db())
+                try:
+                    return mediate_generate(extract_result, thread_db)
+                finally:
+                    thread_db.close()
 
-            # Re-generate response with research context
-            yield _sse_event("status", {"message": "Incorporating research…"})
-            try:
-                regen = mediate_regenerate(project_id, research_topic, research_text, db)
-                result["message"] = regen["message"]
-                result["actions"] = regen.get("actions", result["actions"])
-                # Persist regenerated response so history matches what the user saw
-                last_assistant = (
-                    db.query(ChatMessage)
-                    .filter_by(project_id=project_id, role="assistant")
-                    .order_by(ChatMessage.created_at.desc())
-                    .first()
-                )
-                if last_assistant:
-                    last_assistant.content = result["message"]
-                    last_assistant.actions = result["actions"]
-                    db.commit()
-                else:
-                    db.add(ChatMessage(
+            result = await loop.run_in_executor(None, _generate_in_thread)
+
+            # Check if generation detected a research need
+            research_topic = None
+            research_text = ""
+            gen_research = result.pop("research", None)
+            if gen_research and isinstance(gen_research, str) and gen_research.strip():
+                from backend.services.memory import already_researched
+                db_check = next(get_db())
+                try:
+                    if not already_researched(project.user_id, gen_research.strip(), db_check):
+                        research_topic = gen_research.strip()
+                        yield _sse_event("researching", {"topic": research_topic})
+                        yield _sse_event("status", {"message": f"Researching {research_topic}…"})
+                        # Build conversation context for disambiguation
+                        conv_context = ""
+                        state = extract_result.get("_extract_state", {})
+                        if state.get("messages"):
+                            recent = state["messages"][-6:]
+                            conv_context = "\n".join(
+                                f"{m['role']}: {m['content'][:200]}" for m in recent
+                            )
+                        # Stream research activity events
+                        async for event_type, data in _run_research_streaming(
+                            research_topic, conversation_context=conv_context
+                        ):
+                            if event_type == "activity":
+                                yield _sse_event("research_activity", data)
+                            elif event_type == "result":
+                                research_text = data.get("text", "")
+                finally:
+                    db_check.close()
+
+            if research_text:
+                # Save research as system message and artifact
+                research_db = next(get_db())
+                try:
+                    research_db.add(ChatMessage(
                         project_id=project_id,
-                        role="assistant",
-                        content=result["message"],
-                        actions=result["actions"],
+                        role="system",
+                        content=f"[Background research: {research_topic}]\n\n{research_text}",
                     ))
-                    db.commit()
-            except Exception as e:
-                logger.warning(f"Regeneration after research failed: {e}")
+                    research_db.commit()
 
-        # Handle escalation
-        run_id = None
-        if result.get("escalate") and (result.get("task_description") or project.description):
-            task_desc = result["task_description"] or f"Work on: {project.description or project.name}"
-            from backend.services.run_manager import run_manager
-            from backend.services.ws_manager import ws_manager
+                    # Save research as artifact for right panel
+                    research_db.add(Artifact(
+                        project_id=project_id,
+                        artifact_type="research",
+                        title=research_topic,
+                        content={"markdown": research_text},
+                        sources=[],
+                    ))
+                    research_db.commit()
 
-            run = AgentRun(
-                project_id=project_id,
-                user_id=project.user_id,
-                goal=task_desc,
-            )
-            db.add(run)
-            db.commit()
-            db.refresh(run)
+                    # Extract insights from research results
+                    from backend.services.memory import extract_research_insights
+                    extract_research_insights(
+                        project.user_id, research_topic, research_text,
+                        str(project_id), research_db,
+                        conversation_context=conv_context,
+                    )
+                finally:
+                    research_db.close()
 
-            await run_manager.start_run(run.run_id, on_event=ws_manager.broadcast)
-            run_id = run.run_id
+                # Re-generate response with research context
+                yield _sse_event("status", {"message": "Incorporating research…"})
+                try:
+                    regen = mediate_regenerate(project_id, research_topic, research_text, db)
+                    result["message"] = regen["message"]
+                    result["actions"] = regen.get("actions", result["actions"])
+                    # Persist regenerated response so history matches what the user saw
+                    last_assistant = (
+                        db.query(ChatMessage)
+                        .filter_by(project_id=project_id, role="assistant")
+                        .order_by(ChatMessage.created_at.desc())
+                        .first()
+                    )
+                    if last_assistant:
+                        last_assistant.content = result["message"]
+                        last_assistant.actions = result["actions"]
+                        db.commit()
+                    else:
+                        db.add(ChatMessage(
+                            project_id=project_id,
+                            role="assistant",
+                            content=result["message"],
+                            actions=result["actions"],
+                        ))
+                        db.commit()
+                except Exception as e:
+                    logger.warning(f"Regeneration after research failed: {e}")
 
-        yield _sse_event("message", {
-            "message": result["message"],
-            "actions": result["actions"],
-            "run_id": run_id,
-        })
+            # Handle escalation
+            run_id = None
+            if result.get("escalate") and (result.get("task_description") or project.description):
+                task_desc = result["task_description"] or f"Work on: {project.description or project.name}"
+                from backend.services.run_manager import run_manager
+                from backend.services.ws_manager import ws_manager
+
+                run = AgentRun(
+                    project_id=project_id,
+                    user_id=project.user_id,
+                    goal=task_desc,
+                )
+                db.add(run)
+                db.commit()
+                db.refresh(run)
+
+                await run_manager.start_run(run.run_id, on_event=ws_manager.broadcast)
+                run_id = run.run_id
+
+            yield _sse_event("message", {
+                "message": result["message"],
+                "actions": result["actions"],
+                "blocks": result.get("blocks", []),
+                "phase": result.get("phase"),
+                "run_id": run_id,
+                "nav_context": result.get("nav_context"),
+            })
 
     return StreamingResponse(_chat_stream(), media_type="text/event-stream")
 
@@ -532,6 +588,66 @@ def update_artifact(project_id: int, artifact_id: int, req: ArtifactUpdate, db: 
     return {"status": "ok"}
 
 
+class RecordMetricRequest(BaseModel):
+    value: str
+    source: str = "self_reported"
+    note: Optional[str] = None
+
+
+@router.post("/{project_id}/metrics")
+def record_metric(project_id: int, req: RecordMetricRequest, db: Session = Depends(get_db)):
+    """Record a metric data point for a project."""
+    project = db.query(Project).filter_by(id=project_id).first()
+    if not project:
+        raise HTTPException(404, "Project not found")
+    if not project.success_metric:
+        raise HTTPException(400, "Project has no metric configured")
+
+    entry = MetricEntry(
+        project_id=project_id,
+        value=req.value,
+        source=req.source,
+        note=req.note,
+    )
+    db.add(entry)
+    db.commit()
+
+    return {"id": entry.id, "value": entry.value, "recorded_at": str(entry.recorded_at)}
+
+
+@router.get("/{project_id}/metrics")
+def get_metrics(project_id: int, db: Session = Depends(get_db)):
+    """Get all metric entries for a project, plus the metric config."""
+    project = db.query(Project).filter_by(id=project_id).first()
+    if not project:
+        raise HTTPException(404, "Project not found")
+
+    entries = (
+        db.query(MetricEntry)
+        .filter_by(project_id=project_id)
+        .order_by(MetricEntry.recorded_at.asc())
+        .all()
+    )
+
+    return {
+        "metric": {
+            "name": project.success_metric,
+            "target": project.metric_target,
+            "config": project.metric_config or {},
+        } if project.success_metric else None,
+        "entries": [
+            {
+                "id": e.id,
+                "value": e.value,
+                "source": e.source,
+                "note": e.note,
+                "recorded_at": str(e.recorded_at),
+            }
+            for e in entries
+        ],
+    }
+
+
 def _to_response(db: Session, project: Project) -> dict:
     runs = db.query(AgentRun).filter_by(project_id=project.id).all()
     latest = sorted(runs, key=lambda r: r.created_at, reverse=True)
@@ -545,6 +661,9 @@ def _to_response(db: Session, project: Project) -> dict:
         "budget_spent_cents": project.budget_spent_cents,
         "suggested_by_system": project.suggested_by_system,
         "domain": project.domain,
+        "success_metric": project.success_metric,
+        "metric_target": project.metric_target,
+        "metric_config": project.metric_config or {},
         "created_at": str(project.created_at),
         "run_count": len(runs),
         "latest_run_status": latest[0].status if latest else None,

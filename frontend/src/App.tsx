@@ -1,15 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "./services/api";
-import type { User, Project, DiscoveryDomainState, DiscoveryProposal } from "./services/api";
+import type { User, Project } from "./services/api";
 import { WelcomeScreen } from "./components/WelcomeScreen";
 import { LoginScreen } from "./components/LoginScreen";
 import { DiscoveryView } from "./components/DiscoveryView";
 import { Sidebar } from "./components/Sidebar";
 import { HomeView } from "./components/HomeView";
 import { ChatPanel } from "./components/ChatPanel";
-import { DomainChat } from "./components/DomainChat";
 import { ProjectWorkspace } from "./components/ProjectWorkspace";
-import { ProposedProjectsPanel } from "./components/ProposedProjectsPanel";
 
 function App() {
   const [showWelcome, setShowWelcome] = useState(() => {
@@ -18,18 +16,12 @@ function App() {
   });
   const [user, setUser] = useState<User | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [domains, setDomains] = useState<DiscoveryDomainState[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<number | null>(null);
-  const [activeDomainId, setActiveDomainId] = useState<string | null>(null);
   const [workspaceRefresh, setWorkspaceRefresh] = useState(0);
   const [chatPanelWidth, setChatPanelWidth] = useState<string>("45%");
   const splitRef = useRef<HTMLDivElement>(null);
   const draggingSplit = useRef(false);
   const discoveryDone = user?.discovery_complete ?? null;
-  const [domainProposals, setDomainProposals] = useState<DiscoveryProposal[]>([]);
-  const [acceptedIndices, setAcceptedIndices] = useState<Set<number>>(new Set());
-  const [skippedIndices, setSkippedIndices] = useState<Set<number>>(new Set());
-  const [proposalLoading, setProposalLoading] = useState(false);
 
   // Restore user session from localStorage on mount
   useEffect(() => {
@@ -67,16 +59,6 @@ function App() {
     }
   }, [user]);
 
-  const loadDomains = useCallback(async () => {
-    if (!user) return;
-    try {
-      const state = await api.getDiscoveryState(user.id);
-      setDomains(state.domains);
-    } catch {
-      // No domains yet
-    }
-  }, [user]);
-
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
@@ -85,9 +67,6 @@ function App() {
     }).catch((err) => {
       console.error("Failed to load projects:", err);
     });
-    api.getDiscoveryState(user.id).then((state) => {
-      if (!cancelled) setDomains(state.domains);
-    }).catch(() => {});
     return () => { cancelled = true; };
   }, [user]);
 
@@ -108,12 +87,6 @@ function App() {
     const list = await api.listProjects(updated.id);
     setProjects(list);
 
-    // Load domains (ignore errors - domains may not exist yet)
-    try {
-      const state = await api.getDiscoveryState(updated.id);
-      setDomains(state.domains);
-    } catch { /* expected for new users */ }
-
     // Auto-select home project
     const home = list.find((p) => p.domain === "home");
     if (home) {
@@ -126,10 +99,9 @@ function App() {
     try {
       const project = await api.createProject({
         user_id: user.id,
-        name: "New task",
+        name: "New project",
       });
       await loadProjects();
-      setActiveDomainId(null);
       setActiveProjectId(project.id);
     } catch (err) {
       console.error("Failed to create project:", err);
@@ -137,13 +109,7 @@ function App() {
   };
 
   const handleSelectProject = (id: number) => {
-    setActiveDomainId(null);
     setActiveProjectId(id);
-  };
-
-  const handleSelectDomain = (domain: string) => {
-    setActiveProjectId(null);
-    setActiveDomainId(domain);
   };
 
   const handleRunComplete = () => {
@@ -151,59 +117,33 @@ function App() {
     loadProjects();
   };
 
+  const handleNavigateDomain = async (domain: string, context?: string) => {
+    if (!user) return;
+    try {
+      const project = await api.createProject({
+        user_id: user.id,
+        name: "New project",
+        domain,
+        description: context,
+      });
+      await loadProjects();
+      setActiveProjectId(project.id);
+    } catch (err) {
+      console.error("Failed to create project for domain:", err);
+    }
+  };
+
   const handleGoHome = () => {
-    setActiveDomainId(null);
     setActiveProjectId(null);
   };
 
-  // Reset proposals when domain changes; restore from domain state if proposals exist
-  useEffect(() => {
-    const domain = domains.find((d) => d.domain === activeDomainId);
-    if (domain?.proposed_projects?.length) {
-      setDomainProposals(domain.proposed_projects);
-    } else {
-      setDomainProposals([]);
-    }
-    setAcceptedIndices(new Set());
-    setSkippedIndices(new Set());
-  }, [activeDomainId, domains]);
-
-  const handleAcceptProject = useCallback(async (index: number) => {
-    if (!user || !activeDomainId) return;
-    setProposalLoading(true);
-    try {
-      await api.acceptDiscoveryProjects(user.id, [index], activeDomainId);
-      setAcceptedIndices((prev) => new Set(prev).add(index));
-      await loadProjects();
-      // Don't navigate away — let the user continue accepting/skipping remaining proposals
-    } catch (err) {
-      console.error("Failed to accept project:", err);
-    }
-    setProposalLoading(false);
-  }, [user, activeDomainId, loadProjects]);
-
-  const handleAcceptAll = useCallback(async () => {
-    if (!user || !activeDomainId) return;
-    setProposalLoading(true);
-    try {
-      const indices = domainProposals.map((_, i) => i);
-      const result = await api.acceptDiscoveryProjects(user.id, indices, activeDomainId);
-      setAcceptedIndices(new Set(indices));
-      await loadProjects();
-      loadDomains();
-      // Navigate to the first created project after accepting all
-      if (result.created_projects?.length > 0) {
-        handleSelectProject(result.created_projects[0].id);
-      }
-    } catch (err) {
-      console.error("Failed to accept all projects:", err);
-    }
-    setProposalLoading(false);
-  }, [user, activeDomainId, domainProposals, loadProjects, loadDomains]);
-
-  const handleSkipProject = useCallback((index: number) => {
-    setSkippedIndices((prev) => new Set(prev).add(index));
-  }, []);
+  const handleLogout = () => {
+    localStorage.removeItem("envisage_user");
+    setUser(null);
+    setProjects([]);
+    setActiveProjectId(null);
+    setShowWelcome(false);
+  };
 
   const onSplitMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -236,60 +176,34 @@ function App() {
   }
 
   const activeProject = projects.find((p) => p.id === activeProjectId);
-  const activeDomain = domains.find((d) => d.domain === activeDomainId);
   const isHome = activeProject?.domain === "home";
 
   // Which view is currently visible
-  const showDomain = !!activeDomain;
-  const showProject = !!activeProject && !isHome && !showDomain;
-  const showHome = !showDomain && !showProject;
+  const showProject = !!activeProject && !isHome;
+  const showHome = !showProject;
 
   return (
     <div className="app-shell">
       <Sidebar
         projects={projects}
-        domains={domains}
         activeProjectId={activeProjectId}
-        activeDomainId={activeDomainId}
         onSelectProject={handleSelectProject}
-        onSelectDomain={handleSelectDomain}
         onNewProject={handleNewProject}
         onGoHome={handleGoHome}
+        userName={user.name}
+        onLogout={handleLogout}
       />
       <main className="main-content">
-        {/* Domain view — mount on first use, then hide/show with CSS */}
-        {activeDomain && (
-          <div className="project-split" ref={showDomain ? splitRef : undefined} style={{ display: showDomain ? undefined : "none" }}>
-            <div className="project-split-chat" style={{ width: chatPanelWidth, minWidth: chatPanelWidth }}>
-              <DomainChat
-                userId={user.id}
-                domain={activeDomain}
-                onProposalsReceived={setDomainProposals}
-              />
-            </div>
-            <div className="split-resize-handle" onMouseDown={onSplitMouseDown} />
-            <ProposedProjectsPanel
-              proposals={domainProposals}
-              acceptedIndices={acceptedIndices}
-              skippedIndices={skippedIndices}
-              onAccept={handleAcceptProject}
-              onSkip={handleSkipProject}
-              onAcceptAll={handleAcceptAll}
-              loading={proposalLoading}
-            />
-          </div>
-        )}
-
         {/* Project view — mount when a project is selected, hide/show with CSS */}
         {activeProject && !isHome && (
           <div className="project-split" ref={showProject ? splitRef : undefined} style={{ display: showProject ? undefined : "none" }}>
             <div className="project-split-chat" style={{ width: chatPanelWidth, minWidth: chatPanelWidth }}>
               <ChatPanel
+                key={activeProject.id}
                 project={activeProject}
                 userId={user.id}
                 onProjectRenamed={loadProjects}
                 onRunComplete={handleRunComplete}
-                onNavigateDomain={handleSelectDomain}
                 onNavigateProject={handleSelectProject}
                 onMessageReceived={() => { setWorkspaceRefresh((k) => k + 1); loadProjects(); }}
               />
@@ -302,16 +216,15 @@ function App() {
           </div>
         )}
 
-        {/* Home view — always mounted once user is logged in, hidden when on project/domain */}
+        {/* Home view — always mounted once user is logged in, hidden when on project */}
         <div style={{ display: showHome ? undefined : "none", height: "100%", overflow: "hidden" }}>
           <HomeView
             projects={projects}
-            domains={domains}
             homeProject={projects.find((p) => p.domain === "home") || null}
             userId={user.id}
             onSelectProject={handleSelectProject}
-            onSelectDomain={handleSelectDomain}
             onNewProject={handleNewProject}
+            onNavigateDomain={handleNavigateDomain}
             onProjectRenamed={loadProjects}
             onRunComplete={handleRunComplete}
             userName={user.name}

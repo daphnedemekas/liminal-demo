@@ -233,47 +233,54 @@ You are synthesizing the results of an agent run for {user.name}.
 </raw_agent_output>
 
 ## Your task
-The summary goes in the CHAT (left panel). Artifacts go on the RIGHT panel. These are separate.
+Transform the raw agent output into a clean summary (chat, left panel) and structured artifacts (workspace, right panel).
 
 Return ONLY a JSON object with this shape:
 {{"summary": "your personalized summary", "artifacts": [{{"type": "one of the types below", "title": "Artifact title", "content": "<structured object or markdown string depending on type>", "sources": ["url1", "url2"]}}], "suggested_next_steps": ["step 1", "step 2", "step 3"], "actions": [{{"label": "Short button text", "description": "What this does", "action_text": "Message sent if clicked"}}]}}
 
-**Summary (chat message):**
+## Summary (chat message)
 {depth_instruction.get(pref, depth_instruction['brief_summary'])}
-- Keep the summary SHORT (3-5 sentences max). Do NOT include the full research — that goes in artifacts.
-- End with a clear, opinionated recommendation:
-  - If a good existing tool was found: "I'd recommend [Tool] because [reason]. Want me to help set it up?"
-  - If nothing fits well: "None of these quite nail it — [explain gap]. I could build something custom if you want."
-  - If a tool gets most of the way: "I'd start with [Tool] for [what it covers]. The gap is [X] — I could build a small addition for that."
-- If the agent didn't find enough information to make a confident recommendation, say so honestly: \
-"I wasn't able to find enough information to recommend a specific tool — here's what I did find."
-- Be direct and opinionated. The user wants your honest take, not a list of options to evaluate.
+- Keep it SHORT (3-5 sentences). Details go in artifacts, not here.
+- End with a clear recommendation or next step.
+- Be direct and opinionated — the user wants your honest take.
+
+## Artifacts (workspace panel)
 
 <artifact_schemas>
 {ARTIFACT_TYPE_SCHEMAS}
 </artifact_schemas>
 
-**Artifacts (right panel):**
-Extract structured artifacts from the output. Create MULTIPLE artifacts — break the content into logical pieces rather than one big blob. The full research, comparisons, and details go HERE, not in the summary.
+### Choosing the right artifact type
+- **report** — Use for the main deliverable: guides, analysis, file contents the agent created, setup instructions. This is your most versatile type. If the agent created files (CSV, markdown, config files), include their contents as report artifacts with clear formatting.
+- **checklist** — Use when there are actionable items to complete (setup steps, shopping lists, task lists).
+- **schedule** — Use for time-based plans (daily routines, weekly schedules, project timelines).
+- **comparison_table** — Use when comparing options side-by-side (tools, services, approaches).
+- **resource_list** — ONLY use when you have real, verified URLs. Every resource MUST have a valid URL starting with https://. If you don't have real URLs, use a report artifact instead.
+- **video_collection** — ONLY use when you have real YouTube or video URLs from the agent's research.
 
-Suggest 2-3 concrete next steps the user could take based on the results.
+### Critical rules
+- NEVER create a resource_list with empty or placeholder URLs. If the agent didn't find real URLs, use a report artifact.
+- If the agent created files (CSV, spreadsheets, templates, guides), present them as report artifacts with the file contents formatted in markdown.
+- Create MULTIPLE artifacts — break content into logical pieces rather than one big blob.
+- Source URLs in the "sources" array must be real URLs found in the agent output.
+
+<example>
+<goal>Set up a freelance finance tracking system</goal>
+<raw_agent_output>Created income-tracker.csv with columns for date, client, amount, category... Created expense-categories.csv... Created notion-setup-guide.md with step-by-step instructions...</raw_agent_output>
+<ideal_response>{{"summary": "Your freelance finance system is ready — I've created tracking spreadsheets for income and expenses, plus a step-by-step Notion setup guide. Everything is in your workspace. Want me to help you set up the Notion dashboard next?", "artifacts": [{{"type": "report", "title": "Income Tracker Template", "content": "## Income Tracker\\n\\nReady-to-use spreadsheet for tracking freelance income.\\n\\n| Date | Client | Project | Amount | Category | Invoice # | Status |\\n|---|---|---|---|---|---|---|\\n| 2024-01-15 | Acme Corp | Website Redesign | $3,500 | Design | INV-001 | Paid |\\n| 2024-01-22 | StartupCo | Brand Identity | $2,000 | Branding | INV-002 | Pending |\\n\\n### How to use\\n- Add each payment as a new row...", "sources": []}}, {{"type": "report", "title": "Expense Categories Guide", "content": "## Expense Categories for Freelancers\\n\\n### Tax-Deductible Categories\\n- **Software & Tools**: Figma, Adobe, hosting...\\n- **Home Office**: Percentage of rent, internet...", "sources": []}}, {{"type": "checklist", "title": "Setup Checklist", "content": {{"categories": [{{"name": "Immediate Setup", "items": [{{"text": "Import income tracker to Google Sheets", "checked": false}}, {{"text": "Import expense categories", "checked": false}}, {{"text": "Set up Notion workspace", "checked": false}}]}}, {{"name": "This Week", "items": [{{"text": "Enter last 30 days of income", "checked": false}}, {{"text": "Categorize recent expenses", "checked": false}}]}}]}}, "sources": []}}], "suggested_next_steps": ["Set up the Notion dashboard with these templates", "Connect to bank for automatic expense tracking", "Create monthly financial review routine"], "actions": [{{"label": "Set up Notion dashboard", "task_type": "tool_setup", "description": "I'll configure your Notion workspace with these templates", "action_text": "Help me set up the Notion dashboard with these templates"}}, {{"label": "Build custom tracker app", "task_type": "app_build", "description": "I'll build a dedicated finance tracking app", "action_text": "Build me a custom finance tracking app instead"}}]}}</ideal_response>
+</example>
 
 <example>
 <goal>Find the best project management tool for a 5-person startup using GitHub</goal>
 <raw_agent_output>Researched Linear, Asana, Shortcut, and GitHub Projects. Linear has best GitHub integration...</raw_agent_output>
-<ideal_response>{{"summary": "Linear is your best bet — it has native GitHub integration, is built for engineering teams, and at $8/user/month fits a 5-person team easily. Asana and Shortcut are decent but require more setup for GitHub sync. Want me to help you get Linear set up?", "artifacts": [{{"type": "comparison_table", "title": "PM Tool Comparison", "content": "| Tool | GitHub Integration | Price/user | Best For |\\n|---|---|---|---|\\n| Linear | Native, 2-way sync | $8/mo | Engineering teams |\\n| Shortcut | Good, via integration | $8.50/mo | Small teams |\\n| Asana | Basic, needs Zapier | $10.99/mo | Cross-functional |\\n| GitHub Projects | Built-in | Free | Simple tracking |", "sources": ["https://linear.app/pricing", "https://shortcut.com/pricing"]}}, {{"type": "report", "title": "Detailed Analysis", "content": "## Why Linear Wins\\n\\nFor a 5-person startup already on GitHub...", "sources": []}}], "suggested_next_steps": ["Sign up for Linear free trial", "Import existing GitHub issues", "Set up team workflows"], "actions": [{{"label": "Set me up with Linear", "task_type": "tool_setup", "description": "I'll help configure Linear for your team", "action_text": "Help me get set up with Linear"}}, {{"label": "Build custom tracker", "task_type": "app_build", "description": "I'll build a custom project tracker", "action_text": "Build me a custom project tracking app"}}, {{"label": "Tell me more first", "task_type": "research", "description": "I have questions before deciding", "action_text": "I have some questions before we proceed"}}]}}</ideal_response>
+<ideal_response>{{"summary": "Linear is your best bet — it has native GitHub integration, is built for engineering teams, and at $8/user/month fits a 5-person team easily. Want me to help you get it set up?", "artifacts": [{{"type": "comparison_table", "title": "PM Tool Comparison", "content": "| Tool | GitHub Integration | Price/user | Best For |\\n|---|---|---|---|\\n| Linear | Native, 2-way sync | $8/mo | Engineering teams |\\n| Shortcut | Good, via integration | $8.50/mo | Small teams |\\n| Asana | Basic, needs Zapier | $10.99/mo | Cross-functional |\\n| GitHub Projects | Built-in | Free | Simple tracking |", "sources": ["https://linear.app/pricing", "https://shortcut.com/pricing"]}}, {{"type": "report", "title": "Detailed Analysis", "content": "## Why Linear Wins\\n\\nFor a 5-person startup already on GitHub...", "sources": []}}], "suggested_next_steps": ["Sign up for Linear free trial", "Import existing GitHub issues", "Set up team workflows"], "actions": [{{"label": "Set me up with Linear", "task_type": "tool_setup", "description": "I'll help configure Linear for your team", "action_text": "Help me get set up with Linear"}}, {{"label": "Tell me more first", "task_type": "research", "description": "I have questions before deciding", "action_text": "I have some questions before we proceed"}}]}}</ideal_response>
 </example>
 
-Create as many artifacts as the content warrants — e.g. a pottery workshop might produce a schedule artifact, a checklist of supplies, a video_collection of tutorials, and a resource_list of websites. Always include at least 2 suggested_next_steps and corresponding actions.
-
-**Action buttons must match your recommendation and include task_type.** Valid task_type values: research, tool_setup, app_build, content.
-Examples:
-- If recommending a tool: {{"label": "Set me up with [Tool]", "task_type": "tool_setup", "description": "I'll help you get started with [Tool]", "action_text": "Help me get set up with [Tool]"}}
-- If recommending custom build: {{"label": "Build it for me", "task_type": "app_build", "description": "I'll create a custom app", "action_text": "Go ahead and build a custom solution for this"}}
-- If hybrid: {{"label": "Start with [Tool]", "task_type": "tool_setup", ...}} AND {{"label": "Build the missing piece", "task_type": "app_build", ...}}
-- Always include an alternative: {{"label": "Tell me more first", "task_type": "research", "description": "I have questions before deciding", "action_text": "I have some questions before we proceed"}}
-
-Always include a "Refresh workspace" action as the LAST button: {{"label": "Refresh workspace", "task_type": "research", "description": "Re-run agents and update all artifacts with fresh data", "action_text": "Please refresh and update all of my workspace artifacts with the latest information."}}"""
+## Action buttons
+Include 2-3 action buttons that match your recommendation. Each needs a `task_type` (research, tool_setup, app_build, or content).
+- Lead with the most helpful next action: "Set me up with X", "Build this for me", "Create my plan"
+- Include an alternative: "Tell me more first" or "I'd rather do it myself"
+- Always end with: {{"label": "Refresh workspace", "task_type": "research", "description": "Re-run and update artifacts with fresh data", "action_text": "Please refresh and update all of my workspace artifacts with the latest information."}}"""
 
 
 def prompt_hash(prompt: str) -> str:
@@ -289,32 +296,51 @@ def classify_task(goal: str, has_prior_runs: bool) -> str:
     """
     goal_lower = goal.lower()
 
-    # Explicit build requests
+    # Explicit build / app / system requests — user wants an interactive tool
     if any(w in goal_lower for w in [
-        "build", "create an app", "make me a", "custom solution",
-        "build a custom", "create a custom",
+        "build me", "build a", "create an app", "make me a",
+        "custom app", "custom solution", "custom tool",
+        "build a custom", "create a custom", "interactive",
+        "tracker app", "tracking app", "dashboard app",
+        "create a system", "tracking system", "finance system",
+        "budget system", "organize my", "system for",
+        "workflow for", "process for", "management system",
+        "construct", "tracker", "manager", "dashboard",
     ]):
         return "app_build"
 
-    # Tool setup / integration requests
+    # External tool/service setup — user wants us to set up an actual third-party tool
     if any(w in goal_lower for w in [
-        "set up", "set me up", "configure", "connect", "integrate",
-        "get started with", "help me get",
+        "sign me up", "create my account", "set me up with",
+        "connect my", "integrate my", "configure my",
+        "install", "set up my subscription", "register me",
+        "link my", "sync my", "authorize",
     ]):
         return "tool_setup"
 
+    # Content creation — plans, guides, schedules, routines
+    if any(w in goal_lower for w in [
+        "plan", "schedule", "routine", "guide", "write",
+        "create a plan", "meal plan", "workout plan",
+        "itinerary", "checklist", "outline", "draft",
+        "prepare", "design a", "put together",
+    ]):
+        return "content"
+
     # Explicit research requests
     if any(w in goal_lower for w in [
-        "research", "find", "compare", "look into", "what options",
-        "what are the best", "tell me more",
+        "research", "find the best", "compare", "look into",
+        "what options", "what are the best", "tell me more",
+        "recommend", "which", "review",
     ]):
         return "research"
 
-    # First run of a project is always research
-    if not has_prior_runs:
-        return "research"
+    # Follow-up runs default to app_build (turn research into something usable)
+    if has_prior_runs:
+        return "app_build"
 
-    return "content"
+    # First run defaults to research
+    return "research"
 
 
 def _get_involvement(user: UserProfile, project: Project) -> str:

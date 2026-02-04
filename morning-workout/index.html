@@ -1,0 +1,1617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>30-Day Morning Workout</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-primary: #0f1219;
+  --bg-secondary: #1a1f2e;
+  --bg-tertiary: #242938;
+  --border: #2d3348;
+  --border-hover: #3d4560;
+  --text-primary: #e8eaed;
+  --text-secondary: #9aa0b0;
+  --text-tertiary: #6b7280;
+  --accent: #34a853;
+  --accent-hover: #3dba5e;
+  --accent-subtle: rgba(52, 168, 83, 0.12);
+  --success: #34c759;
+  --warning: #f0a030;
+  --danger: #e54d4d;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+button {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+button:hover { border-color: var(--border-hover); background: #2a3040; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+button.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+button.danger:hover { opacity: 0.9; }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+input, select, textarea {
+  font-family: inherit;
+  font-size: 14px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+
+/* Layout */
+.app { display: flex; min-height: 100vh; }
+
+.sidebar {
+  width: 220px;
+  min-width: 220px;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 20px 0;
+  overflow-y: auto;
+}
+
+.sidebar-header {
+  padding: 0 16px 16px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+
+.sidebar-header h2 {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.sidebar-header .subtitle {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.15s ease;
+  border-left: 3px solid transparent;
+}
+.nav-item:hover { color: var(--text-primary); background: var(--bg-tertiary); }
+.nav-item.active {
+  color: var(--accent);
+  background: var(--accent-subtle);
+  border-left-color: var(--accent);
+}
+.nav-item .icon { width: 18px; text-align: center; font-size: 14px; opacity: 0.8; }
+
+.nav-section {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  padding: 16px 16px 6px;
+}
+
+.main-content {
+  flex: 1;
+  padding: 28px 32px;
+  overflow-y: auto;
+  max-height: 100vh;
+}
+
+.page { display: none; }
+.page.active { display: block; }
+
+/* Dashboard */
+.greeting { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 4px; }
+.greeting-sub { color: var(--text-secondary); font-size: 13px; margin-bottom: 24px; }
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+}
+.stat-label { font-size: 11px; font-weight: 500; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+.stat-value { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; }
+.stat-detail { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+
+.today-card {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.today-card h3 { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+.today-card .meta { font-size: 12px; color: var(--text-secondary); margin-bottom: 14px; }
+
+.today-exercises {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.today-ex {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  font-size: 12px;
+}
+.today-ex .ex-name { font-weight: 500; color: var(--text-primary); }
+.today-ex .ex-detail { color: var(--text-tertiary); font-size: 11px; margin-top: 2px; }
+
+.btn-start-workout {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  padding: 10px 24px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.btn-start-workout:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+
+/* Week progress bar */
+.week-progress {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 20px;
+}
+.week-dot {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.week-dot.completed { background: var(--accent-subtle); border-color: var(--accent); color: var(--accent); }
+.week-dot.today { border-color: var(--accent); color: var(--text-primary); }
+.week-dot.rest { opacity: 0.5; }
+
+/* Calendar */
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin-bottom: 20px;
+}
+.cal-header {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-tertiary);
+  text-align: center;
+  padding: 8px 0;
+}
+.cal-day {
+  aspect-ratio: 1;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  position: relative;
+}
+.cal-day:hover { border-color: var(--border-hover); }
+.cal-day.completed { background: var(--accent-subtle); border-color: var(--accent); color: var(--accent); }
+.cal-day.today { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.cal-day.rest { opacity: 0.4; }
+.cal-day .day-label { font-size: 9px; color: var(--text-tertiary); margin-top: 2px; }
+.cal-day.completed .day-label { color: var(--accent); }
+
+/* Plan view */
+.week-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0;
+}
+.week-tab {
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: all 0.15s ease;
+  background: none;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  border-radius: 0;
+}
+.week-tab:hover { color: var(--text-primary); }
+.week-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+.day-card {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.day-card:hover { border-color: var(--border-hover); }
+.day-card.completed { border-left: 3px solid var(--accent); }
+.day-card .day-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.day-card .day-title { font-size: 14px; font-weight: 600; }
+.day-card .day-focus { font-size: 12px; color: var(--text-secondary); }
+.day-card .day-status {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+}
+.day-card .day-status.done { background: var(--accent-subtle); color: var(--accent); }
+.day-card .day-status.rest-day { background: rgba(240, 160, 48, 0.12); color: var(--warning); }
+.day-card .day-status.upcoming { background: var(--bg-secondary); color: var(--text-tertiary); }
+.day-card .exercise-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+.day-card .ex-tag {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+}
+
+/* Day detail / workout view */
+.workout-view {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: var(--bg-primary);
+  z-index: 100;
+  display: none;
+  flex-direction: column;
+  overflow-y: auto;
+}
+.workout-view.active { display: flex; }
+
+.workout-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.workout-topbar .back-btn { font-size: 13px; }
+.workout-topbar h3 { font-size: 15px; font-weight: 600; }
+
+.workout-body { padding: 24px; max-width: 680px; margin: 0 auto; width: 100%; }
+
+.workout-phase {
+  margin-bottom: 24px;
+}
+.phase-header {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-tertiary);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.phase-header .phase-line { flex: 1; height: 1px; background: var(--border); }
+
+.exercise-item {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  margin-bottom: 8px;
+  transition: all 0.15s ease;
+}
+.exercise-item.active-exercise {
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+}
+.exercise-item.done-exercise {
+  opacity: 0.5;
+  border-color: var(--accent);
+}
+.exercise-item .ex-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.exercise-item .ex-title { font-size: 14px; font-weight: 600; }
+.exercise-item .ex-prescription {
+  font-size: 12px;
+  color: var(--accent);
+  font-weight: 500;
+}
+.exercise-item .ex-form {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 6px;
+  line-height: 1.5;
+}
+.exercise-item .ex-muscle {
+  display: inline-block;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-tertiary);
+  margin-top: 6px;
+}
+
+/* Timer overlay */
+.timer-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(15, 18, 25, 0.96);
+  z-index: 200;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.timer-overlay.active { display: flex; }
+
+.timer-exercise-name {
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 4px;
+  text-align: center;
+}
+.timer-prescription {
+  font-size: 14px;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+.timer-set-info {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 24px;
+}
+.timer-circle {
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  border: 4px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 24px;
+  position: relative;
+}
+.timer-circle svg {
+  position: absolute;
+  top: -4px; left: -4px;
+  width: 208px;
+  height: 208px;
+  transform: rotate(-90deg);
+}
+.timer-circle svg circle {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 4;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.5s ease;
+}
+.timer-value {
+  font-size: 48px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  z-index: 1;
+}
+.timer-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 24px;
+}
+.timer-form-tip {
+  max-width: 400px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 28px;
+  line-height: 1.5;
+  padding: 0 20px;
+}
+.timer-controls {
+  display: flex;
+  gap: 10px;
+}
+.timer-controls button { padding: 10px 24px; font-size: 14px; }
+
+/* Achievements */
+.achievements-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.achievement-card {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  text-align: center;
+  transition: all 0.15s ease;
+}
+.achievement-card.unlocked { border-color: var(--accent); }
+.achievement-card.locked { opacity: 0.35; }
+.achievement-icon { font-size: 28px; margin-bottom: 8px; }
+.achievement-name { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.achievement-desc { font-size: 11px; color: var(--text-secondary); }
+.achievement-date { font-size: 10px; color: var(--text-tertiary); margin-top: 6px; }
+
+/* History */
+.history-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.history-table th {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  text-align: left;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.history-table td {
+  padding: 10px 12px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border);
+}
+.history-table tr:nth-child(even) td { background: var(--bg-secondary); }
+
+/* Section header */
+.section-header {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-bottom: 16px;
+}
+.section-sub { font-size: 12px; color: var(--text-secondary); margin-bottom: 16px; }
+
+/* Streak banner */
+.streak-banner {
+  background: var(--accent-subtle);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-lg);
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+.streak-fire { font-size: 28px; }
+.streak-info .streak-count { font-size: 18px; font-weight: 700; color: var(--accent); }
+.streak-info .streak-label { font-size: 12px; color: var(--text-secondary); }
+
+/* Settings */
+.setting-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+.setting-label { font-size: 13px; font-weight: 500; }
+.setting-desc { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
+
+/* Progress bar */
+.progress-bar-outer {
+  height: 6px;
+  background: var(--bg-secondary);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.progress-bar-inner {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+  .sidebar { display: none; }
+  .mobile-nav {
+    display: flex !important;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border);
+    z-index: 50;
+    padding: 6px 0;
+  }
+  .mobile-nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 6px 0;
+    cursor: pointer;
+    color: var(--text-tertiary);
+    font-size: 10px;
+    font-weight: 500;
+    transition: all 0.15s ease;
+  }
+  .mobile-nav-item.active { color: var(--accent); }
+  .mobile-nav-item .m-icon { font-size: 18px; }
+  .main-content { padding: 20px 16px 80px; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .today-exercises { grid-template-columns: 1fr; }
+  .achievements-grid { grid-template-columns: repeat(2, 1fr); }
+  .calendar-grid { gap: 2px; }
+  .cal-day { font-size: 11px; }
+}
+.mobile-nav { display: none; }
+
+/* Completion screen */
+.completion-screen {
+  text-align: center;
+  padding: 40px 20px;
+}
+.completion-icon { font-size: 48px; margin-bottom: 16px; color: var(--accent); }
+.completion-title { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
+.completion-subtitle { font-size: 14px; color: var(--text-secondary); margin-bottom: 24px; }
+.completion-stats {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  margin-bottom: 28px;
+}
+.completion-stat .cs-val { font-size: 20px; font-weight: 700; color: var(--accent); }
+.completion-stat .cs-lab { font-size: 11px; color: var(--text-tertiary); }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <h2>Morning Workout</h2>
+      <div class="subtitle">30-Day Plan</div>
+    </div>
+    <div class="nav-section">Overview</div>
+    <div class="nav-item active" data-page="dashboard"><span class="icon">&#9671;</span> Dashboard</div>
+    <div class="nav-item" data-page="plan"><span class="icon">&#9776;</span> Full Plan</div>
+    <div class="nav-item" data-page="calendar"><span class="icon">&#9632;</span> Calendar</div>
+    <div class="nav-section">Progress</div>
+    <div class="nav-item" data-page="achievements"><span class="icon">&#9733;</span> Achievements</div>
+    <div class="nav-item" data-page="history"><span class="icon">&#8635;</span> History</div>
+    <div class="nav-section">Settings</div>
+    <div class="nav-item" data-page="settings"><span class="icon">&#9881;</span> Settings</div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <!-- Dashboard -->
+    <div class="page active" id="page-dashboard"></div>
+    <!-- Plan -->
+    <div class="page" id="page-plan"></div>
+    <!-- Calendar -->
+    <div class="page" id="page-calendar"></div>
+    <!-- Achievements -->
+    <div class="page" id="page-achievements"></div>
+    <!-- History -->
+    <div class="page" id="page-history"></div>
+    <!-- Settings -->
+    <div class="page" id="page-settings"></div>
+  </div>
+</div>
+
+<!-- Mobile nav -->
+<div class="mobile-nav">
+  <div class="mobile-nav-item active" data-page="dashboard"><span class="m-icon">&#9671;</span>Home</div>
+  <div class="mobile-nav-item" data-page="plan"><span class="m-icon">&#9776;</span>Plan</div>
+  <div class="mobile-nav-item" data-page="calendar"><span class="m-icon">&#9632;</span>Cal</div>
+  <div class="mobile-nav-item" data-page="achievements"><span class="m-icon">&#9733;</span>Awards</div>
+  <div class="mobile-nav-item" data-page="history"><span class="m-icon">&#8635;</span>Log</div>
+</div>
+
+<!-- Workout View -->
+<div class="workout-view" id="workoutView"></div>
+
+<!-- Timer Overlay -->
+<div class="timer-overlay" id="timerOverlay">
+  <div class="timer-exercise-name" id="timerExName"></div>
+  <div class="timer-prescription" id="timerPrescription"></div>
+  <div class="timer-set-info" id="timerSetInfo"></div>
+  <div class="timer-circle">
+    <svg viewBox="0 0 208 208"><circle id="timerArc" cx="104" cy="104" r="100" /></svg>
+    <div class="timer-value" id="timerValue">0</div>
+  </div>
+  <div class="timer-label" id="timerLabel">seconds</div>
+  <div class="timer-form-tip" id="timerFormTip"></div>
+  <div class="timer-controls">
+    <button id="timerSkipBtn">Skip</button>
+    <button class="primary" id="timerActionBtn">Next</button>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// FULL 30-DAY WORKOUT DATA
+// ============================================================
+const EXERCISES = {
+  // WARM-UP
+  march: { name: "Marching in Place", type: "warmup", duration: 30, muscle: "Full Body", form: "Stand tall, drive knees to hip height, pump arms naturally, land softly on balls of feet." },
+  armCircles: { name: "Arm Circles", type: "warmup", duration: 30, muscle: "Shoulders", form: "Arms extended at shoulder height. 15s forward, 15s backward. Start small, increase size." },
+  jumpingJacks: { name: "Jumping Jacks", type: "warmup", duration: 30, muscle: "Full Body", form: "Feet together, arms at sides. Jump feet out, raise arms overhead. Land softly with slight knee bend." },
+  stepOutJacks: { name: "Step-Out Jacks", type: "warmup", duration: 30, muscle: "Full Body", form: "Low-impact alternative: step one foot out to side while raising arms overhead. Alternate sides." },
+  highKnees: { name: "High Knees", type: "warmup", duration: 30, muscle: "Legs / Cardio", form: "Jog in place driving knees to waist height. Keep core tight, pump arms in sync." },
+  legSwings: { name: "Leg Swings", type: "warmup", duration: 30, muscle: "Hips", form: "Hold a wall for balance. Swing one leg forward and back like a pendulum. 15s per leg." },
+  torsoTwists: { name: "Torso Twists", type: "warmup", duration: 30, muscle: "Core", form: "Feet shoulder-width, arms at chest. Rotate torso left and right. Keep hips forward." },
+  hipCircles: { name: "Hip Circles", type: "warmup", duration: 30, muscle: "Hips", form: "Hands on hips, feet shoulder-width. Large circles, 15s each direction." },
+  buttKicks: { name: "Butt Kicks", type: "warmup", duration: 30, muscle: "Hamstrings", form: "Jog in place bringing heels to glutes. Stay tall, keep core engaged." },
+
+  // UPPER BODY
+  wallPushups: { name: "Wall Push-Ups", type: "main", sets: 2, reps: 8, rest: 30, muscle: "Chest / Triceps", form: "Stand arm's length from wall. Hands shoulder-width at shoulder height. Lower chest to wall, push back. Keep body in a straight line." },
+  wallPushups10: { name: "Wall Push-Ups", type: "main", sets: 2, reps: 10, rest: 30, muscle: "Chest / Triceps", form: "Stand arm's length from wall. Hands shoulder-width at shoulder height. Lower chest to wall, push back. Keep body in a straight line." },
+  kneePushups: { name: "Knee Push-Ups", type: "main", sets: 2, reps: 8, rest: 30, muscle: "Chest / Triceps", form: "Hands slightly wider than shoulders. Lower chest to floor, elbows at 45 degrees. Keep spine and thighs aligned." },
+  kneePushups10: { name: "Knee Push-Ups", type: "main", sets: 2, reps: 10, rest: 30, muscle: "Chest / Triceps", form: "Hands slightly wider than shoulders. Slow tempo: 3s down, 1s up. Keep spine and thighs aligned." },
+  kneePushupsSlow: { name: "Knee Push-Ups (Slow)", type: "main", sets: 2, reps: 8, rest: 30, muscle: "Chest / Triceps", form: "Slow tempo: 3 seconds down, 1 second up. Elbows at 45 degrees, core tight throughout." },
+  inclinePushups: { name: "Incline Push-Ups", type: "main", sets: 2, reps: 8, rest: 30, muscle: "Chest / Triceps", form: "Hands on a sturdy elevated surface (chair, counter). Body straight, lower chest toward surface." },
+  pushups: { name: "Push-Ups", type: "main", sets: 2, reps: 5, rest: 45, muscle: "Chest / Triceps", form: "Hands shoulder-width apart. Body forms a straight line head to heels. Lower until chest hovers above floor. If too hard, use incline." },
+  pushups8: { name: "Push-Ups", type: "main", sets: 2, reps: 8, rest: 45, muscle: "Chest / Triceps", form: "Hands shoulder-width apart. Body forms a straight line head to heels. Lower until chest hovers above floor." },
+  tricepDips: { name: "Tricep Dips", type: "main", sets: 2, reps: 8, rest: 30, muscle: "Triceps", form: "Hands on edge of sturdy chair. Slide hips off edge, lower by bending elbows to 90 degrees. Press back up." },
+  tricepDips10: { name: "Tricep Dips", type: "main", sets: 2, reps: 10, rest: 30, muscle: "Triceps", form: "Hands on edge of sturdy chair. Slow and controlled. Bend elbows to 90 degrees. Press back up." },
+
+  // LOWER BODY
+  squats10: { name: "Bodyweight Squats", type: "main", sets: 2, reps: 10, rest: 30, muscle: "Quads / Glutes", form: "Feet shoulder-width, toes slightly out. Sit back and down, thighs to parallel. Knees track over toes. Push through heels." },
+  squats12: { name: "Bodyweight Squats", type: "main", sets: 2, reps: 12, rest: 30, muscle: "Quads / Glutes", form: "Feet shoulder-width, toes slightly out. Sit back and down, thighs to parallel. Arms forward for balance." },
+  squats15: { name: "Bodyweight Squats", type: "main", sets: 3, reps: 12, rest: 25, muscle: "Quads / Glutes", form: "3 sets this week. Sit deep, push through heels, keep torso upright throughout." },
+  squatPulse: { name: "Squat Pulses", type: "main", sets: 2, reps: 10, rest: 25, muscle: "Quads / Glutes", form: "Lower into squat, pulse up and down 3-4 inches at the bottom. Maintain form throughout." },
+  reverseLunges6: { name: "Reverse Lunges", type: "main", sets: 2, reps: 6, rest: 30, muscle: "Quads / Glutes", form: "6 per leg. Step backward, lower back knee toward floor. Both knees at ~90 degrees. Push through front heel." },
+  reverseLunges8: { name: "Reverse Lunges", type: "main", sets: 2, reps: 8, rest: 30, muscle: "Quads / Glutes", form: "8 per leg. Step backward, lower back knee toward floor. Keep torso upright, core engaged." },
+  forwardLunges: { name: "Forward Lunges", type: "main", sets: 2, reps: 10, rest: 30, muscle: "Quads / Glutes", form: "10 per leg. Step forward, lower until both knees at 90 degrees. Front knee over ankle, not past toes." },
+  walkingLunges: { name: "Walking Lunges", type: "main", sets: 2, reps: 12, rest: 25, muscle: "Quads / Glutes", form: "12 steps total. Continuous forward lunges alternating legs each step." },
+  gluteBridges12: { name: "Glute Bridges", type: "main", sets: 2, reps: 12, rest: 30, muscle: "Glutes / Hamstrings", form: "On back, knees bent, feet flat. Press through heels, squeeze glutes, lift hips. Hold 1 second at top." },
+  gluteBridges15: { name: "Glute Bridges", type: "main", sets: 2, reps: 15, rest: 30, muscle: "Glutes / Hamstrings", form: "15 reps. Press through heels, squeeze glutes hard at top. Lower with control." },
+  singleLegBridge8: { name: "Single-Leg Glute Bridge", type: "main", sets: 2, reps: 8, rest: 30, muscle: "Glutes", form: "8 per leg. Extend one leg straight. Drive through grounded foot. Keep hips level." },
+  singleLegBridge10: { name: "Single-Leg Glute Bridge", type: "main", sets: 2, reps: 10, rest: 25, muscle: "Glutes", form: "10 per leg. All drive from grounded foot. Squeeze hard at top, lower with control." },
+  calfRaises: { name: "Calf Raises", type: "main", sets: 2, reps: 15, rest: 20, muscle: "Calves", form: "Feet hip-width. Rise onto balls of feet, squeeze calves at top, lower with control. Hold wall if needed." },
+
+  // CORE
+  plank15: { name: "Forearm Plank", type: "main", sets: 2, reps: "15-20s", rest: 30, muscle: "Core", form: "Forearms on floor, elbows under shoulders. Straight line from shoulders to heels. Don't let hips sag or pike." },
+  plank25: { name: "Forearm Plank", type: "main", sets: 2, reps: "25-30s", rest: 30, muscle: "Core", form: "Hold longer this week. Brace core, breathe steadily. Neck neutral." },
+  plank35: { name: "Forearm Plank", type: "main", sets: 2, reps: "35-40s", rest: 30, muscle: "Core", form: "Breathe steady. If hips start to sag, take a 3-second break and resume." },
+  plank50: { name: "Forearm Plank", type: "main", sets: 2, reps: "45-60s", rest: 30, muscle: "Core", form: "Target 60 seconds! Keep squeezing glutes and bracing abs. You've got this." },
+  birdDog: { name: "Bird Dog", type: "main", sets: 2, reps: 6, rest: 30, muscle: "Core / Back", form: "6 per side. On hands and knees. Extend opposite arm and leg. Hold 2 seconds. Keep hips level." },
+  birdDog8: { name: "Bird Dog", type: "main", sets: 2, reps: 8, rest: 30, muscle: "Core / Back", form: "8 per side. Extend opposite arm and leg, hold 2 seconds. Control the movement." },
+  deadBug: { name: "Dead Bug", type: "main", sets: 2, reps: 8, rest: 30, muscle: "Core", form: "8 per side. On back, arms up, knees at 90 degrees. Extend opposite arm and leg. Keep lower back pressed down." },
+  deadBug10: { name: "Dead Bug", type: "main", sets: 2, reps: 10, rest: 30, muscle: "Core", form: "10 per side. Slow and controlled. Lower back stays glued to the floor." },
+  mountainClimbers20: { name: "Mountain Climbers", type: "main", sets: 2, reps: "20s", rest: 25, muscle: "Core / Cardio", form: "High plank position. Drive knees toward chest alternately. Keep hips level with shoulders." },
+  mountainClimbers30: { name: "Mountain Climbers", type: "main", sets: 2, reps: "30s", rest: 25, muscle: "Core / Cardio", form: "30 seconds! Drive knees fast if you can, or go slow with control. Hips stay level." },
+  superman: { name: "Superman", type: "main", sets: 2, reps: 8, rest: 30, muscle: "Lower Back", form: "Face down, arms overhead. Lift arms, chest, and legs off floor. Squeeze glutes and back. Hold 1-2 seconds." },
+  superman10: { name: "Superman", type: "main", sets: 2, reps: 10, rest: 30, muscle: "Lower Back", form: "10 reps. Lift everything, squeeze hard at top for 2 seconds. Lower with control." },
+  bicycleCrunches: { name: "Bicycle Crunches", type: "main", sets: 2, reps: 10, rest: 25, muscle: "Core", form: "10 per side. On back, hands behind head (don't pull neck). Elbow to opposite knee, extend other leg." },
+  flutterKicks: { name: "Flutter Kicks", type: "main", sets: 2, reps: "20s", rest: 25, muscle: "Lower Abs", form: "On back, hands under glutes. Legs slightly off floor. Alternately kick up and down. Keep lower back pressed down." },
+
+  // COOL-DOWN
+  quadStretch: { name: "Standing Quad Stretch", type: "cooldown", duration: 20, muscle: "Quads", form: "Stand on one leg, grab opposite ankle, pull heel to glute. Keep knees together. 20s per leg." },
+  hamstringStretch: { name: "Forward Fold", type: "cooldown", duration: 20, muscle: "Hamstrings", form: "Feet hip-width, hinge at hips, reach toward toes. Slight knee bend is fine. Let head hang." },
+  childsPose: { name: "Child's Pose", type: "cooldown", duration: 30, muscle: "Back / Hips", form: "Kneel, sit hips toward heels, extend arms forward. Rest forehead on ground. Breathe deeply." },
+  chestOpener: { name: "Chest Opener Stretch", type: "cooldown", duration: 20, muscle: "Chest / Shoulders", form: "Clasp hands behind back, straighten arms, lift hands away from body. Squeeze shoulder blades." },
+  catCow: { name: "Cat-Cow Stretch", type: "cooldown", duration: 30, muscle: "Spine", form: "On hands and knees. Alternate arching back (cow) and rounding spine (cat). Move with breath." },
+  cobraStretch: { name: "Cobra Stretch", type: "cooldown", duration: 20, muscle: "Abs / Back", form: "Lie face down, hands under shoulders. Press up to lift chest, hips on ground. Look slightly up." },
+  butterflyStretch: { name: "Butterfly Stretch", type: "cooldown", duration: 20, muscle: "Hips / Groin", form: "Seated, soles of feet together, knees out. Hold feet, gently press knees toward floor." },
+  kneeToChest: { name: "Knee-to-Chest Stretch", type: "cooldown", duration: 20, muscle: "Lower Back", form: "On back, pull one knee toward chest, hold behind thigh. 20s per leg." },
+  spinalTwist: { name: "Seated Spinal Twist", type: "cooldown", duration: 20, muscle: "Spine", form: "Seated, legs extended. Cross one foot over opposite knee, twist toward bent knee. 20s per side." },
+  tricepsStretch: { name: "Overhead Triceps Stretch", type: "cooldown", duration: 15, muscle: "Triceps / Lats", form: "One arm overhead, bend elbow so hand reaches toward opposite shoulder blade. Gentle press. 15s per side." }
+};
+
+// 30-day plan: each day has warmup, main, cooldown arrays of exercise keys
+const PLAN = [
+  // WEEK 1 — Foundation
+  { day: 1, week: 1, title: "Day 1 — Foundation Start", focus: "Full Body Basics", rest: false,
+    warmup: ["march","armCircles","legSwings","torsoTwists","highKnees","hipCircles"],
+    main: ["wallPushups","squats10","reverseLunges6","gluteBridges12","plank15","birdDog"],
+    cooldown: ["quadStretch","hamstringStretch","childsPose","chestOpener","catCow"] },
+  { day: 2, week: 1, title: "Day 2 — Building Rhythm", focus: "Full Body Basics", rest: false,
+    warmup: ["march","armCircles","stepOutJacks","hipCircles","legSwings","torsoTwists"],
+    main: ["wallPushups","squats10","reverseLunges6","gluteBridges12","plank15","birdDog"],
+    cooldown: ["quadStretch","hamstringStretch","cobraStretch","butterflyStretch","catCow"] },
+  { day: 3, week: 1, title: "Day 3 — Core Focus", focus: "Core + Lower Body", rest: false,
+    warmup: ["march","hipCircles","highKnees","torsoTwists","legSwings","armCircles"],
+    main: ["squats10","reverseLunges6","gluteBridges12","plank15","birdDog","wallPushups"],
+    cooldown: ["childsPose","kneeToChest","hamstringStretch","spinalTwist","quadStretch"] },
+  { day: 4, week: 1, title: "Day 4 — Rest Day", focus: "Recovery & Mobility", rest: true,
+    warmup: [], main: [], cooldown: ["catCow","childsPose","butterflyStretch","spinalTwist","kneeToChest","cobraStretch","hamstringStretch","quadStretch"] },
+  { day: 5, week: 1, title: "Day 5 — Increasing Reps", focus: "Full Body Progress", rest: false,
+    warmup: ["march","jumpingJacks","armCircles","hipCircles","highKnees","legSwings"],
+    main: ["wallPushups10","squats12","reverseLunges8","gluteBridges15","plank15","birdDog8"],
+    cooldown: ["quadStretch","hamstringStretch","chestOpener","childsPose","catCow"] },
+  { day: 6, week: 1, title: "Day 6 — End of Week 1", focus: "Full Body + Endurance", rest: false,
+    warmup: ["march","buttKicks","armCircles","torsoTwists","hipCircles","legSwings"],
+    main: ["wallPushups10","squats12","reverseLunges8","gluteBridges15","plank25","birdDog8"],
+    cooldown: ["cobraStretch","kneeToChest","butterflyStretch","tricepsStretch","catCow"] },
+  { day: 7, week: 1, title: "Day 7 — Rest Day", focus: "Full Rest", rest: true,
+    warmup: [], main: [], cooldown: ["catCow","childsPose","hamstringStretch","quadStretch","spinalTwist","butterflyStretch","cobraStretch","kneeToChest"] },
+
+  // WEEK 2 — Building Volume
+  { day: 8, week: 2, title: "Day 8 — Week 2 Kickoff", focus: "Push-Up Progression", rest: false,
+    warmup: ["march","jumpingJacks","armCircles","hipCircles","highKnees","legSwings"],
+    main: ["kneePushups","squats12","reverseLunges8","gluteBridges15","plank25","deadBug"],
+    cooldown: ["quadStretch","hamstringStretch","chestOpener","childsPose","catCow"] },
+  { day: 9, week: 2, title: "Day 9 — Lower Body Focus", focus: "Legs + Glutes", rest: false,
+    warmup: ["march","buttKicks","legSwings","hipCircles","highKnees","torsoTwists"],
+    main: ["squats12","reverseLunges8","gluteBridges15","calfRaises","plank25","superman"],
+    cooldown: ["quadStretch","hamstringStretch","butterflyStretch","kneeToChest","catCow"] },
+  { day: 10, week: 2, title: "Day 10 — Core + Upper", focus: "Core Strength", rest: false,
+    warmup: ["march","armCircles","jumpingJacks","torsoTwists","hipCircles","legSwings"],
+    main: ["kneePushups","deadBug","superman","plank25","squats12","gluteBridges15"],
+    cooldown: ["childsPose","cobraStretch","spinalTwist","chestOpener","hamstringStretch"] },
+  { day: 11, week: 2, title: "Day 11 — Rest Day", focus: "Active Recovery", rest: true,
+    warmup: [], main: [], cooldown: ["catCow","childsPose","butterflyStretch","spinalTwist","kneeToChest","cobraStretch","hamstringStretch","quadStretch"] },
+  { day: 12, week: 2, title: "Day 12 — Full Circuit", focus: "Full Body Volume", rest: false,
+    warmup: ["march","jumpingJacks","highKnees","armCircles","hipCircles","legSwings"],
+    main: ["kneePushups10","squats12","reverseLunges8","gluteBridges15","plank25","deadBug","superman"],
+    cooldown: ["quadStretch","hamstringStretch","chestOpener","childsPose","catCow"] },
+  { day: 13, week: 2, title: "Day 13 — Endurance Day", focus: "Longer Holds + More Reps", rest: false,
+    warmup: ["march","buttKicks","jumpingJacks","torsoTwists","hipCircles","legSwings"],
+    main: ["kneePushups10","squats12","reverseLunges8","gluteBridges15","plank25","deadBug","calfRaises"],
+    cooldown: ["cobraStretch","kneeToChest","butterflyStretch","tricepsStretch","catCow"] },
+  { day: 14, week: 2, title: "Day 14 — Rest Day", focus: "Full Rest", rest: true,
+    warmup: [], main: [], cooldown: ["catCow","childsPose","hamstringStretch","quadStretch","spinalTwist","butterflyStretch","cobraStretch","kneeToChest"] },
+
+  // WEEK 3 — Adding Intensity
+  { day: 15, week: 3, title: "Day 15 — Halfway Mark", focus: "Intensity Ramp-Up", rest: false,
+    warmup: ["march","jumpingJacks","highKnees","armCircles","hipCircles","buttKicks"],
+    main: ["kneePushupsSlow","squats15","forwardLunges","singleLegBridge8","plank35","mountainClimbers20"],
+    cooldown: ["quadStretch","hamstringStretch","chestOpener","childsPose","catCow"] },
+  { day: 16, week: 3, title: "Day 16 — Core Blast", focus: "Core + Stability", rest: false,
+    warmup: ["march","buttKicks","torsoTwists","hipCircles","highKnees","legSwings"],
+    main: ["kneePushupsSlow","deadBug10","mountainClimbers20","plank35","bicycleCrunches","singleLegBridge8"],
+    cooldown: ["childsPose","cobraStretch","spinalTwist","kneeToChest","catCow"] },
+  { day: 17, week: 3, title: "Day 17 — Legs & Glutes", focus: "Lower Body Power", rest: false,
+    warmup: ["march","jumpingJacks","legSwings","hipCircles","highKnees","armCircles"],
+    main: ["squats15","forwardLunges","singleLegBridge8","calfRaises","plank35","superman10"],
+    cooldown: ["quadStretch","hamstringStretch","butterflyStretch","kneeToChest","catCow"] },
+  { day: 18, week: 3, title: "Day 18 — Rest Day", focus: "Recovery", rest: true,
+    warmup: [], main: [], cooldown: ["catCow","childsPose","butterflyStretch","spinalTwist","kneeToChest","cobraStretch","hamstringStretch","quadStretch"] },
+  { day: 19, week: 3, title: "Day 19 — Full Circuit+", focus: "Full Body Challenge", rest: false,
+    warmup: ["march","jumpingJacks","highKnees","buttKicks","hipCircles","legSwings"],
+    main: ["kneePushupsSlow","squats15","forwardLunges","singleLegBridge8","mountainClimbers20","plank35","bicycleCrunches"],
+    cooldown: ["quadStretch","hamstringStretch","chestOpener","childsPose","catCow"] },
+  { day: 20, week: 3, title: "Day 20 — Push & Core", focus: "Upper Body + Core", rest: false,
+    warmup: ["march","armCircles","jumpingJacks","torsoTwists","hipCircles","highKnees"],
+    main: ["inclinePushups","tricepDips","deadBug10","mountainClimbers20","plank35","superman10"],
+    cooldown: ["cobraStretch","chestOpener","tricepsStretch","childsPose","catCow"] },
+  { day: 21, week: 3, title: "Day 21 — Rest Day", focus: "Full Rest", rest: true,
+    warmup: [], main: [], cooldown: ["catCow","childsPose","hamstringStretch","quadStretch","spinalTwist","butterflyStretch","cobraStretch","kneeToChest"] },
+
+  // WEEK 4 — Peak Challenge
+  { day: 22, week: 4, title: "Day 22 — Final Week Begins", focus: "Peak Full Body", rest: false,
+    warmup: ["march","jumpingJacks","highKnees","buttKicks","hipCircles","armCircles"],
+    main: ["pushups","squatPulse","walkingLunges","singleLegBridge10","mountainClimbers30","plank50"],
+    cooldown: ["quadStretch","hamstringStretch","chestOpener","childsPose","catCow"] },
+  { day: 23, week: 4, title: "Day 23 — Core Finisher", focus: "Core Endurance", rest: false,
+    warmup: ["march","buttKicks","torsoTwists","hipCircles","highKnees","legSwings"],
+    main: ["inclinePushups","plank50","mountainClimbers30","bicycleCrunches","flutterKicks","deadBug10"],
+    cooldown: ["childsPose","cobraStretch","spinalTwist","kneeToChest","catCow"] },
+  { day: 24, week: 4, title: "Day 24 — Legs & Power", focus: "Lower Body Peak", rest: false,
+    warmup: ["march","jumpingJacks","legSwings","hipCircles","highKnees","armCircles"],
+    main: ["squatPulse","walkingLunges","singleLegBridge10","calfRaises","plank50","superman10"],
+    cooldown: ["quadStretch","hamstringStretch","butterflyStretch","kneeToChest","catCow"] },
+  { day: 25, week: 4, title: "Day 25 — Rest Day", focus: "Recovery", rest: true,
+    warmup: [], main: [], cooldown: ["catCow","childsPose","butterflyStretch","spinalTwist","kneeToChest","cobraStretch","hamstringStretch","quadStretch"] },
+  { day: 26, week: 4, title: "Day 26 — Full Challenge", focus: "Complete Circuit", rest: false,
+    warmup: ["march","jumpingJacks","highKnees","buttKicks","hipCircles","legSwings"],
+    main: ["pushups8","squatPulse","walkingLunges","singleLegBridge10","mountainClimbers30","plank50","flutterKicks"],
+    cooldown: ["quadStretch","hamstringStretch","chestOpener","childsPose","catCow"] },
+  { day: 27, week: 4, title: "Day 27 — Upper + Core Peak", focus: "Push & Brace", rest: false,
+    warmup: ["march","armCircles","jumpingJacks","torsoTwists","hipCircles","highKnees"],
+    main: ["pushups8","tricepDips10","plank50","mountainClimbers30","bicycleCrunches","flutterKicks"],
+    cooldown: ["cobraStretch","chestOpener","tricepsStretch","childsPose","catCow"] },
+  { day: 28, week: 4, title: "Day 28 — Rest Day", focus: "Final Rest", rest: true,
+    warmup: [], main: [], cooldown: ["catCow","childsPose","hamstringStretch","quadStretch","spinalTwist","butterflyStretch","cobraStretch","kneeToChest"] },
+  { day: 29, week: 4, title: "Day 29 — Grand Finale", focus: "Full Body Max Effort", rest: false,
+    warmup: ["march","jumpingJacks","highKnees","buttKicks","hipCircles","armCircles"],
+    main: ["pushups8","squatPulse","walkingLunges","singleLegBridge10","mountainClimbers30","plank50","bicycleCrunches"],
+    cooldown: ["quadStretch","hamstringStretch","chestOpener","childsPose","catCow","cobraStretch"] },
+  { day: 30, week: 4, title: "Day 30 — Victory Lap", focus: "Celebration Workout", rest: false,
+    warmup: ["march","jumpingJacks","highKnees","buttKicks","hipCircles","legSwings"],
+    main: ["pushups8","squatPulse","walkingLunges","singleLegBridge10","plank50","mountainClimbers30","flutterKicks"],
+    cooldown: ["quadStretch","hamstringStretch","chestOpener","childsPose","catCow","cobraStretch","butterflyStretch","spinalTwist"] },
+];
+
+// ACHIEVEMENTS
+const ACHIEVEMENT_DEFS = [
+  { id: "first", name: "First Step", desc: "Complete your first workout", check: s => s.completedDays.length >= 1 },
+  { id: "streak3", name: "3-Day Streak", desc: "Work out 3 days in a row", check: s => s.bestStreak >= 3 },
+  { id: "week1", name: "Week 1 Done", desc: "Complete all Week 1 workouts", check: s => [1,2,3,5,6].every(d => s.completedDays.includes(d)) },
+  { id: "streak7", name: "7-Day Streak", desc: "Work out 7 workout days in a row", check: s => s.bestStreak >= 7 },
+  { id: "halfway", name: "Halfway There", desc: "Complete Day 15", check: s => s.completedDays.includes(15) },
+  { id: "week2", name: "Week 2 Done", desc: "Complete all Week 2 workouts", check: s => [8,9,10,12,13].every(d => s.completedDays.includes(d)) },
+  { id: "streak14", name: "14-Day Streak", desc: "14 workout days in a row", check: s => s.bestStreak >= 14 },
+  { id: "week3", name: "Week 3 Done", desc: "Complete all Week 3 workouts", check: s => [15,16,17,19,20].every(d => s.completedDays.includes(d)) },
+  { id: "streak20", name: "20-Day Streak", desc: "20 workout days in a row", check: s => s.bestStreak >= 20 },
+  { id: "week4", name: "Week 4 Done", desc: "Complete all Week 4 workouts", check: s => [22,23,24,26,27,29,30].every(d => s.completedDays.includes(d)) },
+  { id: "allDone", name: "30-Day Champion", desc: "Complete every workout day", check: s => getWorkoutDays().every(d => s.completedDays.includes(d)) },
+  { id: "ten", name: "Double Digits", desc: "Complete 10 workouts", check: s => s.completedDays.length >= 10 },
+];
+
+function getWorkoutDays() {
+  return PLAN.filter(d => !d.rest).map(d => d.day);
+}
+
+// ============================================================
+// STATE
+// ============================================================
+let state = {
+  completedDays: [],
+  currentDay: 1,
+  startDate: null,
+  history: [],
+  bestStreak: 0,
+  currentStreak: 0,
+  achievements: {},
+  totalMinutes: 0,
+};
+
+let currentPage = 'dashboard';
+let userName = 'there';
+
+// ============================================================
+// INIT
+// ============================================================
+async function init() {
+  try {
+    if (window.envisage && window.envisage.user) {
+      userName = window.envisage.user.name || 'there';
+    }
+  } catch(e) {}
+
+  try {
+    if (window.envisage && window.envisage.store) {
+      const saved = await window.envisage.store.load();
+      if (saved) {
+        state = { ...state, ...saved };
+      }
+    }
+  } catch(e) {}
+
+  if (!state.startDate) {
+    state.startDate = new Date().toISOString().split('T')[0];
+    await saveState();
+  }
+
+  computeCurrentDay();
+  setupNav();
+  renderAll();
+}
+
+function computeCurrentDay() {
+  if (!state.startDate) return;
+  const start = new Date(state.startDate);
+  const now = new Date();
+  const diff = Math.floor((now - start) / (1000 * 60 * 60 * 24));
+  state.currentDay = Math.min(Math.max(diff + 1, 1), 30);
+}
+
+async function saveState() {
+  try {
+    if (window.envisage && window.envisage.store) {
+      await window.envisage.store.save(state);
+    }
+  } catch(e) {}
+}
+
+// ============================================================
+// NAV
+// ============================================================
+function setupNav() {
+  document.querySelectorAll('.nav-item, .mobile-nav-item').forEach(el => {
+    el.addEventListener('click', () => {
+      currentPage = el.dataset.page;
+      document.querySelectorAll('.nav-item, .mobile-nav-item').forEach(n => n.classList.remove('active'));
+      document.querySelectorAll(`.nav-item[data-page="${currentPage}"], .mobile-nav-item[data-page="${currentPage}"]`).forEach(n => n.classList.add('active'));
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      document.getElementById('page-' + currentPage).classList.add('active');
+      renderAll();
+    });
+  });
+}
+
+function renderAll() {
+  computeCurrentDay();
+  renderDashboard();
+  renderPlan();
+  renderCalendar();
+  renderAchievements();
+  renderHistory();
+  renderSettings();
+}
+
+// ============================================================
+// STREAK CALCULATION
+// ============================================================
+function calculateStreak() {
+  const workoutDays = getWorkoutDays();
+  const completed = state.completedDays.sort((a,b) => a - b);
+  let currentStreak = 0;
+  // count backwards from current day
+  for (let d = state.currentDay; d >= 1; d--) {
+    const dayData = PLAN[d - 1];
+    if (dayData.rest) continue; // skip rest days
+    if (completed.includes(d)) {
+      currentStreak++;
+    } else {
+      break;
+    }
+  }
+  state.currentStreak = currentStreak;
+  if (currentStreak > state.bestStreak) state.bestStreak = currentStreak;
+}
+
+// ============================================================
+// DASHBOARD
+// ============================================================
+function renderDashboard() {
+  calculateStreak();
+  const totalWorkoutDays = getWorkoutDays().length;
+  const completedCount = state.completedDays.length;
+  const progress = Math.round((completedCount / totalWorkoutDays) * 100);
+  const todayPlan = PLAN[state.currentDay - 1];
+  const todayDone = state.completedDays.includes(state.currentDay);
+
+  let html = `
+    <div class="greeting">Good morning, ${userName.split(' ')[0]}</div>
+    <div class="greeting-sub">Day ${state.currentDay} of 30 &mdash; ${todayPlan ? todayPlan.focus : 'Complete!'}</div>
+  `;
+
+  if (state.currentStreak > 0) {
+    html += `<div class="streak-banner">
+      <div class="streak-fire" style="color: var(--warning);">&#9733;</div>
+      <div class="streak-info">
+        <div class="streak-count">${state.currentStreak} day streak</div>
+        <div class="streak-label">Best: ${state.bestStreak} days &middot; Keep going!</div>
+      </div>
+    </div>`;
+  }
+
+  html += `<div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-label">Progress</div>
+      <div class="stat-value">${progress}%</div>
+      <div style="margin-top:8px"><div class="progress-bar-outer"><div class="progress-bar-inner" style="width:${progress}%"></div></div></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Workouts Done</div>
+      <div class="stat-value">${completedCount}</div>
+      <div class="stat-detail">of ${totalWorkoutDays} total</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Current Streak</div>
+      <div class="stat-value">${state.currentStreak}</div>
+      <div class="stat-detail">workout days</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Total Time</div>
+      <div class="stat-value">${state.totalMinutes}m</div>
+      <div class="stat-detail">${Math.round(state.totalMinutes / 60 * 10) / 10} hours</div>
+    </div>
+  </div>`;
+
+  // This week's dots
+  const weekStart = Math.floor((state.currentDay - 1) / 7) * 7 + 1;
+  const weekEnd = Math.min(weekStart + 6, 30);
+  html += `<div class="section-header">This Week</div>`;
+  html += `<div class="week-progress">`;
+  for (let d = weekStart; d <= weekEnd; d++) {
+    const dp = PLAN[d - 1];
+    const done = state.completedDays.includes(d);
+    const isToday = d === state.currentDay;
+    let cls = '';
+    if (done) cls = 'completed';
+    else if (isToday) cls = 'today';
+    if (dp.rest) cls += ' rest';
+    html += `<div class="week-dot ${cls}" title="${dp.title}">${d}</div>`;
+  }
+  html += `</div>`;
+
+  // Today's workout
+  if (todayPlan) {
+    html += `<div class="section-header">Today's Workout</div>`;
+    html += `<div class="today-card">`;
+    html += `<h3>${todayPlan.title}</h3>`;
+    if (todayPlan.rest) {
+      html += `<div class="meta">Rest Day &mdash; Take it easy or do the optional stretching routine below.</div>`;
+      html += `<div class="today-exercises">`;
+      todayPlan.cooldown.forEach(key => {
+        const ex = EXERCISES[key];
+        html += `<div class="today-ex"><div class="ex-name">${ex.name}</div><div class="ex-detail">${ex.duration}s &middot; ${ex.muscle}</div></div>`;
+      });
+      html += `</div>`;
+      if (!todayDone) {
+        html += `<button class="btn-start-workout" onclick="markRestDayComplete()">Mark Rest Day Complete</button>`;
+      } else {
+        html += `<span style="color: var(--accent); font-weight: 500; font-size: 13px;">Completed</span>`;
+      }
+    } else {
+      html += `<div class="meta">${todayPlan.focus} &middot; ~20 min &middot; ${todayPlan.main.length} exercises</div>`;
+      html += `<div class="today-exercises">`;
+      todayPlan.main.forEach(key => {
+        const ex = EXERCISES[key];
+        const prescription = ex.reps ? `${ex.sets}x${ex.reps}` : `${ex.duration}s`;
+        html += `<div class="today-ex"><div class="ex-name">${ex.name}</div><div class="ex-detail">${prescription} &middot; ${ex.muscle}</div></div>`;
+      });
+      html += `</div>`;
+      if (!todayDone) {
+        html += `<button class="btn-start-workout" onclick="openWorkout(${state.currentDay})">Start Workout</button>`;
+      } else {
+        html += `<span style="color: var(--accent); font-weight: 500; font-size: 13px;">Completed today</span>`;
+      }
+    }
+    html += `</div>`;
+  }
+
+  document.getElementById('page-dashboard').innerHTML = html;
+}
+
+async function markRestDayComplete() {
+  if (!state.completedDays.includes(state.currentDay)) {
+    state.completedDays.push(state.currentDay);
+    state.history.push({ day: state.currentDay, date: new Date().toISOString(), duration: 0, type: 'rest' });
+    calculateStreak();
+    checkAchievements();
+    await saveState();
+    renderAll();
+  }
+}
+
+// ============================================================
+// PLAN VIEW
+// ============================================================
+let planWeek = 1;
+
+function renderPlan() {
+  let html = `<div class="section-header">30-Day Plan</div>`;
+  html += `<div class="section-sub">Progressive difficulty across 4 weeks. Tap any day to preview exercises.</div>`;
+  html += `<div class="week-tabs">`;
+  for (let w = 1; w <= 4; w++) {
+    html += `<button class="week-tab ${planWeek === w ? 'active' : ''}" onclick="planWeek=${w};renderPlan()">${w <= 3 ? 'Week ' + w : 'Week 4'}</button>`;
+  }
+  html += `</div>`;
+
+  const weekDays = PLAN.filter(d => d.week === planWeek);
+  weekDays.forEach(day => {
+    const done = state.completedDays.includes(day.day);
+    const statusClass = done ? 'done' : day.rest ? 'rest-day' : 'upcoming';
+    const statusText = done ? 'Done' : day.rest ? 'Rest' : (day.day <= state.currentDay ? 'Today' : 'Upcoming');
+
+    html += `<div class="day-card ${done ? 'completed' : ''}" onclick="${day.rest ? '' : `openWorkout(${day.day})`}">
+      <div class="day-header">
+        <div>
+          <div class="day-title">${day.title}</div>
+          <div class="day-focus">${day.focus}${day.rest ? '' : ' &middot; ~20 min'}</div>
+        </div>
+        <div class="day-status ${statusClass}">${statusText}</div>
+      </div>`;
+    if (!day.rest) {
+      html += `<div class="exercise-tags">`;
+      day.main.forEach(key => {
+        html += `<span class="ex-tag">${EXERCISES[key].name}</span>`;
+      });
+      html += `</div>`;
+    }
+    html += `</div>`;
+  });
+
+  document.getElementById('page-plan').innerHTML = html;
+}
+
+// ============================================================
+// CALENDAR VIEW
+// ============================================================
+function renderCalendar() {
+  let html = `<div class="section-header">Calendar</div>`;
+  html += `<div class="section-sub">Your 30-day journey at a glance.</div>`;
+
+  // Simple 5-column grid (Mon-Fri style representation)
+  html += `<div class="calendar-grid" style="grid-template-columns: repeat(7, 1fr);">`;
+  const dayLabels = ['W1','W2','W3','W4','W5','W6','W7'];
+  dayLabels.forEach(l => { html += `<div class="cal-header">${l}</div>`; });
+
+  for (let d = 1; d <= 30; d++) {
+    const dp = PLAN[d - 1];
+    const done = state.completedDays.includes(d);
+    const isToday = d === state.currentDay;
+    let cls = '';
+    if (done) cls = 'completed';
+    if (isToday) cls += ' today';
+    if (dp.rest) cls += ' rest';
+    html += `<div class="cal-day ${cls}" onclick="${dp.rest ? '' : `openWorkout(${d})`}">
+      ${d}
+      <div class="day-label">${dp.rest ? 'Rest' : (done ? 'Done' : '')}</div>
+    </div>`;
+  }
+  // Fill remaining slots
+  for (let i = 0; i < (35 - 30); i++) {
+    html += `<div class="cal-day" style="opacity:0.15;cursor:default"></div>`;
+  }
+  html += `</div>`;
+
+  // Legend
+  html += `<div style="display:flex;gap:16px;font-size:11px;color:var(--text-tertiary);margin-top:8px;">
+    <div style="display:flex;align-items:center;gap:4px;"><div style="width:12px;height:12px;background:var(--accent-subtle);border:1px solid var(--accent);border-radius:3px;"></div> Completed</div>
+    <div style="display:flex;align-items:center;gap:4px;"><div style="width:12px;height:12px;border:1px solid var(--accent);border-radius:3px;"></div> Today</div>
+    <div style="display:flex;align-items:center;gap:4px;"><div style="width:12px;height:12px;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:3px;opacity:0.4;"></div> Rest</div>
+  </div>`;
+
+  document.getElementById('page-calendar').innerHTML = html;
+}
+
+// ============================================================
+// ACHIEVEMENTS
+// ============================================================
+function renderAchievements() {
+  let html = `<div class="section-header">Achievements</div>`;
+  html += `<div class="section-sub">${Object.keys(state.achievements).length} of ${ACHIEVEMENT_DEFS.length} unlocked</div>`;
+  html += `<div class="achievements-grid">`;
+  ACHIEVEMENT_DEFS.forEach(a => {
+    const unlocked = !!state.achievements[a.id];
+    html += `<div class="achievement-card ${unlocked ? 'unlocked' : 'locked'}">
+      <div class="achievement-icon">${unlocked ? '&#9733;' : '&#9734;'}</div>
+      <div class="achievement-name">${a.name}</div>
+      <div class="achievement-desc">${a.desc}</div>
+      ${unlocked ? `<div class="achievement-date">${new Date(state.achievements[a.id]).toLocaleDateString()}</div>` : ''}
+    </div>`;
+  });
+  html += `</div>`;
+  document.getElementById('page-achievements').innerHTML = html;
+}
+
+function checkAchievements() {
+  ACHIEVEMENT_DEFS.forEach(a => {
+    if (!state.achievements[a.id] && a.check(state)) {
+      state.achievements[a.id] = new Date().toISOString();
+    }
+  });
+}
+
+// ============================================================
+// HISTORY
+// ============================================================
+function renderHistory() {
+  let html = `<div class="section-header">Workout History</div>`;
+  if (state.history.length === 0) {
+    html += `<div class="section-sub">No workouts completed yet. Start your first workout from the dashboard!</div>`;
+  } else {
+    html += `<table class="history-table"><thead><tr><th>Day</th><th>Date</th><th>Type</th><th>Duration</th></tr></thead><tbody>`;
+    [...state.history].reverse().forEach(h => {
+      const dp = PLAN[h.day - 1];
+      html += `<tr>
+        <td>${dp ? dp.title : 'Day ' + h.day}</td>
+        <td>${new Date(h.date).toLocaleDateString()}</td>
+        <td>${h.type === 'rest' ? 'Rest Day' : dp ? dp.focus : 'Workout'}</td>
+        <td>${h.duration ? h.duration + ' min' : '--'}</td>
+      </tr>`;
+    });
+    html += `</tbody></table>`;
+  }
+  document.getElementById('page-history').innerHTML = html;
+}
+
+// ============================================================
+// SETTINGS
+// ============================================================
+function renderSettings() {
+  let html = `<div class="section-header">Settings</div>`;
+  html += `<div class="setting-row">
+    <div><div class="setting-label">Start Date</div><div class="setting-desc">${state.startDate}</div></div>
+    <button onclick="resetStartDate()">Reset</button>
+  </div>`;
+  html += `<div class="setting-row">
+    <div><div class="setting-label">Current Day</div><div class="setting-desc">Day ${state.currentDay} of 30</div></div>
+    <div></div>
+  </div>`;
+  html += `<div class="setting-row">
+    <div><div class="setting-label">Total Workouts</div><div class="setting-desc">${state.completedDays.length} completed</div></div>
+    <div></div>
+  </div>`;
+  html += `<div class="setting-row">
+    <div><div class="setting-label">Reset All Progress</div><div class="setting-desc">Clear all workout history and start fresh</div></div>
+    <button class="danger" onclick="resetAllProgress()">Reset</button>
+  </div>`;
+  document.getElementById('page-settings').innerHTML = html;
+}
+
+async function resetStartDate() {
+  if (confirm('Reset your start date to today? This will recalculate your current day but keep your workout history.')) {
+    state.startDate = new Date().toISOString().split('T')[0];
+    computeCurrentDay();
+    await saveState();
+    renderAll();
+  }
+}
+
+async function resetAllProgress() {
+  if (confirm('Are you sure? This will delete all your progress, streaks, and history.')) {
+    state = {
+      completedDays: [],
+      currentDay: 1,
+      startDate: new Date().toISOString().split('T')[0],
+      history: [],
+      bestStreak: 0,
+      currentStreak: 0,
+      achievements: {},
+      totalMinutes: 0,
+    };
+    await saveState();
+    renderAll();
+  }
+}
+
+// ============================================================
+// WORKOUT VIEW
+// ============================================================
+let activeWorkoutDay = null;
+
+function openWorkout(dayNum) {
+  activeWorkoutDay = dayNum;
+  const day = PLAN[dayNum - 1];
+  if (!day || day.rest) return;
+
+  const view = document.getElementById('workoutView');
+  const done = state.completedDays.includes(dayNum);
+
+  let html = `<div class="workout-topbar">
+    <button class="back-btn" onclick="closeWorkout()">&#8592; Back</button>
+    <h3>${day.title}</h3>
+    <div style="width:60px"></div>
+  </div>
+  <div class="workout-body">
+    <div style="margin-bottom:20px;">
+      <div style="font-size:13px;color:var(--text-secondary);">${day.focus} &middot; ~20 minutes</div>
+      ${done ? '<div style="color:var(--accent);font-size:12px;font-weight:500;margin-top:4px;">Completed</div>' : ''}
+    </div>`;
+
+  // Warm-up
+  html += `<div class="workout-phase"><div class="phase-header">Warm-Up &middot; 3 min<span class="phase-line"></span></div>`;
+  day.warmup.forEach(key => {
+    const ex = EXERCISES[key];
+    html += `<div class="exercise-item">
+      <div class="ex-top"><div class="ex-title">${ex.name}</div><div class="ex-prescription">${ex.duration}s</div></div>
+      <div class="ex-form">${ex.form}</div>
+      <span class="ex-muscle">${ex.muscle}</span>
+    </div>`;
+  });
+  html += `</div>`;
+
+  // Main
+  html += `<div class="workout-phase"><div class="phase-header">Main Circuit &middot; 14 min<span class="phase-line"></span></div>`;
+  day.main.forEach(key => {
+    const ex = EXERCISES[key];
+    const prescription = ex.reps ? `${ex.sets} x ${ex.reps}` : `${ex.sets} x ${ex.duration}s`;
+    html += `<div class="exercise-item">
+      <div class="ex-top"><div class="ex-title">${ex.name}</div><div class="ex-prescription">${prescription}${ex.rest ? ` &middot; ${ex.rest}s rest` : ''}</div></div>
+      <div class="ex-form">${ex.form}</div>
+      <span class="ex-muscle">${ex.muscle}</span>
+    </div>`;
+  });
+  html += `</div>`;
+
+  // Cool-down
+  html += `<div class="workout-phase"><div class="phase-header">Cool-Down &middot; 3 min<span class="phase-line"></span></div>`;
+  day.cooldown.forEach(key => {
+    const ex = EXERCISES[key];
+    html += `<div class="exercise-item">
+      <div class="ex-top"><div class="ex-title">${ex.name}</div><div class="ex-prescription">${ex.duration}s</div></div>
+      <div class="ex-form">${ex.form}</div>
+      <span class="ex-muscle">${ex.muscle}</span>
+    </div>`;
+  });
+  html += `</div>`;
+
+  if (!done) {
+    html += `<div style="text-align:center;padding:20px 0;">
+      <button class="primary btn-start-workout" onclick="startGuidedWorkout(${dayNum})">Start Guided Workout</button>
+      <div style="margin-top:8px;"><button onclick="markDayComplete(${dayNum})">Mark as Complete (no timer)</button></div>
+    </div>`;
+  }
+
+  html += `</div>`;
+  view.innerHTML = html;
+  view.classList.add('active');
+}
+
+function closeWorkout() {
+  document.getElementById('workoutView').classList.remove('active');
+  activeWorkoutDay = null;
+  renderAll();
+}
+
+async function markDayComplete(dayNum) {
+  if (!state.completedDays.includes(dayNum)) {
+    state.completedDays.push(dayNum);
+    state.totalMinutes += 20;
+    state.history.push({ day: dayNum, date: new Date().toISOString(), duration: 20, type: 'workout' });
+    calculateStreak();
+    checkAchievements();
+    await saveState();
+  }
+  closeWorkout();
+  showCompletionScreen(dayNum);
+}
+
+function showCompletionScreen(dayNum) {
+  const day = PLAN[dayNum - 1];
+  const view = document.getElementById('workoutView');
+  view.innerHTML = `<div class="workout-topbar">
+    <button class="back-btn" onclick="closeWorkout()">&#8592; Back</button>
+    <h3>Workout Complete</h3>
+    <div style="width:60px"></div>
+  </div>
+  <div class="workout-body">
+    <div class="completion-screen">
+      <div class="completion-icon">&#10003;</div>
+      <div class="completion-title">Great work!</div>
+      <div class="completion-subtitle">${day.title} &mdash; ${day.focus}</div>
+      <div class="completion-stats">
+        <div class="completion-stat"><div class="cs-val">${state.currentStreak}</div><div class="cs-lab">Day Streak</div></div>
+        <div class="completion-stat"><div class="cs-val">${state.completedDays.length}</div><div class="cs-lab">Total Done</div></div>
+        <div class="completion-stat"><div class="cs-val">~20m</div><div class="cs-lab">Duration</div></div>
+      </div>
+      <button class="primary" onclick="closeWorkout()">Back to Dashboard</button>
+    </div>
+  </div>`;
+  view.classList.add('active');
+}
+
+// ============================================================
+// GUIDED WORKOUT TIMER
+// ============================================================
+let timerInterval = null;
+let timerQueue = [];
+let timerIndex = 0;
+let timerSeconds = 0;
+let timerTotalSeconds = 0;
+let timerPaused = false;
+let workoutStartTime = null;
+
+function startGuidedWorkout(dayNum) {
+  const day = PLAN[dayNum - 1];
+  timerQueue = [];
+  workoutStartTime = Date.now();
+
+  // Build queue
+  // Warm-up
+  day.warmup.forEach(key => {
+    const ex = EXERCISES[key];
+    timerQueue.push({ name: ex.name, duration: ex.duration, form: ex.form, phase: 'Warm-Up', type: 'timed' });
+  });
+
+  // Main
+  day.main.forEach(key => {
+    const ex = EXERCISES[key];
+    for (let s = 1; s <= (ex.sets || 1); s++) {
+      if (typeof ex.reps === 'number') {
+        timerQueue.push({ name: ex.name, reps: ex.reps, form: ex.form, phase: 'Main Circuit', type: 'reps', set: s, totalSets: ex.sets || 1, muscle: ex.muscle });
+      } else if (typeof ex.reps === 'string') {
+        // timed like "20s" or "25-30s"
+        const durMatch = ex.reps.match(/(\d+)/);
+        const dur = durMatch ? parseInt(durMatch[1]) : 30;
+        timerQueue.push({ name: ex.name, duration: dur, form: ex.form, phase: 'Main Circuit', type: 'timed', set: s, totalSets: ex.sets || 1, muscle: ex.muscle });
+      } else {
+        timerQueue.push({ name: ex.name, duration: ex.duration || 30, form: ex.form, phase: 'Main Circuit', type: 'timed', set: s, totalSets: ex.sets || 1, muscle: ex.muscle });
+      }
+      // Add rest between sets (not after last set of last exercise)
+      if (ex.rest && s < (ex.sets || 1)) {
+        timerQueue.push({ name: 'Rest', duration: ex.rest, form: 'Shake it out, breathe, get ready for the next set.', phase: 'Rest', type: 'rest' });
+      } else if (ex.rest) {
+        timerQueue.push({ name: 'Rest', duration: ex.rest, form: 'Breathe and prepare for the next exercise.', phase: 'Rest', type: 'rest' });
+      }
+    }
+  });
+  // Remove last rest
+  if (timerQueue.length > 0 && timerQueue[timerQueue.length - 1].type === 'rest') {
+    timerQueue.pop();
+  }
+
+  // Cool-down
+  day.cooldown.forEach(key => {
+    const ex = EXERCISES[key];
+    timerQueue.push({ name: ex.name, duration: ex.duration, form: ex.form, phase: 'Cool-Down', type: 'timed' });
+  });
+
+  timerIndex = 0;
+  showTimerStep();
+}
+
+function showTimerStep() {
+  if (timerIndex >= timerQueue.length) {
+    // Workout complete
+    finishGuidedWorkout();
+    return;
+  }
+
+  const step = timerQueue[timerIndex];
+  const overlay = document.getElementById('timerOverlay');
+  const nameEl = document.getElementById('timerExName');
+  const prescEl = document.getElementById('timerPrescription');
+  const setInfoEl = document.getElementById('timerSetInfo');
+  const valueEl = document.getElementById('timerValue');
+  const labelEl = document.getElementById('timerLabel');
+  const formEl = document.getElementById('timerFormTip');
+  const actionBtn = document.getElementById('timerActionBtn');
+  const skipBtn = document.getElementById('timerSkipBtn');
+
+  nameEl.textContent = step.name;
+  formEl.textContent = step.form || '';
+
+  if (step.type === 'reps') {
+    prescEl.textContent = `${step.reps} reps`;
+    setInfoEl.textContent = step.totalSets > 1 ? `Set ${step.set} of ${step.totalSets} &middot; ${step.phase}` : step.phase;
+    setInfoEl.innerHTML = setInfoEl.textContent;
+    valueEl.textContent = step.reps;
+    labelEl.textContent = 'reps';
+    actionBtn.textContent = 'Done';
+    actionBtn.onclick = () => nextTimerStep();
+    skipBtn.textContent = 'Skip';
+    skipBtn.onclick = () => nextTimerStep();
+    clearInterval(timerInterval);
+    // Hide arc
+    document.getElementById('timerArc').style.strokeDasharray = '0 999';
+  } else {
+    const dur = step.duration || 30;
+    prescEl.textContent = `${dur} seconds`;
+    setInfoEl.innerHTML = step.set ? `Set ${step.set} of ${step.totalSets} &middot; ${step.phase}` : step.phase;
+    timerSeconds = dur;
+    timerTotalSeconds = dur;
+    valueEl.textContent = timerSeconds;
+    labelEl.textContent = 'seconds';
+    actionBtn.textContent = 'Pause';
+    timerPaused = false;
+    actionBtn.onclick = () => togglePauseTimer(actionBtn);
+    skipBtn.textContent = 'Skip';
+    skipBtn.onclick = () => { clearInterval(timerInterval); nextTimerStep(); };
+    startCountdown(valueEl, actionBtn);
+  }
+
+  overlay.classList.add('active');
+}
+
+function startCountdown(valueEl, actionBtn) {
+  clearInterval(timerInterval);
+  const circ = 2 * Math.PI * 100;
+  const arc = document.getElementById('timerArc');
+  arc.style.strokeDasharray = `${circ} ${circ}`;
+  arc.style.strokeDashoffset = '0';
+
+  timerInterval = setInterval(() => {
+    if (timerPaused) return;
+    timerSeconds--;
+    valueEl.textContent = timerSeconds;
+    const progress = 1 - (timerSeconds / timerTotalSeconds);
+    arc.style.strokeDashoffset = (progress * circ).toString();
+
+    if (timerSeconds <= 0) {
+      clearInterval(timerInterval);
+      nextTimerStep();
+    }
+  }, 1000);
+}
+
+function togglePauseTimer(btn) {
+  timerPaused = !timerPaused;
+  btn.textContent = timerPaused ? 'Resume' : 'Pause';
+}
+
+function nextTimerStep() {
+  timerIndex++;
+  showTimerStep();
+}
+
+async function finishGuidedWorkout() {
+  const overlay = document.getElementById('timerOverlay');
+  overlay.classList.remove('active');
+  clearInterval(timerInterval);
+
+  const dayNum = activeWorkoutDay;
+  const elapsed = Math.round((Date.now() - workoutStartTime) / 60000);
+
+  if (!state.completedDays.includes(dayNum)) {
+    state.completedDays.push(dayNum);
+    state.totalMinutes += Math.max(elapsed, 1);
+    state.history.push({ day: dayNum, date: new Date().toISOString(), duration: elapsed || 20, type: 'workout' });
+    calculateStreak();
+    checkAchievements();
+    await saveState();
+  }
+
+  showCompletionScreen(dayNum);
+}
+
+// ============================================================
+// BOOT
+// ============================================================
+init();
+</script>
+</body>
+</html>

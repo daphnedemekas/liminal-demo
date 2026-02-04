@@ -1,0 +1,5 @@
+Quarter,Tax Year,Income Period Start,Income Period End,Payment Deadline,Gross Income,Total Expenses,Net Profit,SE Tax Estimate,Federal Income Tax Est,State Tax Est,Total Est Tax Due,Amount Paid,Payment Status,Confirmation Number,Notes
+2026 Q1,2026,2026-01-01,2026-03-31,2026-04-15,0,0,0,0,0,0,0,0,Pending,,Update monthly as income comes in
+2026 Q2,2026,2026-04-01,2026-05-31,2026-06-15,0,0,0,0,0,0,0,0,Pending,,Note: Only 2 months of income
+2026 Q3,2026,2026-06-01,2026-08-31,2026-09-15,0,0,0,0,0,0,0,0,Pending,,3 months of income
+2026 Q4,2026,2026-09-01,2026-12-31,2027-01-15,0,0,0,0,0,0,0,0,Pending,,Can skip if filing by Feb 2 2027

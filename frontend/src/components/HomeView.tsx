@@ -45,7 +45,7 @@ export function HomeView({
   onRunComplete,
   userName,
 }: Props) {
-  const [chatOpen, setChatOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(true);
   const [chatWidth, setChatWidth] = useState(420);
   const [insightsRefresh, setInsightsRefresh] = useState(0);
   const dragging = useRef(false);

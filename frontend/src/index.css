@@ -776,6 +776,7 @@ body {
 }
 .home-chat-panel {
   width: 0;
+  height: 100%;
   overflow: hidden;
   transition: width 0.25s ease;
   border-left: 1px solid var(--border-hairline);

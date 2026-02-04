@@ -416,6 +416,46 @@ class DiscoveryEngine:
 
         return result
 
+    def force_propose(self, user_id: str, domain_name: str, db: Session) -> dict:
+        """Force project proposal generation for a domain, skipping _should_advance().
+
+        Returns a result dict with proposed_projects (same shape as process_response),
+        or an error message if the domain has no conversation yet.
+        """
+        user = db.query(UserProfile).filter_by(id=user_id).first()
+        if not user:
+            raise ValueError(f"User {user_id} not found")
+
+        domain = db.query(DiscoveryDomain).filter_by(user_id=user_id, domain=domain_name).first()
+        if not domain:
+            raise ValueError(f"Domain {domain_name} not found for user {user_id}")
+
+        conv = domain.conversation or []
+        if not any(m.get("role") == "user" for m in conv):
+            return {"message": "Send at least one message before proposing projects.", "actions": [], "domain": domain_name}
+
+        schema = domain.schema or {}
+
+        # Generate proposals directly (skip _should_advance)
+        result = self._propose_projects(user, domain, schema, conv, db)
+
+        # Save assistant message to conversation
+        conv = list(domain.conversation or [])
+        conv.append({"role": "assistant", "content": result["message"]})
+        domain.conversation = list(conv)
+        db.commit()
+
+        result["domain"] = domain.domain
+        result["depth"] = domain.depth
+
+        # Attach accumulated research topics for batch execution
+        key = f"{user_id}:{domain.domain}"
+        accumulated = self._accumulated_research.pop(key, [])
+        if accumulated:
+            result["_accumulated_topics"] = accumulated
+
+        return result
+
     def accept_projects(self, user_id: str, project_indices: list[int], db: Session, finalize: bool = False, domain: str | None = None) -> list[dict]:
         """Create Projects from proposals. Only advances domain when finalize=True or all proposals are accepted."""
         if domain:

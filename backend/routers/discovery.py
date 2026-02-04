@@ -45,6 +45,11 @@ class AcceptProjectsRequest(BaseModel):
     domain: str
 
 
+class ForceProposeRequest(BaseModel):
+    user_id: str
+    domain: str
+
+
 class UserIdRequest(BaseModel):
     user_id: str
 
@@ -142,6 +147,43 @@ async def respond(req: RespondRequest, db: Session = Depends(get_db)):
             yield _sse_event("error", {"detail": str(e)})
 
     return StreamingResponse(_respond_stream(), media_type="text/event-stream")
+
+
+@router.post("/force-propose")
+async def force_propose(req: ForceProposeRequest, db: Session = Depends(get_db)):
+    """Force project proposal generation for a domain, skipping organic advancement. Returns SSE stream."""
+
+    async def _propose_stream():
+        try:
+            yield _sse_event("status", {"message": "Generating project proposals…"})
+
+            result = discovery_engine.force_propose(req.user_id, req.domain, db)
+
+            # If proposals were generated, research and refine them
+            accumulated_topics = result.pop("_accumulated_topics", None)
+            if result.get("proposed_projects"):
+                yield _sse_event("status", {"message": "Researching existing solutions…"})
+                try:
+                    result = await asyncio.wait_for(
+                        discovery_engine.research_and_refine_proposals(
+                            req.user_id, result, db,
+                            accumulated_topics=accumulated_topics,
+                        ),
+                        timeout=60.0,
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning("Force-propose research timed out, using unresearched proposals")
+                except Exception as e:
+                    logger.warning(f"Force-propose research failed, using unresearched proposals: {e}")
+
+            yield _sse_event("message", result)
+        except ValueError as e:
+            yield _sse_event("error", {"detail": str(e)})
+        except Exception as e:
+            logger.exception(f"force_propose failed: {e}")
+            yield _sse_event("error", {"detail": str(e)})
+
+    return StreamingResponse(_propose_stream(), media_type="text/event-stream")
 
 
 @router.post("/accept-projects")

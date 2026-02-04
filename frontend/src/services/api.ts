@@ -372,6 +372,64 @@ export const api = {
     }
   },
 
+  forcePropose: async (
+    userId: string,
+    domain: string,
+    onStatus: (message: string) => void,
+    onMessage: (data: DiscoveryResponse) => void,
+    onError: (err: Error) => void,
+  ) => {
+    try {
+      const res = await fetch(`${BASE}/api/discovery/force-propose`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: userId, domain }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(err.detail || res.statusText);
+      }
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No response body");
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() || "";
+
+        for (const part of parts) {
+          let eventType = "message";
+          let data = "";
+          for (const line of part.split("\n")) {
+            if (line.startsWith("event: ")) eventType = line.slice(7);
+            else if (line.startsWith("data: ")) data = line.slice(6);
+          }
+          if (!data) continue;
+          try {
+            const parsed = JSON.parse(data);
+            if (eventType === "status") {
+              onStatus(parsed.message);
+            } else if (eventType === "message") {
+              onMessage(parsed as DiscoveryResponse);
+            } else if (eventType === "error") {
+              onError(new Error(parsed.detail || "Unknown error"));
+            }
+          } catch {
+            // skip malformed events
+          }
+        }
+      }
+    } catch (err) {
+      onError(err as Error);
+    }
+  },
+
   acceptDiscoveryProjects: (userId: string, projectIndices: number[], domain: string) =>
     request<{ created_projects: { id: number; name: string; description: string }[]; next_domain: string | null; opening: DiscoveryResponse | null; all_complete: boolean }>(
       "/api/discovery/accept-projects",

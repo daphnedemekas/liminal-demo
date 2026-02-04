@@ -161,6 +161,44 @@ export function DomainChat({ userId, domain, onProposalsReceived }: Props) {
     setLoading(false);
   }, [input, loading, userId, domain.domain, onProposalsReceived]);
 
+  const handleForcePropose = useCallback(async () => {
+    if (loading) return;
+    setLoading(true);
+
+    await api.forcePropose(
+      userId,
+      domain.domain,
+      (status) => {
+        setStatusMessage(status);
+      },
+      (result) => {
+        setStatusMessage(null);
+        if (result.proposed_projects?.length && onProposalsReceived) {
+          onProposalsReceived(result.proposed_projects);
+          setMessages((prev) => [
+            ...prev,
+            { role: "assistant", content: result.message, actions: [] },
+          ]);
+        } else {
+          setMessages((prev) => [
+            ...prev,
+            { role: "assistant", content: result.message, actions: result.actions || [] },
+          ]);
+        }
+        setLoading(false);
+      },
+      (err) => {
+        setStatusMessage(null);
+        console.error("Force propose failed:", err);
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: "Something went wrong generating proposals. Try again?" },
+        ]);
+        setLoading(false);
+      },
+    );
+  }, [loading, userId, domain.domain, onProposalsReceived]);
+
   const handleAction = (action: ChatAction) => {
     handleSend(action.action_text ?? "");
   };
@@ -176,6 +214,13 @@ export function DomainChat({ userId, domain, onProposalsReceived }: Props) {
     <div className="chat-panel">
       <div className="chat-header">
         <h3>{domain.label}</h3>
+        {!loading &&
+          messages.some((m) => m.role === "user") &&
+          !domain.proposed_projects?.length && (
+            <button className="propose-projects-btn" onClick={handleForcePropose}>
+              Propose Projects
+            </button>
+          )}
         {loading && <span className="running-indicator">{statusMessage || "Thinking…"}</span>}
       </div>
 

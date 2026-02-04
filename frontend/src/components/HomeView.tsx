@@ -125,9 +125,6 @@ export function HomeView({
                   >
                     <div className="domain-card-header">
                       <h3>{label}</h3>
-                      <span className={`domain-status-badge ${d.status}`}>
-                        {STATUS_LABELS[d.status] || d.status}
-                      </span>
                     </div>
                     <div className="domain-card-meta">
                       {domainProjects.length > 0

@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pitch Prep: Justine Moore Simulation</title>
+<style>
+  :root {
+    --bg: #0d0d0d;
+    --surface: #1a1a1a;
+    --surface2: #242424;
+    --accent: #6C5CE7;
+    --accent-light: #a29bfe;
+    --green: #00b894;
+    --amber: #fdcb6e;
+    --red: #e17055;
+    --text: #f0f0f0;
+    --text-dim: #999;
+    --border: #333;
+    --radius: 12px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    line-height: 1.6;
+  }
+
+  .app { max-width: 900px; margin: 0 auto; padding: 20px; }
+
+  /* Header */
+  .header {
+    text-align: center;
+    padding: 40px 0 30px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 30px;
+  }
+  .header h1 {
+    font-size: 28px; font-weight: 700; margin-bottom: 6px;
+    background: linear-gradient(135deg, var(--accent-light), var(--accent));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .header .subtitle { color: var(--text-dim); font-size: 14px; }
+
+  /* Scenario tabs */
+  .scenarios {
+    display: flex; gap: 10px; overflow-x: auto; padding-bottom: 10px;
+    margin-bottom: 24px; scrollbar-width: thin;
+  }
+  .scenario-btn {
+    flex-shrink: 0; padding: 10px 18px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 999px;
+    color: var(--text-dim); font-size: 13px; cursor: pointer;
+    transition: all 0.2s; white-space: nowrap;
+  }
+  .scenario-btn:hover { border-color: var(--accent); color: var(--text); }
+  .scenario-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  /* Stats */
+  .stats-bar { display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
+  .stat {
+    flex: 1; min-width: 120px; background: var(--surface);
+    border-radius: var(--radius); padding: 14px 16px; text-align: center;
+  }
+  .stat-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat-value { font-size: 22px; font-weight: 700; margin-top: 4px; }
+  .stat-value.green { color: var(--green); }
+  .stat-value.amber { color: var(--amber); }
+  .stat-value.red { color: var(--red); }
+
+  /* Progress */
+  .progress-bar { width: 100%; height: 4px; background: var(--surface2); border-radius: 2px; margin-bottom: 24px; overflow: hidden; }
+  .progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-light)); border-radius: 2px; transition: width 0.4s ease; }
+
+  /* Question card */
+  .question-card {
+    background: var(--surface); border-radius: var(--radius); padding: 28px;
+    margin-bottom: 20px; border-left: 4px solid var(--accent);
+  }
+  .question-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .question-category { font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--accent-light); font-weight: 600; }
+  .question-difficulty { font-size: 11px; padding: 3px 10px; border-radius: 999px; font-weight: 600; }
+  .diff-warm { background: rgba(0,184,148,0.15); color: var(--green); }
+  .diff-pointed { background: rgba(253,203,110,0.15); color: var(--amber); }
+  .diff-hardball { background: rgba(225,112,85,0.15); color: var(--red); }
+  .question-text { font-size: 18px; font-weight: 600; line-height: 1.5; margin-bottom: 10px; }
+  .question-context { font-size: 13px; color: var(--text-dim); font-style: italic; line-height: 1.5; }
+
+  /* Answer */
+  .answer-area { margin-bottom: 20px; }
+  .answer-area textarea {
+    width: 100%; min-height: 140px; background: var(--surface2);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px; color: var(--text); font-size: 15px;
+    font-family: inherit; line-height: 1.6; resize: vertical; transition: border-color 0.2s;
+  }
+  .answer-area textarea:focus { outline: none; border-color: var(--accent); }
+  .answer-area textarea::placeholder { color: #555; }
+  .answer-controls { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+
+  .btn { padding: 10px 22px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; transition: all 0.2s; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #5a4bd4; }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-secondary { background: var(--surface2); color: var(--text-dim); border: 1px solid var(--border); }
+  .btn-secondary:hover { border-color: var(--accent); color: var(--text); }
+  .btn-hint { background: transparent; color: var(--accent-light); border: 1px dashed var(--accent); margin-left: auto; }
+  .btn-hint:hover { background: rgba(108,92,231,0.1); }
+
+  /* Feedback */
+  .feedback-panel { background: var(--surface); border-radius: var(--radius); overflow: hidden; margin-bottom: 24px; display: none; }
+  .feedback-panel.visible { display: block; }
+  .feedback-header { padding: 16px 20px; display: flex; align-items: center; gap: 10px; font-weight: 600; }
+  .feedback-header.strong { background: rgba(0,184,148,0.1); color: var(--green); }
+  .feedback-header.decent { background: rgba(253,203,110,0.1); color: var(--amber); }
+  .feedback-header.weak { background: rgba(225,112,85,0.1); color: var(--red); }
+  .feedback-body { padding: 20px; }
+  .feedback-section { margin-bottom: 16px; }
+  .feedback-section:last-child { margin-bottom: 0; }
+  .feedback-section h4 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dim); margin-bottom: 6px; }
+  .feedback-section p { font-size: 14px; line-height: 1.6; color: var(--text); }
+
+  .score-pills { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .score-pill { font-size: 12px; padding: 4px 12px; border-radius: 999px; background: var(--surface2); border: 1px solid var(--border); }
+  .score-pill.hit { border-color: var(--green); color: var(--green); }
+  .score-pill.miss { border-color: var(--red); color: var(--red); opacity: 0.6; }
+
+  .example-response { background: var(--surface2); border-radius: 8px; padding: 16px; margin-top: 12px; border-left: 3px solid var(--accent); }
+  .example-response p { font-size: 13px; color: var(--text-dim); line-height: 1.7; }
+
+  /* Hint */
+  .hint-box {
+    background: rgba(108,92,231,0.08); border: 1px dashed var(--accent);
+    border-radius: 8px; padding: 14px 18px; margin-bottom: 16px;
+    font-size: 13px; color: var(--accent-light); line-height: 1.6; display: none;
+  }
+  .hint-box.visible { display: block; }
+
+  /* History */
+  .history-section { margin-top: 40px; border-top: 1px solid var(--border); padding-top: 24px; }
+  .history-section h3 { font-size: 16px; margin-bottom: 16px; color: var(--text-dim); }
+  .history-item {
+    background: var(--surface); border-radius: var(--radius); padding: 16px;
+    margin-bottom: 10px; cursor: pointer; transition: border-color 0.2s; border: 1px solid transparent;
+  }
+  .history-item:hover { border-color: var(--border); }
+  .history-item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .history-q { font-size: 14px; font-weight: 600; }
+  .history-score { font-size: 13px; font-weight: 700; }
+  .history-answer { font-size: 13px; color: var(--text-dim); line-height: 1.5; display: none; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+  .history-item.expanded .history-answer { display: block; }
+
+  /* Timer */
+  .timer { font-size: 13px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+  .timer.warning { color: var(--amber); }
+  .timer.danger { color: var(--red); }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 100; opacity: 0; pointer-events: none; transition: opacity 0.2s;
+  }
+  .modal-overlay.visible { opacity: 1; pointer-events: all; }
+  .modal { background: var(--surface); border-radius: var(--radius); padding: 32px; max-width: 560px; width: 90%; max-height: 80vh; overflow-y: auto; }
+  .modal h2 { font-size: 20px; margin-bottom: 4px; }
+  .modal .subtitle { font-size: 13px; color: var(--text-dim); margin-bottom: 20px; }
+  .form-group { margin-bottom: 16px; }
+  .form-group label { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dim); margin-bottom: 6px; }
+  .form-group input, .form-group textarea {
+    width: 100%; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 14px; color: var(--text); font-size: 14px; font-family: inherit;
+  }
+  .form-group input:focus, .form-group textarea:focus { outline: none; border-color: var(--accent); }
+  .form-group textarea { min-height: 80px; resize: vertical; }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+
+  @media (max-width: 600px) {
+    .app { padding: 12px; }
+    .header { padding: 24px 0 20px; }
+    .header h1 { font-size: 22px; }
+    .question-text { font-size: 16px; }
+    .question-card { padding: 20px; }
+    .stats-bar { gap: 8px; }
+    .stat { min-width: 80px; padding: 10px; }
+    .stat-value { font-size: 18px; }
+  }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+
+  <div class="header">
+    <h1>Pitch Prep: Justine Moore</h1>
+    <div class="subtitle">Simulating a16z Partner — AI Consumer & Prosumer Focus • Seed / Series A</div>
+  </div>
+
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+    <span style="font-size:13px;color:var(--text-dim);" id="company-label">Pitching: Envisage</span>
+    <button class="btn btn-secondary" onclick="openCustomize()" style="font-size:12px;padding:6px 14px;">Customize Pitch</button>
+  </div>
+
+  <div class="scenarios" id="scenario-tabs"></div>
+
+  <div class="progress-bar">
+    <div class="progress-fill" id="progress-fill" style="width:0%"></div>
+  </div>
+
+  <div class="stats-bar">
+    <div class="stat">
+      <div class="stat-label">Questions</div>
+      <div class="stat-value" id="stat-questions">0 / 0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Avg Score</div>
+      <div class="stat-value green" id="stat-score">—</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Strongest</div>
+      <div class="stat-value" id="stat-strong" style="font-size:14px;">—</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Response Time</div>
+      <div class="timer" id="timer">0:00</div>
+    </div>
+  </div>
+
+  <div class="question-card" id="question-card">
+    <div class="question-meta">
+      <span class="question-category" id="q-category">—</span>
+      <span class="question-difficulty" id="q-difficulty">—</span>
+    </div>
+    <div class="question-text" id="q-text">Select a scenario above to begin.</div>
+    <div class="question-context" id="q-context"></div>
+  </div>
+
+  <div class="hint-box" id="hint-box"></div>
+
+  <div class="answer-area" id="answer-area" style="display:none;">
+    <textarea id="answer-input" placeholder="Type your pitch response here... Speak as if you're face-to-face with Justine."></textarea>
+    <div class="answer-controls">
+      <button class="btn btn-primary" id="submit-btn" onclick="submitAnswer()">Submit Response</button>
+      <button class="btn btn-secondary" onclick="skipQuestion()">Skip</button>
+      <button class="btn btn-hint" onclick="showHint()">Show Hint</button>
+    </div>
+  </div>
+
+  <div class="feedback-panel" id="feedback-panel">
+    <div class="feedback-header" id="feedback-header">
+      <span id="feedback-icon"></span>
+      <span id="feedback-title"></span>
+    </div>
+    <div class="feedback-body" id="feedback-body"></div>
+    <div style="padding:0 20px 20px;">
+      <button class="btn btn-primary" onclick="nextQuestion()">Next Question →</button>
+    </div>
+  </div>
+
+  <div class="history-section" id="history-section" style="display:none;">
+    <h3>Previous Responses</h3>
+    <div id="history-list"></div>
+  </div>
+</div>
+
+<!-- Customize Modal -->
+<div class="modal-overlay" id="customize-modal">
+  <div class="modal">
+    <h2>Customize Your Pitch</h2>
+    <div class="subtitle">Tailor the simulation to your company specifics</div>
+    <div class="form-group">
+      <label>Company Name</label>
+      <input id="c-name" type="text" value="Envisage" />
+    </div>
+    <div class="form-group">
+      <label>One-Line Value Proposition</label>
+      <input id="c-vp" type="text" value="A personal AI mediation layer that learns who you are and bootstraps you into agentic systems." />
+    </div>
+    <div class="form-group">
+      <label>Target User</label>
+      <input id="c-user" type="text" value="Knowledge workers and individuals overwhelmed by the AI explosion" />
+    </div>
+    <div class="form-group">
+      <label>Stage</label>
+      <input id="c-stage" type="text" value="Pre-Seed / Seed" />
+    </div>
+    <div class="form-group">
+      <label>Key Differentiator</label>
+      <textarea id="c-diff">Human agency-first approach: instead of replacing user decisions, Envisage decomposes goals into agentic workflows while reinforcing the user's sense of ownership and self-efficacy.</textarea>
+    </div>
+    <div class="form-group">
+      <label>Traction / Metrics (optional)</label>
+      <textarea id="c-traction" placeholder="e.g. 500 beta users, 40% weekly retention..."></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeCustomize()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveCustomize()">Save & Restart</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// SCENARIOS & QUESTION BANK
+// ============================================================
+const SCENARIOS = [
+  { id: 'opener', label: 'Opening Pitch', icon: '🎯' },
+  { id: 'product', label: 'Product Deep-Dive', icon: '🛠' },
+  { id: 'market', label: 'Market & Timing', icon: '📊' },
+  { id: 'agency', label: 'Human Agency', icon: '🧠' },
+  { id: 'business', label: 'Business Model', icon: '💰' },
+  { id: 'hardball', label: 'Hardball Round', icon: '🔥' },
+];
+
+let company = {
+  name: 'Envisage',
+  vp: 'A personal AI mediation layer that learns who you are and bootstraps you into agentic systems.',
+  user: 'Knowledge workers and individuals overwhelmed by the AI explosion',
+  stage: 'Pre-Seed / Seed',
+  diff: "Human agency-first approach: instead of replacing user decisions, Envisage decomposes goals into agentic workflows while reinforcing the user's sense of ownership and self-efficacy.",
+  traction: '',
+};
+
+const QUESTIONS = {
+  opener: [
+    {
+      text: "Walk me through what Envisage actually does in 60 seconds — pretend I'm a user, not an investor.",
+      category: 'Elevator Pitch', difficulty: 'warm',
+      context: "Justine tests whether founders can explain simply. She's said the best AI tools \"translate cutting-edge models into an accessible, effective UI\" — she wants clarity over jargon.",
+      keyPoints: ['user-centric framing', 'clear problem statement', 'concrete example', 'no jargon'],
+      hint: "Lead with a specific user pain point. Justine wrote about \"exporting your brain\" — unstructured knowledge in your head that AI should translate into action. Frame Envisage as the bridge.",
+      exampleResponse: "\"Imagine you just heard about five new AI tools this week — an email assistant, a meeting summarizer, a code helper, a writing tool, and a scheduling agent. Which ones actually matter for you? Most people freeze. Envisage is the layer that already knows you — your goals, your workflow, your constraints — and surfaces the right agentic tools at the right time. Instead of you hunting through an ocean of AI products, Envisage learns your life context and brings the right capabilities to you, while keeping you in the driver's seat.\"",
+    },
+    {
+      text: "Why are you the right person to build this?",
+      category: 'Founder-Market Fit', difficulty: 'pointed',
+      context: "Justine heavily weighs founder backgrounds. For Mirelo, founders' PhD-level ML backgrounds plus being \"former musicians\" was decisive. For Krea, founders were \"OGs of the generative art scene.\"",
+      keyPoints: ['personal connection to problem', 'domain expertise', 'unique insight from experience', 'execution proof'],
+      hint: "She wants to see you've lived this problem, not just analyzed it. Connect your background directly to the user pain. Show a unique vantage point.",
+      exampleResponse: "\"I've spent years at the intersection of [relevant experience]. But honestly, I'm building this because I am the user. When the AI wave hit, I spent months trying to integrate different AI tools into my life — and I watched as most people around me couldn't even start. That gap between AI's potential and human adoption isn't a technology problem; it's a mediation problem. I've been obsessing over self-efficacy theory and how to scaffold people into new capabilities without making them feel replaced.\"",
+    },
+    {
+      text: "I invest in a lot of AI companies. Why should I pay attention to this one versus the 50 other pitches I'll hear this week?",
+      category: 'Differentiation', difficulty: 'hardball',
+      context: "Justine sees hundreds of AI pitches. She's noted \"subtle product design choices can matter more than raw model quality.\" She wants to know why you're not just another wrapper.",
+      keyPoints: ['structural differentiation', 'why not a feature', 'compounding advantage', 'specific to Justine\'s thesis'],
+      hint: "Connect to her published thesis. She wrote we're in \"the Unix era of AI agents\" — powerful capabilities buried under terminal commands and API keys. Position Envisage as the Canva/Squarespace moment for personal AI.",
+      exampleResponse: "\"You've written that we're in the Unix era of AI agents — the raw capabilities are incredible but buried under terminal commands and YAML configs. Most AI startups are building individual tools. We're building the layer that makes all of them accessible to the person who will never open a terminal. This isn't an AI app — it's the interface between a human and their constellation of AI agents. The compounding advantage is the personal context graph: every interaction makes the mediation smarter. That's a moat no individual tool can replicate.\"",
+    },
+  ],
+  product: [
+    {
+      text: "Show me the product. Walk me through exactly what happens when a new user opens this for the first time.",
+      category: 'User Experience', difficulty: 'warm',
+      context: "Justine and Olivia \"spend significant time testing AI-powered products, going beyond staged demos to see what tools can actually do.\" She values product velocity over polish.",
+      keyPoints: ['concrete walkthrough', 'first-touch experience', 'time to value', 'low friction onboarding'],
+      hint: "She tests every product herself. Describe a specific, tangible flow — not abstract architecture. Focus on what the user sees and does in the first 5 minutes.",
+      exampleResponse: "\"When you open Envisage, you don't see a blank chat box. You see a guided discovery conversation — the app interviewing you. It asks about three things: what's overwhelming you right now, what matters most to you, and what tools you already use. Within five minutes, it's built an initial profile and suggested two or three specific agentic workflows. For example, if you mention you're drowning in email but also trying to learn Spanish, it might surface an email triage agent and a personalized language learning flow — both configured to your constraints.\"",
+    },
+    {
+      text: "What's the iteration loop? When a user's first experience with an AI agent isn't great, what happens?",
+      category: 'Product Depth', difficulty: 'pointed',
+      context: "Justine wrote: \"almost no work product is 'one shot' — especially with AI, when there's inherent randomness.\" She considers the refinement experience a critical differentiator.",
+      keyPoints: ['feedback mechanism', 'user control over refinement', 'learning from failures', 'preserving user agency'],
+      hint: "Core to her prosumer thesis. She believes the best AI tools give users \"control over iteration\" rather than just generating outputs. Show how Envisage handles the mismatch between expectation and reality.",
+      exampleResponse: "\"This is where our agency-first approach matters most. When an agent underperforms, Envisage doesn't just say 'try again.' It surfaces what went wrong in plain language — 'this email agent drafted formal responses, but your style is casual.' The user adjusts a preference, not a prompt. Over time, the system builds a rich context model that reduces mismatch. We think the failure state is the most important design surface in AI. If you handle it well, users trust the system more, not less.\"",
+    },
+    {
+      text: "How are you thinking about multimodality? Your product seems text-heavy — but the world is moving to voice, image, video.",
+      category: 'Product Vision', difficulty: 'pointed',
+      context: "Justine invested in ElevenLabs (voice), Hedra (video), Black Forest Labs (images), Mirelo (audio). She co-authored that 2026 is \"the year AI goes multimodal.\"",
+      keyPoints: ['multimodal vision', 'concrete modality plans', 'user context across modalities', 'not just text-in-text-out'],
+      hint: "She invests heavily across modalities. Show you're thinking about voice, visual, and audio — even if early. Her \"export your brain\" essay envisions AI that ingests information \"across all content modalities.\"",
+      exampleResponse: "\"We're text-first right now, but the personal context graph is modality-agnostic. Phase two introduces voice-first interaction — imagine telling Envisage about your day on your commute, and it updates your context and queues up the right agents. The key insight is that the mediation layer shouldn't be tied to a single modality — it should meet users in whatever modality is natural for the moment.\"",
+    },
+    {
+      text: "What can a user do with Envisage today that they literally cannot do with ChatGPT plus a few browser extensions?",
+      category: 'Competitive Moat', difficulty: 'hardball',
+      context: "Justine noted startups need \"why a startup wins vs. the model labs\" — she acknowledges OpenAI must balance model training and user support while startups can be single-minded about UX.",
+      keyPoints: ['specific capability gap', 'persistent context advantage', 'cross-tool orchestration', 'what ChatGPT can\'t do'],
+      hint: "Don't badmouth ChatGPT. Show the structural gap: ChatGPT is session-based; Envisage is persistent, cross-domain. The moat is the user model, not any single interaction.",
+      exampleResponse: "\"ChatGPT is an incredible hammer — but it treats every conversation as a new nail. It doesn't know that you had a stressful week, that you're saving for a house, that you learn best in the morning, and that you have a pitch meeting on Thursday. Envisage holds all of that context persistently and uses it to orchestrate the right tools at the right moments. The personal context graph is the moat — it compounds with every interaction across every domain of your life.\"",
+    },
+  ],
+  market: [
+    {
+      text: "Why now? People have talked about \"personal AI assistants\" since Siri launched. What's different in 2026?",
+      category: 'Timing', difficulty: 'pointed',
+      context: "Justine looks for clear \"why now.\" She's written that 2026 is when \"AI apps start to demonstrate real business models\" and agentic capabilities become practical.",
+      keyPoints: ['specific technology enablers', 'market readiness signals', 'why previous attempts failed', 'what changed'],
+      hint: "Three converging forces: (1) agentic AI actually works now, (2) consumers are overwhelmed by AI tool proliferation, (3) MCP and open protocols enable cross-tool orchestration for the first time.",
+      exampleResponse: "\"Three things converged. First, agentic AI actually works now — agents can reliably book flights, draft documents, manage calendars. Second, the AI explosion created the problem we solve: 10,000+ AI tools, and the average person has no idea which ones matter. Third, protocols like MCP now allow agents to talk to each other through standardized interfaces. Siri failed because it was a single, mediocre agent trying to do everything. We're building the orchestration layer for an ecosystem of specialized agents that finally exist.\"",
+    },
+    {
+      text: "Who else is building in this space? How do you think about Rabbit, Humane, and the personal AI hardware plays?",
+      category: 'Competition', difficulty: 'pointed',
+      context: "Justine tracks the consumer AI landscape closely. She co-authored \"State of Consumer AI 2025.\" She's seen high-profile consumer AI failures.",
+      keyPoints: ['competitive awareness', 'why they failed', 'different approach', 'software vs hardware advantage'],
+      hint: "Show you understand why Rabbit and Humane struggled: coupling hardware to the intelligence layer. Position Envisage as software-native, meeting users on devices they already have.",
+      exampleResponse: "\"Rabbit and Humane proved the appetite but coupled the mediation layer to new hardware — poor UX and no ecosystem. We're software-native, meeting you on your phone, laptop, and browser. On the software side, there are AI aggregators, but they're tool-centric, not user-centric. They say 'here are 50 agents, pick one.' We say 'here's what you need right now, already configured.' The fundamental difference is starting from the person, not the product catalog.\"",
+    },
+    {
+      text: "What's the TAM here? Be specific — don't tell me \"everyone who uses the internet.\"",
+      category: 'Market Sizing', difficulty: 'hardball',
+      context: "Justine invests Seed to Series A with checks up to $40M. She needs venture-scale markets but wants founders to be rigorous.",
+      keyPoints: ['bottom-up sizing', 'specific segment', 'willingness to pay signal', 'expansion path'],
+      hint: "Size bottom-up from a beachhead. Start with knowledge workers already paying for AI tools ($10-30/mo), then show expansion. Cite real numbers.",
+      exampleResponse: "\"We're starting with knowledge workers who already pay for AI tools — about 150 million globally. Our beachhead is the subset using 3+ AI tools who feel overwhelmed by fragmentation — roughly 20 million people. At $20/month, that's a $4.8B beachhead. Expansion goes to SMB owners needing AI orchestration, then any consumer navigating the agentic economy. But I'd rather dominate the first 20 million than hand-wave about billions.\"",
+    },
+  ],
+  agency: [
+    {
+      text: "You talk about \"human agency\" a lot. I write about this too. What does that actually mean in your product — not philosophically, but in the UI?",
+      category: 'Core Thesis', difficulty: 'pointed',
+      context: "Justine's prosumer thesis centers on preserving user control. She looks for products where AI and human work \"side-by-side\" and users maintain control over the decision process.",
+      keyPoints: ['specific UI decisions', 'user control points', 'transparency', 'not just a philosophy'],
+      hint: "Get concrete. Describe specific interaction patterns: where does the system pause for approval? How does it show confidence? Where does the user override? She wants \"decision points that need approval.\"",
+      exampleResponse: "\"Three specific things. First, every agent action has a confidence indicator — at 90% confidence, it acts; at 60%, it drafts and asks. The user sets those thresholds. Second, we show the 'why' — not just 'I scheduled this meeting' but 'because you mentioned wanting to reconnect with Sarah, and you're both free Thursday.' Third, the system surfaces 'decision points' — moments where we say 'this is a judgment call. Here are your options.' We never silently decide things that matter.\"",
+    },
+    {
+      text: "There's a tension between making AI effortless and keeping users engaged. If Envisage does everything, don't I become dependent and lose the very agency you're trying to build?",
+      category: 'Product Philosophy', difficulty: 'hardball',
+      context: "The deepest question in Justine's thesis. She's written about whether AI complements or competes with the user's skills — the \"AI-Creative Agency Framework.\"",
+      keyPoints: ['scaffolding not replacing', 'self-efficacy theory', 'progressive autonomy', 'user grows over time'],
+      hint: "Make-or-break question. Reference scaffolding: Envisage handles cognitive load while teaching users to be better orchestrators. Users should feel more capable over time, not more dependent.",
+      exampleResponse: "\"This is the core design principle. We build on Bandura's self-efficacy theory — the goal isn't to do things for you, it's to make you feel and be more capable. Envisage handles the cognitive overhead — finding tools, configuring them, managing data flows — but strategic decisions stay with you. Over time, we progressively reveal more control. Think training wheels that gradually come off. We measure success not by how much we automate, but by how much the user's self-reported sense of control increases.\"",
+    },
+    {
+      text: "Your \"Export Your Brain\" concept resonates with me. How does Envisage actually build that user model? Where does the data come from?",
+      category: 'Data & Privacy', difficulty: 'pointed',
+      context: "Justine wrote about AI that ingests info \"across all content modalities.\" But she also cares about privacy — noting users favor \"local-first\" agents that parse data on-device.",
+      keyPoints: ['data collection approach', 'privacy-first design', 'progressive disclosure', 'user owns their data'],
+      hint: "Balance data richness with privacy. Progressive model: start with explicit input, expand to optional integrations, always user-controlled. Mention on-device processing.",
+      exampleResponse: "\"Three layers, all user-controlled. Layer one: discovery conversation — you tell us about yourself. Surprisingly powerful alone. Layer two: optional integrations — calendar, email, task manager. We extract patterns, not raw content. Layer three: ambient learning — as you interact with agents through Envisage, the context graph updates. The user owns all data and can see, edit, or delete any part. We're building toward on-device processing for sensitive data — your financial habits never need to leave your phone.\"",
+    },
+  ],
+  business: [
+    {
+      text: "How do you make money? Walk me through the unit economics you're targeting.",
+      category: 'Revenue Model', difficulty: 'warm',
+      context: "Justine tracks \"paid conversion rates\" alongside qualitative evaluation. She's noted 2026 is when AI apps need real business models.",
+      keyPoints: ['pricing model', 'unit economics', 'willingness to pay signal', 'margin structure'],
+      hint: "Be specific. Consumer AI is $20-30/mo for premium. Show you've thought about costs — you're orchestrating APIs, so margin matters.",
+      exampleResponse: "\"Freemium with a $25/month pro tier. Free gets the personal context profile and basic recommendations. Pro unlocks unlimited agent orchestration, cross-domain workflows, and priority processing. Targeting 60%+ gross margins because we're orchestrating, not training models. Our API costs scale with usage, but the context graph means smarter, cheaper calls over time. Early signal: in user interviews, 70% said they'd pay $20+ for a tool that eliminated the 'which AI tool should I use' friction.\"",
+    },
+    {
+      text: "What are your key metrics right now, and what do you need to see to raise a Series A?",
+      category: 'Traction & Milestones', difficulty: 'pointed',
+      context: "Justine invests Seed ($500K–$20M checks) and Series A. She wants metric-literate founders who know what \"good\" looks like.",
+      keyPoints: ['current metrics', 'north star metric', 'Series A benchmarks', 'honest about stage'],
+      hint: "Be honest about stage. For Seed, she wants strong engagement signals even if revenue is early. Focus on retention, not vanity metrics.",
+      exampleResponse: "\"We're early product — being honest about that. North star: 'weekly active workflows' — users triggering agent-mediated actions. For Series A, three things: 5K+ DAU with 40%+ D30 retention, paid conversion above 5%, and proof the context graph compounds — users at 3+ months have measurably better agent outcomes than new users. That last metric is our real moat indicator.\"",
+    },
+    {
+      text: "What if OpenAI or Google just builds this? They already have the user data and the models.",
+      category: 'Defensibility', difficulty: 'hardball',
+      context: "Justine acknowledges this tension: \"companies like OpenAI have to constantly balance between training new models and supporting user usage\" — she believes startups win on focus.",
+      keyPoints: ['platform vs product', 'why incumbents won\'t', 'focus advantage', 'user loyalty'],
+      hint: "Use her own framework. Big companies balance too many priorities. Also: Google won't recommend non-Google agents. Your neutrality is a structural feature.",
+      exampleResponse: "\"You've written about this. OpenAI is balancing model training, API business, consumer products, and enterprise. But the deeper issue is incentive alignment: Google's assistant will never recommend a non-Google tool. We're model-agnostic and tool-agnostic — our only incentive is making the user more capable. That neutrality is structurally impossible for platform companies. Plus, the context graph creates switching costs that compound daily.\"",
+    },
+  ],
+  hardball: [
+    {
+      text: "I've seen a lot of \"AI for everything\" pitches. Convince me this isn't a feature that ChatGPT ships in their next update.",
+      category: 'Existential Risk', difficulty: 'hardball',
+      context: "The most common investor objection in AI. Justine invests despite this when founders show structural, not feature-level, differentiation.",
+      keyPoints: ['structural moat', 'cross-platform nature', 'context compounding', 'why it\'s a company not a feature'],
+      hint: "ChatGPT can add features; it can't become a neutral, cross-platform, persistent personal context layer without fundamentally changing its business model.",
+      exampleResponse: "\"ChatGPT could ship a recommendation feature. But they can't ship neutrality — they'll always favor their own ecosystem. And they can't ship persistent cross-platform context — they're session-based. Envisage is the connective tissue between you and every AI tool you use. Canva wasn't a feature Adobe shipped. Squarespace wasn't a feature WordPress shipped. The best products in a new paradigm are purpose-built for the new user behavior, not bolted onto the old one.\"",
+    },
+    {
+      text: "You're building across seven life domains — work, health, social, money, learning, hobbies, mental health. That's incredibly broad. Are you building seven products or one?",
+      category: 'Focus & Execution', difficulty: 'hardball',
+      context: "Justine values product velocity and focus. She highlighted Krea for \"shipping new features every Thursday.\" She wants focused execution.",
+      keyPoints: ['wedge strategy', 'why breadth serves the user', 'phased rollout', 'current focus area'],
+      hint: "Acknowledge the concern. Show you have a wedge — one domain you're going deep first — but explain why multi-domain context matters for the core product value.",
+      exampleResponse: "\"One product, phased rollout. Going deep on Work first — sharpest pain, highest willingness to pay. But the multi-domain vision matters: knowing you have a stressful work week AND you're training for a marathon AND you're saving for a wedding lets us make fundamentally better recommendations than a work-only tool. We earn the right to expand domain by domain. Shipping weekly in Work right now. Others are on the roadmap, not in the codebase.\"",
+    },
+    {
+      text: "If you had to pick one metric that proves Envisage works — not user growth, not revenue — one metric that shows it delivers on the promise of human agency, what would it be?",
+      category: 'Product-Market Fit Signal', difficulty: 'hardball',
+      context: "Tests whether you truly understand your thesis. Justine appreciates founders who distill complexity into clear signals.",
+      keyPoints: ['agency-specific metric', 'measurable', 'correlated with real impact', 'not a vanity metric'],
+      hint: "What does \"more agency\" look like in data? It's not engagement — it's capability expansion. Think outcome, not activity.",
+      exampleResponse: "\"Agent success rate by user tenure. If agents succeed at their intended tasks 40% in week one and 80% by month three, that proves two things: the context graph compounds, and the user is becoming a better orchestrator. That single curve captures everything. If it's flat, we've failed regardless of user count.\"",
+    },
+    {
+      text: "You say you're \"agency-first\" — but you're deciding what AI tools to surface. Isn't that just another algorithmic feed? How is this not a new kind of lock-in?",
+      category: 'Philosophical Challenge', difficulty: 'hardball',
+      context: "The deepest objection to the Envisage thesis. Justine thinks carefully about power dynamics in AI — users should be \"orchestrators,\" not consumers.",
+      keyPoints: ['transparency of recommendations', 'user override capability', 'no take rate on agents', 'open system'],
+      hint: "The key difference from a social feed: social feeds optimize for engagement; Envisage optimizes for user-defined goals. Show the structural differences.",
+      exampleResponse: "\"Three structural differences from a social feed. First, our optimization function is user-defined goals, not engagement — we succeed when you close the app. Second, every recommendation is explainable and overridable. Third, we're tool-agnostic with no take rate on agent providers. The moment we compromise any of those, we've broken the core promise. That's why we're building this as an independent company, not inside a platform.\"",
+    },
+  ],
+};
+
+// ============================================================
+// STATE
+// ============================================================
+let currentScenario = null;
+let currentQuestionIndex = 0;
+let answeredQuestions = [];
+let timerInterval = null;
+let timerSeconds = 0;
+let totalScores = [];
+
+// ============================================================
+// EVALUATION ENGINE
+// ============================================================
+function evaluateAnswer(answer, question) {
+  const lower = answer.toLowerCase();
+  const wordCount = answer.split(/\s+/).filter(w => w.length > 0).length;
+
+  const keywordMap = {
+    'user-centric framing': ['user', 'person', 'people', 'someone', 'imagine', 'you'],
+    'clear problem statement': ['problem', 'pain', 'struggle', 'overwhelm', 'friction', 'challenge', 'drowning', 'confused', 'lost', 'difficult'],
+    'concrete example': ['for example', 'imagine', 'like when', 'say you', 'picture', 'scenario', 'specifically', 'concretely', 'such as'],
+    'no jargon': [],
+    'personal connection to problem': ['i ', 'my ', 'personally', 'experience', 'lived', 'saw', 'watched', 'felt'],
+    'domain expertise': ['years', 'background', 'built', 'worked', 'studied', 'research', 'deep', 'expertise'],
+    'unique insight from experience': ['realized', 'discovered', 'noticed', 'insight', 'learned', 'understood', 'saw that'],
+    'execution proof': ['built', 'shipped', 'launched', 'users', 'prototype', 'tested', 'created', 'developed'],
+    'structural differentiation': ['structural', 'fundamental', 'architecture', 'platform', 'layer', 'different kind', 'category'],
+    'why not a feature': ['not a feature', "can't just", "won't", 'impossible for', 'structurally', 'fundamentally'],
+    'compounding advantage': ['compound', 'grows', 'over time', 'accumulate', 'moat', 'network', 'switching cost'],
+    "specific to Justine's thesis": ["you've written", 'your thesis', 'you noted', 'a16z', 'your essay', "as you've said", "you wrote", 'unix era', 'export your brain', 'prosumer'],
+    'concrete walkthrough': ['first', 'then', 'next', 'step', 'screen', 'click', 'see', 'open', 'shows'],
+    'first-touch experience': ['first time', 'onboarding', 'new user', 'sign up', 'first five', 'first minute'],
+    'time to value': ['within', 'minutes', 'immediately', 'right away', 'quickly', 'fast'],
+    'low friction onboarding': ['simple', 'easy', 'guided', 'no friction', 'seamless', 'straightforward'],
+    'feedback mechanism': ['feedback', 'learn', 'adjust', 'correct', 'improve', 'iterate', 'refine'],
+    'user control over refinement': ['control', 'adjust', 'preference', 'override', 'choose', 'decide'],
+    'learning from failures': ['fail', 'wrong', 'mismatch', 'error', 'mistake', 'underperform'],
+    'preserving user agency': ['agency', 'ownership', "driver's seat", 'in control', 'their choice', 'empower'],
+    'multimodal vision': ['voice', 'image', 'video', 'audio', 'visual', 'multimodal', 'modality'],
+    'concrete modality plans': ['phase two', 'next', 'roadmap', 'voice-first', 'plan to', 'introducing'],
+    'user context across modalities': ['agnostic', 'across', 'any modality', 'regardless', 'context'],
+    'not just text-in-text-out': ['beyond text', 'not just text', 'voice', 'visual', 'audio', 'commute', 'speak'],
+    'specific capability gap': ["can't", "doesn't", "won't", 'gap', 'missing', 'lacks', 'impossible'],
+    'persistent context advantage': ['persistent', 'remembers', 'context', 'accumulated', 'over time', 'learns'],
+    'cross-tool orchestration': ['orchestrat', 'multiple', 'across', 'between', 'coordinate', 'integrate'],
+    "what ChatGPT can't do": ['chatgpt', 'openai', 'session', 'new conversation', 'forgets', 'single'],
+    'specific technology enablers': ['now', '2026', 'finally', 'became possible', 'capabilities', 'protocols', 'MCP', 'agentic'],
+    'market readiness signals': ['users', 'demand', 'market', 'adoption', 'growth', 'paying', 'tools'],
+    'why previous attempts failed': ['siri', 'rabbit', 'humane', 'failed', 'tried', 'before', 'previous', "couldn't"],
+    'what changed': ['changed', 'different', 'new', 'shift', 'converge', 'now possible', 'finally'],
+    'competitive awareness': ['competitor', 'also', 'building', 'other', 'similar', 'landscape', 'rabbit', 'humane'],
+    'why they failed': ['failed', 'mistake', 'wrong', 'struggled', 'poor', 'couldn\'t'],
+    'different approach': ['different', 'unlike', 'instead', 'our approach', 'we\'re', 'software'],
+    'software vs hardware advantage': ['software', 'hardware', 'device', 'phone', 'browser', 'native'],
+    'bottom-up sizing': ['million', 'billion', 'subscriber', 'users', 'pay', 'revenue', 'specific', '%', '$'],
+    'specific segment': ['knowledge worker', 'smb', 'creator', 'professional', 'segment', 'beachhead'],
+    'willingness to pay signal': ['pay', 'pricing', 'subscription', 'willing', 'spend', 'purchase', '$'],
+    'expansion path': ['expand', 'then', 'next', 'eventually', 'grow into', 'beyond', 'phase'],
+    'specific UI decisions': ['ui', 'screen', 'button', 'interface', 'display', 'show', 'see', 'threshold', 'indicator', 'confidence'],
+    'user control points': ['control', 'override', 'set', 'threshold', 'approve', 'decide', 'choose'],
+    'transparency': ['why', 'explain', 'reasoning', 'transparent', 'show', 'visible', 'understand', 'because'],
+    'not just a philosophy': ['specific', 'concretely', 'in the ui', 'three things', 'first', 'second'],
+    'scaffolding not replacing': ['scaffold', 'teach', 'grow', 'learn', 'capability', 'not replace', 'complement', 'not do things for'],
+    'self-efficacy theory': ['self-efficacy', 'bandura', 'capable', 'confidence', 'belief', 'mastery'],
+    'progressive autonomy': ['progressive', 'gradually', 'over time', 'earn', 'phase', 'eventually', 'training wheels'],
+    'user grows over time': ['grow', 'improve', 'better', 'more capable', 'orchestrator', 'learn'],
+    'data collection approach': ['data', 'collect', 'learn', 'ingest', 'integrate', 'connect', 'conversation'],
+    'privacy-first design': ['privacy', 'secure', 'own', 'control', 'delete', 'on-device', 'local'],
+    'progressive disclosure': ['layer', 'optional', 'progressive', 'start with', 'then', 'gradually'],
+    'user owns their data': ['own', 'control', 'delete', 'see', 'edit', 'your data', 'portable'],
+    'pricing model': ['freemium', 'subscription', 'price', 'tier', 'free', 'paid', 'month', '$'],
+    'unit economics': ['margin', 'cost', 'economics', 'revenue', 'gross', 'ltv', 'cac', '%'],
+    'margin structure': ['margin', 'gross', 'cost', 'api', 'cheaper', 'efficient'],
+    'current metrics': ['metric', 'retention', 'dau', 'mau', 'conversion', 'engagement', 'active'],
+    'north star metric': ['north star', 'key metric', 'primary', 'main', 'core metric', 'one metric'],
+    'Series A benchmarks': ['series a', 'raise', 'benchmark', 'milestone', 'target'],
+    'honest about stage': ['honest', 'early', 'pre-product', 'building', 'stage', 'currently'],
+    'platform vs product': ['platform', 'balance', 'priorities', 'focus', 'single-minded'],
+    'why incumbents won\'t': ['incentive', 'won\'t', 'can\'t', 'neutral', 'conflict', 'alignment'],
+    'focus advantage': ['focus', 'single-minded', 'obsess', 'dedicated', 'only'],
+    'user loyalty': ['trust', 'loyalty', 'switching', 'lock-in', 'retention', 'love'],
+    'structural moat': ['moat', 'structural', 'defensi', 'switching', 'compound', 'accumulate'],
+    'cross-platform nature': ['cross-platform', 'agnostic', 'neutral', 'any', 'every', 'multiple'],
+    'context compounding': ['compound', 'grows', 'accumulate', 'richer', 'better over time', 'learns'],
+    "why it's a company not a feature": ['company', 'not a feature', 'product', 'platform', 'purpose-built', 'canva', 'squarespace'],
+    'wedge strategy': ['wedge', 'start with', 'first', 'focus', 'then expand', 'earn the right', 'phase', 'work first'],
+    'why breadth serves the user': ['cross-domain', 'knowing', 'context', 'multiple', 'whole life', 'better recommendations'],
+    'phased rollout': ['phase', 'rollout', 'roadmap', 'earn', 'domain by domain', 'weekly'],
+    'current focus area': ['work', 'first', 'currently', 'now', 'today', 'right now', 'shipping'],
+    'agency-specific metric': ['success rate', 'capability', 'self-reported', 'agency', 'control', 'outcome', 'orchestrator'],
+    'measurable': ['measure', 'track', 'data', 'metric', 'number', 'rate', 'percent', '%', 'curve'],
+    'correlated with real impact': ['impact', 'proves', 'means', 'indicates', 'captures', 'shows that'],
+    'not a vanity metric': ['not growth', 'not vanity', 'not just', 'regardless', 'actual'],
+    'transparency of recommendations': ['transparent', 'explain', 'see why', 'override', 'visible', 'explainable'],
+    'user override capability': ['override', 'change', 'control', 'choose', 'reject', 'adjust'],
+    'no take rate on agents': ['no take rate', 'neutral', 'agnostic', 'no incentive', "don't get paid"],
+    'open system': ['open', 'agnostic', 'independent', 'no incentive', 'anyone'],
+  };
+
+  const hits = [];
+  const misses = [];
+
+  for (const point of question.keyPoints) {
+    const keywords = keywordMap[point] || [];
+    if (keywords.length === 0 && point === 'no jargon') {
+      const jargonWords = ['llm', 'transformer', 'fine-tun', 'embedding', 'vector database', 'rag pipeline', 'gpu cluster', 'inference pipeline'];
+      const jargonCount = jargonWords.filter(j => lower.includes(j)).length;
+      if (jargonCount <= 1) hits.push(point); else misses.push(point);
+    } else if (keywords.length === 0) {
+      misses.push(point);
+    } else {
+      keywords.some(k => lower.includes(k)) ? hits.push(point) : misses.push(point);
+    }
+  }
+
+  // Base score
+  let score = Math.round((hits.length / question.keyPoints.length) * 100);
+
+  // Length adjustments
+  if (wordCount < 30) score = Math.max(score - 20, 0);
+  else if (wordCount > 300) score = Math.max(score - 10, 0);
+  else if (wordCount >= 60 && wordCount <= 200) score += 5;
+  score = Math.min(score, 100);
+
+  // Specificity bonus
+  const specificSignals = ['for example', 'specifically', 'concretely', 'imagine', '%', 'million', 'billion', '$'];
+  score = Math.min(score + specificSignals.filter(s => lower.includes(s)).length * 3, 100);
+
+  // Justine-reference bonus
+  const justineRefs = ["you've written", 'your essay', 'your thesis', 'you noted', 'you wrote', 'a16z', 'justine', 'export your brain', 'prosumer', 'unix era', 'vibe cod'];
+  score = Math.min(score + justineRefs.filter(j => lower.includes(j)).length * 5, 100);
+
+  let grade, gradeClass;
+  if (score >= 75) { grade = 'Strong Response'; gradeClass = 'strong'; }
+  else if (score >= 45) { grade = 'Decent — Needs Sharpening'; gradeClass = 'decent'; }
+  else { grade = 'Needs Work'; gradeClass = 'weak'; }
+
+  // Build feedback
+  let feedback = '';
+  if (hits.length > 0) feedback += `<div class="feedback-section"><h4>What Landed</h4><p>${buildPositive(hits, question)}</p></div>`;
+  if (misses.length > 0) feedback += `<div class="feedback-section"><h4>What's Missing</h4><p>${buildMissing(misses, question)}</p></div>`;
+
+  if (wordCount < 30)
+    feedback += `<div class="feedback-section"><h4>Length</h4><p>Too brief at ${wordCount} words. A 60–90 second answer (80–150 words) is the sweet spot. Don't leave her wondering.</p></div>`;
+  else if (wordCount > 300)
+    feedback += `<div class="feedback-section"><h4>Length</h4><p>At ${wordCount} words, this runs long. Tighten to 100–150 words and save depth for follow-ups.</p></div>`;
+
+  feedback += `<div class="feedback-section"><h4>Key Points Coverage</h4><div class="score-pills">`;
+  hits.forEach(h => feedback += `<span class="score-pill hit">✓ ${h}</span>`);
+  misses.forEach(m => feedback += `<span class="score-pill miss">✗ ${m}</span>`);
+  feedback += `</div></div>`;
+
+  if (question.exampleResponse && score < 85)
+    feedback += `<div class="feedback-section"><h4>Strong Example Response</h4><div class="example-response"><p>${question.exampleResponse}</p></div></div>`;
+
+  return { score, grade, gradeClass, feedback, hits, misses };
+}
+
+function buildPositive(hits, q) {
+  let fb = `You hit ${hits.length} of ${q.keyPoints.length} key elements. `;
+  if (hits.includes("specific to Justine's thesis"))
+    fb += 'Referencing her published work is smart — it signals you\'re pitching her specifically, not every VC on Sand Hill Road. ';
+  if (hits.includes('concrete example') || hits.includes('concrete walkthrough'))
+    fb += 'The concrete specificity helps. Justine tests products herself — she responds to tangible descriptions. ';
+  if (hits.includes('preserving user agency') || hits.includes('scaffolding not replacing'))
+    fb += 'Tying back to human agency aligns directly with her prosumer investment thesis. ';
+  if (hits.includes('compounding advantage') || hits.includes('context compounding'))
+    fb += 'Good — highlighting the compounding moat resonates with her search for AI-native network effects. ';
+  return fb;
+}
+
+function buildMissing(misses, q) {
+  let fb = '';
+  const ms = new Set(misses);
+  if (ms.has('concrete example') || ms.has('concrete walkthrough'))
+    fb += 'Add a specific example or walkthrough. Justine invests in what she can see working, not abstractions. ';
+  if (ms.has("specific to Justine's thesis"))
+    fb += 'Reference her actual writing — \"Export Your Brain,\" the prosumer essay, or her Unix era metaphor. Founders who pitch generically lose points. ';
+  if (ms.has('preserving user agency') || ms.has('user control over refinement'))
+    fb += 'Connect back to user agency and control — Envisage\'s core differentiator and Justine\'s core interest. ';
+  if (ms.has('compounding advantage') || ms.has('structural moat') || ms.has('context compounding'))
+    fb += 'Show the compounding/moat angle. She\'s seeking AI-native products with network effects. ';
+  if (ms.has('bottom-up sizing') || ms.has('willingness to pay signal'))
+    fb += 'Get specific with numbers. Justine tracks paid conversion rates — give her data. ';
+  if (ms.has('self-efficacy theory') || ms.has('scaffolding not replacing'))
+    fb += 'Lean into self-efficacy. Most AI companies can\'t articulate why they make users MORE capable, not dependent. ';
+  if (ms.has('wedge strategy') || ms.has('current focus area'))
+    fb += 'Show your beachhead. She rewards focused execution — Krea ships every Thursday. Where are you going deep first? ';
+  if (ms.has('privacy-first design') || ms.has('user owns their data'))
+    fb += 'Address privacy. She\'s noted users favor local-first agents. Show you\'ve thought about data ownership. ';
+  if (!fb) fb = `Missed: ${misses.join(', ')}. Review the hint and example for how to weave these in.`;
+  return fb;
+}
+
+// ============================================================
+// UI
+// ============================================================
+function renderScenarios() {
+  document.getElementById('scenario-tabs').innerHTML = SCENARIOS.map(s =>
+    `<button class="scenario-btn ${currentScenario === s.id ? 'active' : ''}" onclick="selectScenario('${s.id}')">${s.icon} ${s.label}</button>`
+  ).join('');
+}
+
+function selectScenario(id) {
+  currentScenario = id;
+  currentQuestionIndex = 0;
+  renderScenarios();
+  loadQuestion();
+}
+
+function loadQuestion() {
+  const questions = QUESTIONS[currentScenario];
+  if (!questions || currentQuestionIndex >= questions.length) { showSummary(); return; }
+  const q = questions[currentQuestionIndex];
+
+  document.getElementById('q-category').textContent = q.category;
+  document.getElementById('q-text').textContent = q.text;
+  document.getElementById('q-context').textContent = q.context;
+
+  const diffEl = document.getElementById('q-difficulty');
+  diffEl.textContent = q.difficulty === 'warm' ? 'Warm-Up' : q.difficulty === 'pointed' ? 'Pointed' : 'Hardball';
+  diffEl.className = `question-difficulty diff-${q.difficulty}`;
+
+  document.getElementById('answer-area').style.display = 'block';
+  document.getElementById('answer-input').value = '';
+  document.getElementById('feedback-panel').classList.remove('visible');
+  document.getElementById('hint-box').classList.remove('visible');
+  document.getElementById('submit-btn').disabled = false;
+
+  const total = questions.length;
+  document.getElementById('progress-fill').style.width = `${(currentQuestionIndex / total) * 100}%`;
+  document.getElementById('stat-questions').textContent = `${currentQuestionIndex + 1} / ${total}`;
+
+  startTimer();
+}
+
+function startTimer() {
+  clearInterval(timerInterval);
+  timerSeconds = 0;
+  updateTimerDisplay();
+  timerInterval = setInterval(() => { timerSeconds++; updateTimerDisplay(); }, 1000);
+}
+
+function updateTimerDisplay() {
+  const mins = Math.floor(timerSeconds / 60);
+  const secs = timerSeconds % 60;
+  const el = document.getElementById('timer');
+  el.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+  el.className = timerSeconds > 120 ? 'timer danger' : timerSeconds > 90 ? 'timer warning' : 'timer';
+}
+
+function showHint() {
+  const q = QUESTIONS[currentScenario][currentQuestionIndex];
+  const hintBox = document.getElementById('hint-box');
+  hintBox.textContent = q.hint;
+  hintBox.classList.add('visible');
+}
+
+function submitAnswer() {
+  const answer = document.getElementById('answer-input').value.trim();
+  if (!answer) return;
+
+  clearInterval(timerInterval);
+  document.getElementById('submit-btn').disabled = true;
+
+  const q = QUESTIONS[currentScenario][currentQuestionIndex];
+  const result = evaluateAnswer(answer, q);
+
+  totalScores.push(result.score);
+  answeredQuestions.push({
+    scenario: currentScenario, question: q.text, answer,
+    score: result.score, grade: result.grade, time: timerSeconds,
+  });
+
+  const panel = document.getElementById('feedback-panel');
+  const header = document.getElementById('feedback-header');
+  header.className = `feedback-header ${result.gradeClass}`;
+  document.getElementById('feedback-icon').textContent = result.gradeClass === 'strong' ? '✓' : result.gradeClass === 'decent' ? '◐' : '✗';
+  document.getElementById('feedback-title').textContent = `${result.grade} — ${result.score}/100`;
+  document.getElementById('feedback-body').innerHTML = result.feedback;
+  panel.classList.add('visible');
+  document.getElementById('answer-area').style.display = 'none';
+
+  updateStats();
+  updateHistory();
+}
+
+function updateStats() {
+  if (totalScores.length === 0) return;
+  const avg = Math.round(totalScores.reduce((a, b) => a + b, 0) / totalScores.length);
+  const scoreEl = document.getElementById('stat-score');
+  scoreEl.textContent = `${avg}/100`;
+  scoreEl.className = avg >= 70 ? 'stat-value green' : avg >= 45 ? 'stat-value amber' : 'stat-value red';
+
+  const catScores = {};
+  answeredQuestions.forEach(aq => {
+    if (!catScores[aq.scenario]) catScores[aq.scenario] = [];
+    catScores[aq.scenario].push(aq.score);
+  });
+  let bestCat = '', bestAvg = 0;
+  for (const [cat, scores] of Object.entries(catScores)) {
+    const a = scores.reduce((x, y) => x + y, 0) / scores.length;
+    if (a > bestAvg) { bestAvg = a; bestCat = cat; }
+  }
+  document.getElementById('stat-strong').textContent = SCENARIOS.find(s => s.id === bestCat)?.label || '—';
+}
+
+function updateHistory() {
+  const section = document.getElementById('history-section');
+  const list = document.getElementById('history-list');
+  if (answeredQuestions.length === 0) { section.style.display = 'none'; return; }
+  section.style.display = 'block';
+  list.innerHTML = answeredQuestions.slice().reverse().map(aq => `
+    <div class="history-item" onclick="this.classList.toggle('expanded')">
+      <div class="history-item-header">
+        <span class="history-q">${aq.question.substring(0, 70)}${aq.question.length > 70 ? '...' : ''}</span>
+        <span class="history-score" style="color:${aq.score >= 70 ? 'var(--green)' : aq.score >= 45 ? 'var(--amber)' : 'var(--red)'}">${aq.score}/100</span>
+      </div>
+      <div class="history-answer">
+        <p><strong>Your response:</strong> ${aq.answer.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>
+        <p style="margin-top:8px;color:var(--text-dim);font-size:12px;">Time: ${Math.floor(aq.time/60)}:${(aq.time%60).toString().padStart(2,'0')}</p>
+      </div>
+    </div>
+  `).join('');
+}
+
+function nextQuestion() {
+  currentQuestionIndex++;
+  QUESTIONS[currentScenario] && currentQuestionIndex < QUESTIONS[currentScenario].length ? loadQuestion() : showSummary();
+}
+
+function skipQuestion() {
+  currentQuestionIndex++;
+  QUESTIONS[currentScenario] && currentQuestionIndex < QUESTIONS[currentScenario].length ? loadQuestion() : showSummary();
+}
+
+function showSummary() {
+  clearInterval(timerInterval);
+  document.getElementById('progress-fill').style.width = '100%';
+  document.getElementById('answer-area').style.display = 'none';
+  document.getElementById('feedback-panel').classList.remove('visible');
+
+  const scenarioAnswers = answeredQuestions.filter(a => a.scenario === currentScenario);
+  const avg = scenarioAnswers.length > 0
+    ? Math.round(scenarioAnswers.reduce((a, b) => a + b.score, 0) / scenarioAnswers.length) : 0;
+  const label = SCENARIOS.find(s => s.id === currentScenario)?.label || currentScenario;
+
+  document.getElementById('q-category').textContent = 'Scenario Complete';
+  document.getElementById('q-difficulty').textContent = '';
+  document.getElementById('q-difficulty').className = 'question-difficulty';
+  document.getElementById('q-text').textContent = `${label}: ${avg}/100 average`;
+  document.getElementById('q-context').textContent = scenarioAnswers.length > 0
+    ? `Answered ${scenarioAnswers.length} questions. Select another scenario to continue.`
+    : 'No questions answered. Select another scenario.';
+}
+
+// Customize
+function openCustomize() {
+  document.getElementById('c-name').value = company.name;
+  document.getElementById('c-vp').value = company.vp;
+  document.getElementById('c-user').value = company.user;
+  document.getElementById('c-stage').value = company.stage;
+  document.getElementById('c-diff').value = company.diff;
+  document.getElementById('c-traction').value = company.traction;
+  document.getElementById('customize-modal').classList.add('visible');
+}
+
+function closeCustomize() {
+  document.getElementById('customize-modal').classList.remove('visible');
+}
+
+function saveCustomize() {
+  company.name = document.getElementById('c-name').value;
+  company.vp = document.getElementById('c-vp').value;
+  company.user = document.getElementById('c-user').value;
+  company.stage = document.getElementById('c-stage').value;
+  company.diff = document.getElementById('c-diff').value;
+  company.traction = document.getElementById('c-traction').value;
+
+  document.getElementById('company-label').textContent = `Pitching: ${company.name}`;
+  QUESTIONS.opener[0].text = `Walk me through what ${company.name} actually does in 60 seconds — pretend I'm a user, not an investor.`;
+
+  closeCustomize();
+  if (currentScenario) { currentQuestionIndex = 0; loadQuestion(); }
+}
+
+// Init
+renderScenarios();
+</script>
+</body>
+</html>

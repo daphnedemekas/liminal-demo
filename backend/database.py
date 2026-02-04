@@ -218,7 +218,12 @@ _VOLUME_DB_PATHS = [
 
 # Prefer an attached Railway volume at /data if present and DATABASE_PATH not set
 if os.environ.get("DATABASE_PATH"):
-    DB_PATH = os.environ["DATABASE_PATH"]
+    _raw = os.environ["DATABASE_PATH"]
+    # Fix common misconfiguration: relative path like "app/data/envisage.db"
+    # should be absolute "/app/data/envisage.db"
+    if not _raw.startswith("/") and _raw.startswith("app/"):
+        _raw = "/" + _raw
+    DB_PATH = _raw
 else:
     DB_PATH = _DEFAULT_DB_PATH
     for path in _VOLUME_DB_PATHS:

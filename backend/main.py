@@ -54,7 +54,17 @@ app.add_api_websocket_route("/ws/run/{run_id}", runs.ws_run)
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok"}
+    import os
+    db_file = Path(DB_PATH)
+    return {
+        "status": "ok",
+        "db_path": str(db_file.resolve()),
+        "db_exists": db_file.exists(),
+        "db_size": db_file.stat().st_size if db_file.exists() else 0,
+        "DATABASE_PATH_env": os.environ.get("DATABASE_PATH", "(not set)"),
+        "volume_app_data_exists": os.path.isdir("/app/data"),
+        "volume_data_exists": os.path.isdir("/data"),
+    }
 
 
 # ── TTS endpoint ─────────────────────────────────────────────────────

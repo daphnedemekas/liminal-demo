@@ -95,12 +95,16 @@ Based on the conversation so far, ask 1-2 focused follow-up questions.
 </open_questions>
 
 Ask 1-2 specific, focused questions to resolve the most important open questions.
-Do NOT present generic menu options. Ask real questions about THEIR situation.
+Do NOT present generic menu options — options must be specific to the user's situation.
 
-IMPORTANT: Do NOT include action buttons for conversational questions or suggested replies.
-The user has a text input — let them respond naturally. Action buttons should ONLY be used
-for concrete proposals the user can accept or reject (e.g. a plan to approve, a specific
-action to authorize). For normal questions, always use an empty actions array.
+When your question has natural discrete answers, include 2-4 suggested answer options as actions.
+Good candidates: budget ranges, team sizes, yes/no, preference between options, timeline choices,
+experience levels, or any question where most people would pick from a small set of answers.
+Each action: {{"label": "short label", "description": "", "action_text": "the full answer to send"}}
+Keep descriptions empty — these are lightweight answer chips, not plan-approval cards.
+
+For genuinely open-ended questions where a list of options wouldn't make sense
+(e.g. "Tell me about your workflow", "What's the project about?"), use an empty actions array.
 
 If the user mentioned something you don't recognize (a company, person, tool, etc.), include a
 "research" field with a specific task description that includes enough context to disambiguate. \
@@ -119,7 +123,7 @@ message significantly longer than a casual chat message), you MUST:
 If the user's message is short/conversational, set "artifacts" to an empty array.
 
 Respond with JSON:
-{{"message": "your question(s)", "actions": [], "escalate": false, "task_description": "", "research": null, "artifacts": []}}
+{{"message": "your question(s)", "actions": [{{"label": "Option A", "description": "", "action_text": "Option A"}}, {{"label": "Option B", "description": "", "action_text": "Option B"}}], "escalate": false, "task_description": "", "research": null, "artifacts": []}}
 
 Return ONLY the JSON object."""
 

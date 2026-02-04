@@ -636,7 +636,13 @@ export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, on
         <div ref={messagesEndRef} />
       </div>
 
-      <ContextUpload userId={userId} projectId={project.id} />
+      <ContextUpload
+        userId={userId}
+        projectId={project.id}
+        onContextAdded={(title) => {
+          setMessages((prev) => [...prev, { role: "system", content: `Context added: ${title}` }]);
+        }}
+      />
       <div className="chat-input-area">
         <textarea
           value={input}

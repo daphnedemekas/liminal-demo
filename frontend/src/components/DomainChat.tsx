@@ -227,7 +227,12 @@ export function DomainChat({ userId, domain, onProposalsReceived }: Props) {
         <div ref={messagesEndRef} />
       </div>
 
-      <ContextUpload userId={userId} />
+      <ContextUpload
+        userId={userId}
+        onContextAdded={(title) => {
+          setMessages((prev) => [...prev, { role: "system", content: `Context added: ${title}` }]);
+        }}
+      />
       <div className="chat-input-area">
         <textarea
           value={input}

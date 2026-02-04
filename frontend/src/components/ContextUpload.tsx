@@ -6,9 +6,10 @@ interface Props {
   userId: string;
   projectId?: number;
   discoveryDomainId?: number;
+  onContextAdded?: (title: string) => void;
 }
 
-export function ContextUpload({ userId, projectId, discoveryDomainId }: Props) {
+export function ContextUpload({ userId, projectId, discoveryDomainId, onContextAdded }: Props) {
   const [attachments, setAttachments] = useState<ContextAttachment[]>([]);
   const [expanded, setExpanded] = useState(false);
   const [mode, setMode] = useState<"none" | "url" | "text" | "pdf">("none");
@@ -38,6 +39,7 @@ export function ContextUpload({ userId, projectId, discoveryDomainId }: Props) {
     try {
       const att = await api.uploadUrl({ user_id: userId, project_id: projectId, discovery_domain_id: discoveryDomainId, url: urlInput.trim() });
       setAttachments((prev) => [att, ...prev]);
+      onContextAdded?.(att.title || att.source_ref || "URL");
       resetForm();
     } catch (e) {
       setError((e as Error).message);
@@ -52,6 +54,7 @@ export function ContextUpload({ userId, projectId, discoveryDomainId }: Props) {
     try {
       const att = await api.uploadText({ user_id: userId, project_id: projectId, discovery_domain_id: discoveryDomainId, title: titleInput || undefined, text: textInput.trim() });
       setAttachments((prev) => [att, ...prev]);
+      onContextAdded?.(att.title || "Pasted text");
       resetForm();
     } catch (e) {
       setError((e as Error).message);
@@ -65,6 +68,7 @@ export function ContextUpload({ userId, projectId, discoveryDomainId }: Props) {
     try {
       const att = await api.uploadPdf({ user_id: userId, project_id: projectId, discovery_domain_id: discoveryDomainId, file });
       setAttachments((prev) => [att, ...prev]);
+      onContextAdded?.(att.title || file.name);
       resetForm();
     } catch (e) {
       setError((e as Error).message);

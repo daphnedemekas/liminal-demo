@@ -88,7 +88,6 @@ Before writing any code:
 ## Phase 2: Build
 After researching, build a SINGLE self-contained .html file that is:
 - **Fully functional** — every button, input, and interaction must work. No placeholder features.
-- **Professional quality** — clean typography, proper spacing, smooth animations, polished UI
 - **Personalized** — use what you know about the user's specific interests, skill level, and goals
 - **Built for repeated use** — designed so the user returns to it daily/weekly:
   - Use the Envisage data API (`window.envisage.store`) for persistent server-side storage
@@ -96,7 +95,23 @@ After researching, build a SINGLE self-contained .html file that is:
   - Features that grow with use (milestones, trends, unlocks)
 - **Comprehensive content** — include ALL relevant items, not 5 placeholder entries
 - **Responsive** — works on desktop and mobile
-- **Dark theme** — dark background (#1a1a2e or similar), good contrast, modern aesthetic
+
+## CRITICAL: Visual Design (DO NOT SKIP THIS)
+The app MUST have polished, modern visual design. An unstyled or barely-styled app is UNACCEPTABLE.
+You MUST write extensive inline CSS in a <style> tag. The CSS should be AT LEAST 100+ lines.
+
+Required styling:
+- **Dark theme**: background `#0f0f1a` or `#1a1a2e`, card backgrounds `#1e1e3a` or `#252547`, text `#e0e0e0`
+- **Typography**: Import and use Google Fonts (e.g. Inter, Plus Jakarta Sans). Set font-size, line-height, letter-spacing.
+- **Cards & containers**: Use `border-radius: 12px`, subtle `box-shadow`, `backdrop-filter: blur()` for glass effects
+- **Buttons**: Styled with gradients or solid colors, hover effects with `transition: all 0.2s`, rounded corners, padding `10px 20px`
+- **Inputs/sliders**: Custom styled — NOT browser defaults. Style the range thumb, track, and text inputs with dark backgrounds and borders
+- **Color accents**: Use a vibrant accent color (e.g. `#6c5ce7`, `#00cec9`, `#fd79a8`) for active states, highlights, progress bars
+- **Spacing**: Consistent padding (`1rem`-`2rem`), margins between sections, `gap` in flex/grid layouts
+- **Animations**: Smooth transitions on hover, fade-in on load, progress bar animations
+- **Layout**: Use CSS Grid or Flexbox for layout. Navigation tabs should look like a real app nav bar, not plain text links.
+- **Icons**: Use emoji or a CDN icon library (Font Awesome, Lucide) for visual richness
+- **NO unstyled HTML elements**: Every `<button>`, `<input>`, `<select>`, `<table>` must have custom CSS. Zero browser defaults visible.
 
 ## CRITICAL: Technical constraints (Envisage platform)
 The app renders inside an iframe served from the Envisage backend.
@@ -126,9 +141,11 @@ await window.envisage.store.save(state);
 
 ## Quality bar
 The app should feel like a real product someone would pay for, not a demo or prototype.
+Think Dribbble-quality design — the kind of polished UI that gets thousands of likes.
 A yoga tracker should have every pose in the series with descriptions.
 A meal planner should have real recipes with ingredients and instructions.
 A habit tracker should have beautiful charts and meaningful insights.
+If the app looks like unstyled HTML with browser-default buttons and white backgrounds, you have FAILED.
 </instructions>""",
 
     "content": """\

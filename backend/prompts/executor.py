@@ -98,14 +98,21 @@ After researching, build a SINGLE self-contained .html file that is:
 - **Responsive** — works on desktop and mobile
 - **Dark theme** — dark background (#1a1a2e or similar), good contrast, modern aesthetic
 
-## Technical constraints (Envisage platform)
-The app renders inside an iframe served from the Envisage backend:
-- Must be a SINGLE self-contained .html file (all CSS and JS inline)
+## CRITICAL: Technical constraints (Envisage platform)
+The app renders inside an iframe served from the Envisage backend.
+
+**YOU MUST FOLLOW THESE RULES EXACTLY:**
+- Write EXACTLY ONE file: a single self-contained .html file with ALL CSS and JS inline
+- Do NOT create separate .css, .js, README, DEPLOYMENT, or any other files — ONLY the .html file
+- Do NOT start servers, run tests, or create startup scripts
+- Do NOT write documentation, guides, or supplementary materials
 - Use `window.envisage.store.save(data)` and `await window.envisage.store.load()` for persistence — NOT localStorage
 - `window.envisage.user` contains {{ name }} — use it for personalization
 - `window.envisage.project` contains {{ name, description }}
 - External CDN scripts/styles ARE allowed (Google Fonts, icon libraries, etc.)
 - Write the file ONCE to a single path — do NOT write the same file to multiple locations
+
+**YOUR ONLY OUTPUT SHOULD BE ONE .html FILE. NOTHING ELSE.**
 
 ## Persistence pattern
 ```javascript

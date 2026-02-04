@@ -10,6 +10,16 @@ RUN npx vite build
 FROM python:3.12-slim
 WORKDIR /app
 
+# Install Node.js 20 + Claude Code CLI (needed for agent executor)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates curl && \
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y --no-install-recommends nodejs && \
+    npm install -g @anthropic-ai/claude-code && \
+    apt-get purge -y curl && \
+    apt-get autoremove -y && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 

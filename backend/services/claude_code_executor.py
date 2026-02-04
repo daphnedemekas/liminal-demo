@@ -74,16 +74,34 @@ class ClaudeCodeExecutor:
         )
 
         try:
-            async for line in process.stdout:
-                line = line.decode("utf-8").strip()
-                if not line:
-                    continue
+            # Read raw chunks instead of using line-based iteration, which has
+            # a 64KB default buffer limit that large HTML apps blow past.
+            buf = b""
+            while True:
+                chunk = await process.stdout.read(65536)
+                if not chunk:
+                    break
+                buf += chunk
+                while b"\n" in buf:
+                    line_bytes, buf = buf.split(b"\n", 1)
+                    line = line_bytes.decode("utf-8").strip()
+                    if not line:
+                        continue
+                    try:
+                        data = json.loads(line)
+                        for event in self._parse_events(data):
+                            yield event
+                    except json.JSONDecodeError:
+                        logger.warning(f"Non-JSON line from claude: {line[:200]}")
+            # Handle any trailing data without a final newline
+            if buf.strip():
+                line = buf.decode("utf-8").strip()
                 try:
                     data = json.loads(line)
                     for event in self._parse_events(data):
                         yield event
                 except json.JSONDecodeError:
-                    logger.warning(f"Non-JSON line from claude: {line[:200]}")
+                    logger.warning(f"Non-JSON trailing data from claude: {line[:200]}")
         except GeneratorExit:
             # Generator was closed (e.g. by timeout/cancellation) — kill the process
             logger.info("Executor generator closed, killing subprocess")

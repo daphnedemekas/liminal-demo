@@ -102,6 +102,7 @@ export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, on
   const [activityLog, setActivityLog] = useState<ActivityEntry[]>([]);
   const [researchingTopic, setResearchingTopic] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [logsCollapsed, setLogsCollapsed] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { events, synthesis } = useRunStream(activeRunId);
   const {
@@ -615,22 +616,27 @@ export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, on
           </div>
         ))}
         {(activityLog.length > 0 || researchingTopic) && (
-          <div className="activity-log">
-            <div className="activity-log-header">
+          <div className={`activity-log ${logsCollapsed ? "collapsed" : ""}`}>
+            <div className="activity-log-header" onClick={() => setLogsCollapsed((c) => !c)}>
               <span className="activity-pulse" />
-              {researchingTopic ? `Researching: ${researchingTopic}` : "Agent working"}
+              <span className="activity-log-title">
+                {researchingTopic ? `Researching: ${researchingTopic}` : "Agent working"}
+              </span>
+              <span className="activity-log-toggle">{logsCollapsed ? "▸ Show logs" : "▾ Hide logs"}</span>
             </div>
-            <div className="activity-log-entries">
-              {activityLog.map((entry, i) => (
-                <div key={i} className={`activity-entry ${entry.type}`}>
-                  {entry.type === "tool" ? (
-                    <span className="activity-tool">{entry.detail}</span>
-                  ) : (
-                    <span className="activity-text">{entry.text?.slice(0, 120)}{(entry.text?.length ?? 0) > 120 ? "..." : ""}</span>
-                  )}
-                </div>
-              ))}
-            </div>
+            {!logsCollapsed && (
+              <div className="activity-log-entries">
+                {activityLog.map((entry, i) => (
+                  <div key={i} className={`activity-entry ${entry.type}`}>
+                    {entry.type === "tool" ? (
+                      <span className="activity-tool">{entry.detail}</span>
+                    ) : (
+                      <span className="activity-text">{entry.text?.slice(0, 200)}{(entry.text?.length ?? 0) > 200 ? "..." : ""}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
         <div ref={messagesEndRef} />

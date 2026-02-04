@@ -13,6 +13,13 @@ const DOMAIN_LABELS: Record<string, string> = {
   mental_health: "Mind & mental health",
 };
 
+function displayStatus(p: Project): string {
+  const runStatus = p.latest_run_status;
+  if (runStatus === "working" || runStatus === "planning") return runStatus;
+  if (runStatus === "done") return "done";
+  return p.status || "active";
+}
+
 const STATUS_LABELS: Record<string, string> = {
   pending: "Not started",
   active: "In progress",
@@ -169,7 +176,7 @@ export function HomeView({
                     {p.run_count > 0 && (
                       <>
                         <span
-                          className={`status-dot ${p.latest_run_status || p.status}`}
+                          className={`status-dot ${displayStatus(p)}`}
                         />
                         <span>{p.run_count} runs</span>
                       </>
@@ -200,7 +207,7 @@ export function HomeView({
                     {p.run_count > 0 && (
                       <>
                         <span
-                          className={`status-dot ${p.latest_run_status || p.status}`}
+                          className={`status-dot ${displayStatus(p)}`}
                         />
                         <span>{p.run_count} runs</span>
                       </>

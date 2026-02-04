@@ -68,7 +68,7 @@ function App() {
     if (!user) return;
     const interval = setInterval(() => {
       api.listProjects(user.id).then(setProjects).catch(() => {});
-    }, 15_000);
+    }, 5_000);
     return () => clearInterval(interval);
   }, [user]);
 
@@ -119,6 +119,7 @@ function App() {
 
   const handleRunComplete = () => {
     setWorkspaceRefresh((k) => k + 1);
+    loadProjects();
   };
 
   const handleGoHome = () => {
@@ -261,7 +262,7 @@ function App() {
                 onRunComplete={handleRunComplete}
                 onNavigateDomain={handleSelectDomain}
                 onNavigateProject={handleSelectProject}
-                onMessageReceived={() => setWorkspaceRefresh((k) => k + 1)}
+                onMessageReceived={() => { setWorkspaceRefresh((k) => k + 1); loadProjects(); }}
               />
             </div>
             <div className="split-resize-handle" onMouseDown={onSplitMouseDown} />

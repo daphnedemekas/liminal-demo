@@ -65,6 +65,7 @@ class ClaudeCodeExecutor:
         cmd.extend(["--max-turns", str(turns)])
 
         env = os.environ.copy()
+        env["IS_SANDBOX"] = "1"  # Allow --dangerously-skip-permissions as root in Docker
 
         logger.info(f"Executing claude: {instruction[:100]}...")
 

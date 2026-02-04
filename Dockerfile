@@ -26,6 +26,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/ ./backend/
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist/
 
+# Allow Claude Code CLI to run with --dangerously-skip-permissions as root
+ENV IS_SANDBOX=1
+
 # Ensure data directory exists (Railway volume mounts here)
 RUN mkdir -p /app/data
 

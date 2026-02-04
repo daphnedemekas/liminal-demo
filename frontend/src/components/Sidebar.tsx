@@ -31,6 +31,17 @@ const STATUS_DISPLAY: Record<string, string> = {
   active: "Active",
 };
 
+/** Compute the display status for a project.
+ *  Show run status only for transient states (working/planning).
+ *  Don't surface "failed" in the sidebar — show "Active" instead. */
+function displayStatus(p: Project): string {
+  const runStatus = p.latest_run_status;
+  if (runStatus === "working" || runStatus === "planning") return runStatus;
+  if (runStatus === "done") return "done";
+  // For "failed" or null, show project-level status (usually "active")
+  return p.status || "active";
+}
+
 function useTheme() {
   const [dark, setDark] = useState(() => {
     const stored = localStorage.getItem("theme");
@@ -155,8 +166,8 @@ export function Sidebar({ projects, domains, activeProjectId, activeDomainId, on
               >
                 <div className="project-name">{p.name}</div>
                 <div className="project-status">
-                  <span className={`status-dot ${p.latest_run_status || p.status}`} />
-                  {STATUS_DISPLAY[p.latest_run_status || p.status] || p.latest_run_status || p.status}
+                  <span className={`status-dot ${displayStatus(p)}`} />
+                  {STATUS_DISPLAY[displayStatus(p)] || displayStatus(p)}
                 </div>
               </div>
             ))}
@@ -179,8 +190,8 @@ export function Sidebar({ projects, domains, activeProjectId, activeDomainId, on
               >
                 <div className="project-name">{p.name}</div>
                 <div className="project-status">
-                  <span className={`status-dot ${p.latest_run_status || p.status}`} />
-                  {STATUS_DISPLAY[p.latest_run_status || p.status] || p.latest_run_status || p.status}
+                  <span className={`status-dot ${displayStatus(p)}`} />
+                  {STATUS_DISPLAY[displayStatus(p)] || displayStatus(p)}
                 </div>
               </div>
             ))}

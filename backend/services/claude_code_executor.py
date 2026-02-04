@@ -26,6 +26,8 @@ class ClaudeCodeExecutor:
 
     from backend.prompts.executor import EXECUTOR_SYSTEM_PROMPT as SYSTEM_PROMPT
 
+    TIMEOUT_SECONDS = 180  # 3 minute timeout for agent runs
+
     async def execute(
         self,
         instruction: str,
@@ -58,8 +60,9 @@ class ClaudeCodeExecutor:
 
         if allowed_tools:
             cmd.extend(["--allowedTools", ",".join(allowed_tools)])
-        if max_turns is not None:
-            cmd.extend(["--max-turns", str(max_turns)])
+        # Default max-turns to prevent runaway execution
+        turns = max_turns or 10
+        cmd.extend(["--max-turns", str(turns)])
 
         env = os.environ.copy()
 
@@ -73,12 +76,37 @@ class ClaudeCodeExecutor:
             env=env,
         )
 
+        # Read stderr concurrently for diagnostics
+        async def _drain_stderr():
+            while True:
+                line = await process.stderr.readline()
+                if not line:
+                    break
+                msg = line.decode("utf-8", errors="replace").strip()
+                if msg:
+                    logger.info(f"claude stderr: {msg[:500]}")
+
+        stderr_task = asyncio.create_task(_drain_stderr())
+
+        timed_out = False
         try:
             # Read raw chunks instead of using line-based iteration, which has
             # a 64KB default buffer limit that large HTML apps blow past.
             buf = b""
+            deadline = asyncio.get_event_loop().time() + self.TIMEOUT_SECONDS
             while True:
-                chunk = await process.stdout.read(65536)
+                remaining = deadline - asyncio.get_event_loop().time()
+                if remaining <= 0:
+                    timed_out = True
+                    break
+                try:
+                    chunk = await asyncio.wait_for(
+                        process.stdout.read(65536),
+                        timeout=remaining,
+                    )
+                except asyncio.TimeoutError:
+                    timed_out = True
+                    break
                 if not chunk:
                     break
                 buf += chunk
@@ -107,11 +135,30 @@ class ClaudeCodeExecutor:
             logger.info("Executor generator closed, killing subprocess")
             process.kill()
             await process.wait()
+            stderr_task.cancel()
             return
         except Exception as e:
             yield ExecutorEvent(type="error", content={"error": str(e)}, raw={})
 
+        if timed_out:
+            logger.warning(f"Claude CLI timed out after {self.TIMEOUT_SECONDS}s, killing process")
+            process.kill()
+            await process.wait()
+            stderr_task.cancel()
+            yield ExecutorEvent(
+                type="error",
+                content={"error": f"Agent timed out after {self.TIMEOUT_SECONDS}s"},
+                raw={},
+            )
+            # Clean up
+            try:
+                shutil.rmtree(sandbox_home, ignore_errors=True)
+            except Exception:
+                pass
+            return
+
         await process.wait()
+        await stderr_task
 
         # Clean up sandbox HOME directory
         try:
@@ -120,8 +167,15 @@ class ClaudeCodeExecutor:
             pass
 
         if process.returncode != 0:
-            stderr = await process.stderr.read()
-            err_msg = stderr.decode("utf-8").strip() if stderr else "Unknown error"
+            stderr_out = ""
+            try:
+                # stderr may already be drained by the task, but try anyway
+                remaining_stderr = await asyncio.wait_for(process.stderr.read(), timeout=2)
+                stderr_out = remaining_stderr.decode("utf-8").strip()
+            except Exception:
+                pass
+            err_msg = stderr_out or f"Process exited with code {process.returncode}"
+            logger.warning(f"Claude CLI failed (exit {process.returncode}): {err_msg[:500]}")
             yield ExecutorEvent(
                 type="error",
                 content={"error": err_msg, "exit_code": process.returncode},

@@ -210,7 +210,21 @@ class ContextAttachment(Base):
 
 # ── Database setup ──────────────────────────────────────────────────
 
-DB_PATH = os.environ.get("DATABASE_PATH", "data/envisage.db")
+_DEFAULT_DB_PATH = "data/envisage.db"
+_VOLUME_DB_PATHS = [
+    "/data/envisage.db",      # preferred Railway volume mount
+    "/app/data/envisage.db",  # fallback if volume mounted under /app/data
+]
+
+# Prefer an attached Railway volume at /data if present and DATABASE_PATH not set
+if os.environ.get("DATABASE_PATH"):
+    DB_PATH = os.environ["DATABASE_PATH"]
+else:
+    DB_PATH = _DEFAULT_DB_PATH
+    for path in _VOLUME_DB_PATHS:
+        if os.path.isdir(os.path.dirname(path)):
+            DB_PATH = path
+            break
 
 # Ensure the parent directory exists (SQLite can create the file but not the directory)
 os.makedirs(os.path.dirname(DB_PATH) or ".", exist_ok=True)

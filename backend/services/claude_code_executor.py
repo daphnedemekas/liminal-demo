@@ -26,7 +26,7 @@ class ClaudeCodeExecutor:
 
     from backend.prompts.executor import EXECUTOR_SYSTEM_PROMPT as SYSTEM_PROMPT
 
-    TIMEOUT_SECONDS = 180  # 3 minute timeout for agent runs
+    TIMEOUT_SECONDS = 1800  # 30 minute timeout for agent runs
 
     async def execute(
         self,
@@ -61,7 +61,7 @@ class ClaudeCodeExecutor:
         if allowed_tools:
             cmd.extend(["--allowedTools", ",".join(allowed_tools)])
         # Default max-turns to prevent runaway execution
-        turns = max_turns or 10
+        turns = max_turns or 25
         cmd.extend(["--max-turns", str(turns)])
 
         env = os.environ.copy()

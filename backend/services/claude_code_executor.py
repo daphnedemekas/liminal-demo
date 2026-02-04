@@ -39,15 +39,12 @@ class ClaudeCodeExecutor:
 
         Uses: claude -p "instruction" --output-format stream-json --verbose
         """
-        # Create a sandboxed HOME so the inner agent doesn't inherit
-        # user-level plugins (e.g. Playwright MCP) that can hang
+        # Use --strict-mcp-config with empty config to prevent user-level
+        # MCP servers (e.g. Playwright) from loading, while keeping HOME
+        # intact so the CLI can find its auth credentials.
         sandbox_home = tempfile.mkdtemp(prefix="envisage-sandbox-")
-        sandbox_claude_dir = Path(sandbox_home) / ".claude"
-        sandbox_claude_dir.mkdir()
-        # Write minimal settings (no plugins, no MCP servers)
-        (sandbox_claude_dir / "settings.json").write_text(
-            json.dumps({"permissions": {"allow": []}})
-        )
+        empty_mcp_config = Path(sandbox_home) / "empty-mcp.json"
+        empty_mcp_config.write_text(json.dumps({"mcpServers": {}}))
 
         cmd = [
             "claude", "-p", instruction,
@@ -55,6 +52,8 @@ class ClaudeCodeExecutor:
             "--verbose",
             "--dangerously-skip-permissions",
             "--system-prompt", system_prompt or self.SYSTEM_PROMPT,
+            "--mcp-config", str(empty_mcp_config),
+            "--strict-mcp-config",
         ]
 
         if allowed_tools:
@@ -62,9 +61,7 @@ class ClaudeCodeExecutor:
         if max_turns is not None:
             cmd.extend(["--max-turns", str(max_turns)])
 
-        # Inherit current env but override HOME to sandbox
         env = os.environ.copy()
-        env["HOME"] = sandbox_home
 
         logger.info(f"Executing claude: {instruction[:100]}...")
 

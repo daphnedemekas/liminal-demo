@@ -273,7 +273,7 @@ function App() {
         )}
 
         {/* Home view — always mounted once user is logged in, hidden when on project/domain */}
-        <div style={{ display: showHome ? undefined : "none" }}>
+        <div style={{ display: showHome ? undefined : "none", height: "100%", overflow: "hidden" }}>
           <HomeView
             projects={projects}
             domains={domains}

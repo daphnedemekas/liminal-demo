@@ -777,6 +777,7 @@ body {
 .home-chat-panel {
   width: 0;
   height: 100%;
+  min-height: 0;
   overflow: hidden;
   transition: width 0.25s ease;
   border-left: 1px solid var(--border-hairline);
@@ -784,12 +785,14 @@ body {
   flex-direction: column;
   position: relative;
   background: var(--bg-panel);
+  flex-shrink: 0;
 }
 .home-chat-panel.open {
   /* width set via inline style for drag-resize */
 }
 .home-chat-panel .chat-panel {
   flex: 1;
+  min-height: 0;
   height: 100%;
 }
 .home-chat-resize-handle {

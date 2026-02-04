@@ -84,7 +84,7 @@ Return your <analysis> reasoning followed by ONLY the JSON object."""
 # Variables: signals, open_questions
 
 MEDIATOR_ASK_QUESTION_PROMPT = """\
-Based on the conversation so far, ask 1-2 focused follow-up questions.
+Based on the conversation so far, ask ONE focused follow-up question.
 
 <signals>
 {signals}
@@ -94,10 +94,12 @@ Based on the conversation so far, ask 1-2 focused follow-up questions.
 {open_questions}
 </open_questions>
 
-Ask 1-2 specific, focused questions to resolve the most important open questions.
+Ask ONE specific question to resolve the most important open question. Do NOT combine
+multiple questions into one message — pick the single most important thing to ask next.
 Do NOT present generic menu options — options must be specific to the user's situation.
 
 When your question has natural discrete answers, include 2-4 suggested answer options as actions.
+All actions must be answers to the SAME single question.
 Good candidates: budget ranges, team sizes, yes/no, preference between options, timeline choices,
 experience levels, or any question where most people would pick from a small set of answers.
 Each action: {{"label": "short label", "description": "", "action_text": "the full answer to send"}}

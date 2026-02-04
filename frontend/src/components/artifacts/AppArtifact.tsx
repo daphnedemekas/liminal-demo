@@ -10,7 +10,7 @@ interface Props {
   artifactId: number;
 }
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const API_BASE = import.meta.env.VITE_API_URL || "";
 
 export function AppArtifact({ artifactId }: Props) {
   const [expanded, setExpanded] = useState(false);

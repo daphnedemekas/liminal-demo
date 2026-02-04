@@ -12,7 +12,10 @@ import { ProjectWorkspace } from "./components/ProjectWorkspace";
 import { ProposedProjectsPanel } from "./components/ProposedProjectsPanel";
 
 function App() {
-  const [showWelcome, setShowWelcome] = useState(true);
+  const [showWelcome, setShowWelcome] = useState(() => {
+    // Skip welcome if we have a saved session
+    return !localStorage.getItem("envisage_user");
+  });
   const [user, setUser] = useState<User | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [domains, setDomains] = useState<DiscoveryDomainState[]>([]);
@@ -27,6 +30,32 @@ function App() {
   const [acceptedIndices, setAcceptedIndices] = useState<Set<number>>(new Set());
   const [skippedIndices, setSkippedIndices] = useState<Set<number>>(new Set());
   const [proposalLoading, setProposalLoading] = useState(false);
+
+  // Restore user session from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem("envisage_user");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved) as User;
+        // Verify user still exists on the server
+        api.getUser(parsed.id).then((u) => {
+          setUser(u);
+          setShowWelcome(false);
+        }).catch(() => {
+          localStorage.removeItem("envisage_user");
+        });
+      } catch {
+        localStorage.removeItem("envisage_user");
+      }
+    }
+  }, []);
+
+  // Save user to localStorage whenever it changes
+  useEffect(() => {
+    if (user) {
+      localStorage.setItem("envisage_user", JSON.stringify(user));
+    }
+  }, [user]);
 
   const loadProjects = useCallback(async () => {
     if (!user) return;

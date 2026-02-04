@@ -29,6 +29,9 @@ app.add_middleware(
 )
 
 # Initialize database and seed demo data
+from backend.database import DB_PATH
+_db_file = Path(DB_PATH)
+logger.info(f"DB path: {_db_file.resolve()} exists={_db_file.exists()} size={_db_file.stat().st_size if _db_file.exists() else 0}")
 init_db()
 seed_demo_data()
 

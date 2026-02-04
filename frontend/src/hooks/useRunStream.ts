@@ -20,7 +20,9 @@ export function useRunStream(runId: string | null) {
     if (!runId) return;
 
     setSynthesis(null);
-    const wsBase = import.meta.env.VITE_WS_URL || "ws://localhost:8000";
+    // Derive WebSocket URL from current page location so it works in both dev and production
+    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsBase = import.meta.env.VITE_WS_URL || `${proto}//${window.location.host}`;
     const ws = new WebSocket(`${wsBase}/ws/run/${runId}`);
     wsRef.current = ws;
 

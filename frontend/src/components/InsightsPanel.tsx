@@ -167,10 +167,13 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(days / 7)}w ago`;
 }
 
-export function InsightsPanel({ userId, refreshKey }: { userId: string; refreshKey?: number }) {
+export function InsightsPanel({ userId, refreshKey, userName }: { userId: string; refreshKey?: number; userName?: string }) {
   const [data, setData] = useState<InsightsData | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [showProgress, setShowProgress] = useState(true);
+
+  // Only show demo progress for Olivia (the demo user)
+  const isDemoUser = userName?.toLowerCase() === "olivia";
 
   useEffect(() => {
     api.getInsights(userId).then(setData).catch(() => {});
@@ -181,54 +184,58 @@ export function InsightsPanel({ userId, refreshKey }: { userId: string; refreshK
 
   return (
     <div className="insights-panel">
-      {/* Progress Overview Section - Oura-style */}
-      <div className="insights-header">
-        <span className="section-title" style={{ marginBottom: 0 }}>
-          Olivia's Progress
-        </span>
-        <button
-          className="toggle-progress-btn"
-          onClick={() => setShowProgress(!showProgress)}
-        >
-          {showProgress ? "Hide" : "Show"}
-        </button>
-      </div>
+      {/* Progress Overview Section - Oura-style (only for demo user Olivia) */}
+      {isDemoUser && (
+        <>
+          <div className="insights-header">
+            <span className="section-title" style={{ marginBottom: 0 }}>
+              Your Progress
+            </span>
+            <button
+              className="toggle-progress-btn"
+              onClick={() => setShowProgress(!showProgress)}
+            >
+              {showProgress ? "Hide" : "Show"}
+            </button>
+          </div>
 
-      {showProgress && (
-        <div className="progress-cards">
-          {Object.entries(DEMO_PROGRESS).map(([key, project]) => (
-            <div key={key} className="progress-card" style={{ borderLeftColor: project.color }}>
-              <div className="progress-card-header">
-                <span className="progress-card-icon">{project.icon}</span>
-                <span className="progress-card-label">{project.label}</span>
-              </div>
-
-              <div className="progress-card-content">
-                <div className="progress-ring-container">
-                  <ProgressRing progress={project.progress} color={project.color} />
-                </div>
-
-                <div className="progress-card-right">
-                  <div className="trend-container">
-                    <TrendLine data={project.trend} color={project.color} />
-                    <span className="trend-label">6 weeks</span>
+          {showProgress && (
+            <div className="progress-cards">
+              {Object.entries(DEMO_PROGRESS).map(([key, project]) => (
+                <div key={key} className="progress-card" style={{ borderLeftColor: project.color }}>
+                  <div className="progress-card-header">
+                    <span className="progress-card-icon">{project.icon}</span>
+                    <span className="progress-card-label">{project.label}</span>
                   </div>
 
-                  <div className="stats-row">
-                    {project.stats.map((stat, i) => (
-                      <StatBadge key={i} {...stat} />
-                    ))}
+                  <div className="progress-card-content">
+                    <div className="progress-ring-container">
+                      <ProgressRing progress={project.progress} color={project.color} />
+                    </div>
+
+                    <div className="progress-card-right">
+                      <div className="trend-container">
+                        <TrendLine data={project.trend} color={project.color} />
+                        <span className="trend-label">6 weeks</span>
+                      </div>
+
+                      <div className="stats-row">
+                        {project.stats.map((stat, i) => (
+                          <StatBadge key={i} {...stat} />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="progress-card-insight">
+                    <span className="insight-icon">💡</span>
+                    <span>{project.insight}</span>
                   </div>
                 </div>
-              </div>
-
-              <div className="progress-card-insight">
-                <span className="insight-icon">💡</span>
-                <span>{project.insight}</span>
-              </div>
+              ))}
             </div>
-          ))}
-        </div>
+          )}
+        </>
       )}
 
       {/* Insights Section */}

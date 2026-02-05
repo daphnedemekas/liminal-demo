@@ -98,7 +98,7 @@ export function HomeView({
           <p className="home-summary">{summaryText}</p>
         </div>
 
-        <InsightsPanel userId={userId} refreshKey={insightsRefresh} />
+        <InsightsPanel userId={userId} refreshKey={insightsRefresh} userName={userName} />
 
         {Object.entries(projectsByDomain).map(([domain, domainProjects]) => (
           <div key={domain} className="domain-section">

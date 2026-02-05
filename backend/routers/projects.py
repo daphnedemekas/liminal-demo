@@ -55,6 +55,9 @@ class ProjectUpdate(BaseModel):
 
 @router.post("", response_model=ProjectResponse)
 def create_project(req: ProjectCreate, db: Session = Depends(get_db)):
+    # If project has both a domain and description, it was created via navigation from home chat
+    # and should auto-start with that context. Otherwise it's a fresh "New project" click.
+    suggested = bool(req.domain and req.description)
     project = Project(
         user_id=req.user_id,
         name=req.name,
@@ -62,6 +65,7 @@ def create_project(req: ProjectCreate, db: Session = Depends(get_db)):
         involvement_level=req.involvement_level,
         budget_limit_cents=req.budget_limit_cents,
         domain=req.domain,
+        suggested_by_system=suggested,
     )
     db.add(project)
     db.commit()

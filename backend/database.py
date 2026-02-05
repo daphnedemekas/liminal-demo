@@ -99,6 +99,7 @@ class Project(Base):
     success_metric = Column(String, nullable=True)  # e.g. "workouts per week"
     metric_target = Column(String, nullable=True)  # e.g. "4"
     metric_config = Column(MutableDict.as_mutable(JSON), default=dict)  # full metric spec: unit, cadence, source, prompt
+    notification_prefs = Column(MutableDict.as_mutable(JSON), default=dict)  # {frequency, update_types}
     domain = Column(String, nullable=True)  # discovery domain that spawned this project
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
@@ -280,7 +281,24 @@ def get_engine():
 def init_db():
     engine = get_engine()
     Base.metadata.create_all(engine)
+    _run_migrations(engine)
     return engine
+
+
+def _run_migrations(engine):
+    """Run simple schema migrations for SQLite (add missing columns)."""
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(engine)
+
+    # Check if notification_prefs column exists in projects table
+    if "projects" in inspector.get_table_names():
+        columns = [col["name"] for col in inspector.get_columns("projects")]
+        if "notification_prefs" not in columns:
+            with engine.connect() as conn:
+                conn.execute(text("ALTER TABLE projects ADD COLUMN notification_prefs JSON DEFAULT '{}'"))
+                conn.commit()
+                logger.info("Added notification_prefs column to projects table")
 
 
 def get_session_factory():

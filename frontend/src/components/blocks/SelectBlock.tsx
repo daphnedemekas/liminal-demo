@@ -10,6 +10,9 @@ interface Props {
 }
 
 export function SelectBlock({ block, selection, submitted, disabled, onSelect, onSubmit }: Props) {
+  // Some blocks (like metric/notification choices before CTA) shouldn't auto-submit
+  const shouldAutoSubmit = block.submitOnSelect !== false;
+
   const handleOptionClick = (value: string) => {
     if (submitted || disabled) return;
     if (block.multi) {
@@ -19,8 +22,10 @@ export function SelectBlock({ block, selection, submitted, disabled, onSelect, o
       onSelect(next);
     } else {
       onSelect([value]);
-      // Single-select auto-submits — pass the value directly to avoid stale closure
-      setTimeout(() => onSubmit(value), 50);
+      // Single-select auto-submits unless submitOnSelect is false
+      if (shouldAutoSubmit) {
+        setTimeout(() => onSubmit(value), 50);
+      }
     }
   };
 

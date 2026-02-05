@@ -445,7 +445,7 @@ def _handle_greeting(project, messages, recent_runs, base_prompt, db) -> dict:
     return result
 
 
-def synthesize_result(run: AgentRun, project: Project, user: UserProfile, db: Session, written_files: list[dict] | None = None) -> dict:
+def synthesize_result(run: AgentRun, project: Project, user: UserProfile, db: Session, written_files: Optional[list] = None) -> dict:
     """Synthesize raw agent output into a personalized summary with artifacts.
 
     Returns dict with keys: summary, artifacts, suggested_next_steps, actions

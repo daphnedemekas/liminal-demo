@@ -177,6 +177,7 @@ export interface SelectBlock {
   prompt: string;
   options: SelectOption[];
   multi: boolean;
+  submitOnSelect?: boolean;  // if false, don't auto-submit single-select (wait for CTA)
 }
 
 export interface InputBlock {

@@ -71,7 +71,7 @@ SIMPLICITY_CONSTRAINTS = """\
 ## Simplicity — avoid over-engineering
 - Only make changes directly requested or clearly necessary
 - Don't add features, refactoring, or "improvements" beyond what was asked
-- Prefer existing tools and services over custom builds
+- If user asks for something custom, build it — don't redirect to external tools
 - Three similar lines are better than a premature abstraction
 - Trust internal code — only validate at system boundaries
 - If something is unused, delete it completely rather than commenting it out

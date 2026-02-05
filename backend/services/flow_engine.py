@@ -59,9 +59,9 @@ class FlowEngine:
 
         # No user message and no phase yet — greeting or auto-start from nav context
         if not user_message and not state.get("phase"):
-            # If the project has a description (e.g. from home chat nav_context),
-            # treat it as the first user message and jump straight into Frame phase
-            if project.description and project.description.strip():
+            # Only auto-start with description if project was created via navigation from home chat
+            # (suggested_by_system=True). Fresh "New project" clicks should get a greeting instead.
+            if project.suggested_by_system and project.description and project.description.strip():
                 nav_context = project.description.strip()
                 db.add(ChatMessage(project_id=project.id, role="user", content=nav_context))
                 db.commit()
@@ -600,7 +600,7 @@ class FlowEngine:
         state: dict,
         db: Session,
     ) -> dict:
-        """Commit phase: present summary checklist + build CTA."""
+        """Commit phase: present preferences + summary checklist + build CTA."""
         answers = state.get("diagnostic_answers", {})
         selected = state.get("selected_proposals", "")
         context = state.get("context_answers", {})
@@ -626,21 +626,12 @@ class FlowEngine:
         # Save task description for escalation
         state["task_description"] = result.get("task_description", "")
         state["phase"] = "commit"
+
+        # Store metric and notification options for user selection
+        state["metric_options"] = result.get("metric_options", [])
+        state["notification_options"] = result.get("notification_options", [])
+
         project.flow_state = state
-
-        # Save success metric if proposed
-        metric = result.get("success_metric")
-        if metric and isinstance(metric, dict):
-            project.success_metric = metric.get("name", "")
-            project.metric_target = str(metric.get("target", ""))
-            project.metric_config = {
-                "unit": metric.get("unit", ""),
-                "cadence": metric.get("cadence", "weekly"),
-                "source": metric.get("source", "self_reported"),
-                "prompt": metric.get("prompt"),
-                "description": metric.get("description", ""),
-            }
-
         db.flush()
 
         blocks = result.get("blocks", [])
@@ -672,10 +663,17 @@ class FlowEngine:
         db: Session,
     ) -> dict:
         """Handle commit phase response: build or adjust."""
-        lower = user_message.lower().strip()
+        # Parse selections from message format: "build|metric_choice:value|notification_choice:value"
+        parts = user_message.split("|")
+        action = parts[0].lower().strip()
+        selections = {}
+        for part in parts[1:]:
+            if ":" in part:
+                key, value = part.split(":", 1)
+                selections[key.strip()] = value.strip()
 
         # Check if user wants to adjust
-        if "adjust" in lower or "change" in lower or "modify" in lower:
+        if "adjust" in action or "change" in action or "modify" in action:
             # Go back to propose phase
             state["phase"] = "propose"
             project.flow_state = state
@@ -699,7 +697,40 @@ class FlowEngine:
                 "phase": "commit",
             }
 
-        # User approved — escalate to execution
+        # User approved — save their preferences and escalate to execution
+
+        # Save selected metric
+        metric_choice = selections.get("metric_choice", "")
+        metric_options = state.get("metric_options", [])
+        selected_metric = next(
+            (m for m in metric_options if m.get("value") == metric_choice),
+            metric_options[0] if metric_options else None
+        )
+        if selected_metric:
+            project.success_metric = selected_metric.get("name", "")
+            project.metric_target = str(selected_metric.get("target", ""))
+            project.metric_config = {
+                "unit": selected_metric.get("unit", ""),
+                "cadence": selected_metric.get("cadence", "weekly"),
+                "source": selected_metric.get("source", "self_reported"),
+                "prompt": selected_metric.get("prompt"),
+                "description": selected_metric.get("description", ""),
+            }
+
+        # Save selected notification preferences
+        notify_choice = selections.get("notification_choice", "")
+        notify_options = state.get("notification_options", [])
+        selected_notify = next(
+            (n for n in notify_options if n.get("value") == notify_choice),
+            notify_options[0] if notify_options else None
+        )
+        if selected_notify:
+            project.notification_prefs = {
+                "frequency": selected_notify.get("frequency", "weekly"),
+                "update_types": selected_notify.get("update_types", []),
+                "description": selected_notify.get("description", ""),
+            }
+
         task_desc = state.get("task_description", "")
         if not task_desc:
             task_desc = f"Work on: {project.description or project.name}"

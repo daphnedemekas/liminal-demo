@@ -1,0 +1,1180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guitar Journey | Olivia</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+        :root {
+            --bg-primary: #0f1219;
+            --bg-secondary: #1a1f2e;
+            --bg-tertiary: #242938;
+            --border: #2d3348;
+            --border-hover: #3d4560;
+            --text-primary: #e8eaed;
+            --text-secondary: #9aa0b0;
+            --text-tertiary: #6b7280;
+            --accent: #4a8fe7;
+            --accent-hover: #5c9df0;
+            --accent-subtle: rgba(74, 143, 231, 0.12);
+            --success: #34c759;
+            --warning: #f0a030;
+            --danger: #e54d4d;
+            --radius-sm: 4px;
+            --radius-md: 6px;
+            --radius-lg: 8px;
+        }
+
+        :root[data-theme="light"] {
+            --bg-primary: #f7f6f3;
+            --bg-secondary: #ffffff;
+            --bg-tertiary: #f0f0f0;
+            --border: #e0e0e0;
+            --border-hover: #d0d0d0;
+            --text-primary: #1f2937;
+            --text-secondary: #5b6470;
+            --text-tertiary: #8a94a2;
+            --accent: #3566a8;
+            --accent-hover: #2a5590;
+            --accent-subtle: rgba(53, 102, 168, 0.12);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            font-size: 14px;
+            line-height: 1.6;
+            color: var(--text-primary);
+            background: var(--bg-primary);
+            -webkit-font-smoothing: antialiased;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .app-container { display: flex; height: 100vh; }
+
+        .sidebar {
+            width: 220px;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            padding: 20px 0;
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+        }
+
+        .logo {
+            padding: 0 20px 20px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 16px;
+        }
+
+        .logo h1 { font-size: 16px; font-weight: 600; color: var(--warning); }
+        .logo p { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+
+        .nav-item {
+            padding: 10px 20px;
+            cursor: pointer;
+            transition: background 0.15s ease;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .nav-item:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+        .nav-item.active { background: var(--accent-subtle); color: var(--accent); border-left: 2px solid var(--accent); }
+
+        .practice-box {
+            margin: auto 20px 20px;
+            background: rgba(240, 160, 48, 0.12);
+            padding: 14px;
+            border-radius: var(--radius-md);
+            text-align: center;
+        }
+
+        .practice-num { font-size: 28px; font-weight: 700; color: var(--warning); }
+        .practice-label { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+
+        .main-content { flex: 1; overflow-y: auto; padding: 24px; }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+
+        .header h2 { font-size: 20px; font-weight: 600; }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 16px;
+        }
+
+        .card {
+            background: var(--bg-secondary);
+            border-radius: var(--radius-lg);
+            padding: 20px;
+            border: 1px solid var(--border);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .card-title { font-size: 14px; font-weight: 600; }
+
+        .card-badge {
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 10px;
+            background: var(--accent-subtle);
+            color: var(--accent);
+            font-weight: 500;
+        }
+
+        .card-badge.success { background: rgba(52, 199, 89, 0.15); color: var(--success); }
+        .card-badge.warning { background: rgba(240, 160, 48, 0.15); color: var(--warning); }
+
+        /* Stats */
+        .stats-section { grid-column: span 12; }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+        }
+
+        .stat-card {
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-md);
+            padding: 16px;
+            text-align: center;
+        }
+
+        .stat-value { font-size: 28px; font-weight: 700; color: var(--accent); }
+        .stat-value.gold { color: var(--warning); }
+        .stat-value.green { color: var(--success); }
+        .stat-label { font-size: 11px; color: var(--text-secondary); margin-top: 4px; }
+
+        /* Today's Practice */
+        .practice-section { grid-column: span 6; }
+
+        .practice-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-md);
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .practice-item:hover { background: var(--border); }
+
+        .practice-check {
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--border-hover);
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.15s;
+            flex-shrink: 0;
+        }
+
+        .practice-check.checked { background: var(--success); border-color: var(--success); }
+        .practice-check.checked::after { content: ""; font-size: 12px; color: white; }
+
+        .practice-content { flex: 1; }
+        .practice-title { font-size: 13px; font-weight: 500; }
+        .practice-meta { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+
+        .practice-item.completed .practice-title { text-decoration: line-through; color: var(--text-tertiary); }
+
+        /* Chord Library */
+        .chord-section { grid-column: span 6; }
+
+        .chord-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+        }
+
+        .chord-card {
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-md);
+            padding: 12px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.15s;
+            border: 2px solid transparent;
+        }
+
+        .chord-card:hover { border-color: var(--accent); }
+        .chord-card.learned { border-color: var(--success); }
+
+        .chord-diagram {
+            width: 60px;
+            height: 70px;
+            margin: 0 auto 8px;
+            position: relative;
+        }
+
+        .chord-name { font-size: 16px; font-weight: 700; margin-bottom: 2px; }
+        .chord-type { font-size: 10px; color: var(--text-secondary); }
+
+        .chord-status {
+            font-size: 9px;
+            margin-top: 6px;
+            padding: 2px 6px;
+            border-radius: 8px;
+            display: inline-block;
+        }
+
+        .chord-status.learned { background: rgba(52, 199, 89, 0.15); color: var(--success); }
+        .chord-status.learning { background: rgba(240, 160, 48, 0.15); color: var(--warning); }
+        .chord-status.new { background: var(--accent-subtle); color: var(--accent); }
+
+        /* Video Lessons */
+        .video-section { grid-column: span 8; }
+
+        .video-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+
+        .video-card {
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-md);
+            overflow: hidden;
+        }
+
+        .video-embed {
+            width: 100%;
+            aspect-ratio: 16/9;
+            border: none;
+        }
+
+        .video-info { padding: 12px; }
+        .video-title { font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+        .video-meta { font-size: 11px; color: var(--text-secondary); }
+
+        /* Song Library */
+        .songs-section { grid-column: span 4; }
+
+        .song-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-md);
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .song-item:hover { background: var(--border); }
+
+        .song-difficulty {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .song-difficulty.easy { background: var(--success); }
+        .song-difficulty.medium { background: var(--warning); }
+        .song-difficulty.hard { background: var(--danger); }
+
+        .song-info { flex: 1; }
+        .song-name { font-size: 13px; font-weight: 500; }
+        .song-artist { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+
+        .song-chords {
+            display: flex;
+            gap: 4px;
+        }
+
+        .song-chord {
+            font-size: 10px;
+            padding: 2px 6px;
+            background: var(--bg-secondary);
+            border-radius: var(--radius-sm);
+            color: var(--text-secondary);
+        }
+
+        /* Exercises */
+        .exercises-section { grid-column: span 6; }
+
+        .exercise-card {
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-md);
+            padding: 16px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .exercise-card:hover { background: var(--border); }
+
+        .exercise-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .exercise-title { font-size: 14px; font-weight: 600; }
+
+        .exercise-badge {
+            font-size: 10px;
+            padding: 3px 8px;
+            border-radius: 8px;
+            background: var(--accent-subtle);
+            color: var(--accent);
+        }
+
+        .exercise-desc { font-size: 12px; color: var(--text-secondary); margin-bottom: 10px; }
+
+        .exercise-progress {
+            height: 4px;
+            background: var(--bg-secondary);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .exercise-bar {
+            height: 100%;
+            background: var(--accent);
+            transition: width 0.3s;
+        }
+
+        /* Metronome */
+        .metronome-section { grid-column: span 6; }
+
+        .metronome-display {
+            text-align: center;
+            padding: 20px;
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-md);
+        }
+
+        .bpm-display {
+            font-size: 48px;
+            font-weight: 700;
+            color: var(--accent);
+            margin-bottom: 4px;
+        }
+
+        .bpm-label { font-size: 12px; color: var(--text-secondary); margin-bottom: 16px; }
+
+        .metronome-controls {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .met-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            font-size: 18px;
+            cursor: pointer;
+            transition: all 0.15s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .met-btn:hover { border-color: var(--accent); }
+
+        .met-btn.play {
+            width: 50px;
+            height: 50px;
+            background: var(--accent);
+            border: none;
+        }
+
+        .met-btn.play:hover { background: var(--accent-hover); }
+
+        .beat-indicator {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .beat-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--border);
+            transition: all 0.1s;
+        }
+
+        .beat-dot.active { background: var(--accent); transform: scale(1.3); }
+
+        /* Finger Stretches */
+        .stretch-section { grid-column: span 6; }
+
+        .stretch-exercise {
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-md);
+            padding: 16px;
+            margin-bottom: 10px;
+        }
+
+        .stretch-title { font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+        .stretch-desc { font-size: 12px; color: var(--text-secondary); margin-bottom: 12px; }
+
+        .stretch-frets {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .fret-box {
+            width: 40px;
+            height: 40px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--accent);
+        }
+
+        .stretch-tip { font-size: 11px; color: var(--text-tertiary); font-style: italic; }
+
+        /* Devices */
+        .devices-section { grid-column: span 6; }
+
+        .devices-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+
+        .device-card {
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-md);
+            padding: 14px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.15s;
+            border: 1px solid transparent;
+        }
+
+        .device-card:hover { border-color: var(--accent); }
+        .device-card.connected { border-color: var(--success); }
+
+        .device-icon { font-size: 22px; margin-bottom: 6px; }
+        .device-name { font-size: 11px; font-weight: 500; }
+        .device-status { font-size: 10px; color: var(--text-secondary); margin-top: 2px; }
+        .device-status.connected { color: var(--success); }
+
+        /* Progress Timeline */
+        .progress-section { grid-column: span 12; }
+
+        .progress-timeline {
+            display: flex;
+            gap: 16px;
+            overflow-x: auto;
+            padding-bottom: 8px;
+        }
+
+        .progress-week {
+            min-width: 140px;
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-md);
+            padding: 14px;
+            text-align: center;
+        }
+
+        .progress-week.current { border: 2px solid var(--accent); }
+
+        .week-label { font-size: 11px; color: var(--text-secondary); margin-bottom: 6px; }
+        .week-focus { font-size: 13px; font-weight: 500; margin-bottom: 8px; }
+
+        .week-status {
+            font-size: 10px;
+            padding: 3px 8px;
+            border-radius: 8px;
+            display: inline-block;
+        }
+
+        .week-status.complete { background: rgba(52, 199, 89, 0.15); color: var(--success); }
+        .week-status.current { background: var(--accent-subtle); color: var(--accent); }
+        .week-status.upcoming { background: var(--bg-secondary); color: var(--text-tertiary); }
+
+        /* Modal for chord detail */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.7);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.show { display: flex; }
+
+        .modal {
+            background: var(--bg-secondary);
+            border-radius: var(--radius-lg);
+            max-width: 400px;
+            width: 90%;
+            border: 1px solid var(--border);
+            padding: 24px;
+            text-align: center;
+        }
+
+        .modal-chord-name { font-size: 32px; font-weight: 700; margin-bottom: 4px; }
+        .modal-chord-type { font-size: 14px; color: var(--text-secondary); margin-bottom: 20px; }
+
+        .chord-svg {
+            width: 150px;
+            height: 180px;
+            margin: 0 auto 20px;
+        }
+
+        .chord-fingers { font-size: 13px; color: var(--text-secondary); margin-bottom: 16px; }
+
+        .modal-btn {
+            padding: 10px 24px;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: var(--radius-md);
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            margin: 0 6px;
+        }
+
+        .modal-btn.secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
+        @media (max-width: 1200px) {
+            .sidebar { display: none; }
+            .dashboard { grid-template-columns: repeat(6, 1fr); }
+            .stats-section, .progress-section { grid-column: span 6; }
+            .practice-section, .chord-section, .video-section, .songs-section, .exercises-section, .metronome-section, .stretch-section, .devices-section { grid-column: span 6; }
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        @media (max-width: 768px) {
+            .dashboard { grid-template-columns: 1fr; }
+            .dashboard > * { grid-column: span 1 !important; }
+            .chord-grid, .video-grid, .devices-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <nav class="sidebar">
+            <div class="logo">
+                <h1>Guitar Journey</h1>
+                <p>Learn at your pace</p>
+            </div>
+            <div class="nav-item active"><span>📊</span> Dashboard</div>
+            <div class="nav-item"><span>🎸</span> Chord Library</div>
+            <div class="nav-item"><span>🎵</span> Songs</div>
+            <div class="nav-item"><span>💪</span> Exercises</div>
+            <div class="nav-item"><span>📹</span> Lessons</div>
+            <div class="nav-item"><span>🎚️</span> Metronome</div>
+            <div class="nav-item"><span>⚙️</span> Settings</div>
+            <div class="practice-box">
+                <div class="practice-num">14</div>
+                <div class="practice-label">Day Streak</div>
+            </div>
+        </nav>
+
+        <main class="main-content">
+            <header class="header">
+                <div>
+                    <h2>Keep strumming, Olivia!</h2>
+                    <p style="color: var(--text-secondary); font-size: 13px; margin-top: 4px;">Your G-C-D progression is sounding great</p>
+                </div>
+                <div style="font-size: 13px; color: var(--text-secondary);" id="currentDate"></div>
+            </header>
+
+            <div class="dashboard">
+                <!-- Stats -->
+                <section class="card stats-section">
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-value gold">14</div>
+                            <div class="stat-label">Day Streak</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value green">8</div>
+                            <div class="stat-label">Chords Learned</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">12</div>
+                            <div class="stat-label">Songs Started</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">4.5</div>
+                            <div class="stat-label">Hours This Week</div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Today's Practice -->
+                <section class="card practice-section">
+                    <div class="card-header">
+                        <span class="card-title">Today's Practice</span>
+                        <span class="card-badge">5 exercises</span>
+                    </div>
+                    <div class="practice-item completed" onclick="togglePractice(this)">
+                        <div class="practice-check checked"></div>
+                        <div class="practice-content">
+                            <div class="practice-title">Finger warm-up stretches</div>
+                            <div class="practice-meta">5 min  Fundamentals</div>
+                        </div>
+                    </div>
+                    <div class="practice-item completed" onclick="togglePractice(this)">
+                        <div class="practice-check checked"></div>
+                        <div class="practice-content">
+                            <div class="practice-title">G-C-D chord transitions (2 min each)</div>
+                            <div class="practice-meta">6 min  Chord Practice</div>
+                        </div>
+                    </div>
+                    <div class="practice-item" onclick="togglePractice(this)">
+                        <div class="practice-check"></div>
+                        <div class="practice-content">
+                            <div class="practice-title">Learn Em chord shape</div>
+                            <div class="practice-meta">10 min  New Chord</div>
+                        </div>
+                    </div>
+                    <div class="practice-item" onclick="togglePractice(this)">
+                        <div class="practice-check"></div>
+                        <div class="practice-content">
+                            <div class="practice-title">Practice "Knockin' on Heaven's Door"</div>
+                            <div class="practice-meta">15 min  Song Practice</div>
+                        </div>
+                    </div>
+                    <div class="practice-item" onclick="togglePractice(this)">
+                        <div class="practice-check"></div>
+                        <div class="practice-content">
+                            <div class="practice-title">Strumming pattern: D-DU-UDU</div>
+                            <div class="practice-meta">5 min  Rhythm</div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Chord Library -->
+                <section class="card chord-section">
+                    <div class="card-header">
+                        <span class="card-title">Your Chord Library</span>
+                        <span class="card-badge success">8 learned</span>
+                    </div>
+                    <div class="chord-grid">
+                        <div class="chord-card learned" onclick="openChord('G')">
+                            <div class="chord-diagram" id="chord-G"></div>
+                            <div class="chord-name">G</div>
+                            <div class="chord-type">Major</div>
+                            <div class="chord-status learned">Learned</div>
+                        </div>
+                        <div class="chord-card learned" onclick="openChord('C')">
+                            <div class="chord-diagram" id="chord-C"></div>
+                            <div class="chord-name">C</div>
+                            <div class="chord-type">Major</div>
+                            <div class="chord-status learned">Learned</div>
+                        </div>
+                        <div class="chord-card learned" onclick="openChord('D')">
+                            <div class="chord-diagram" id="chord-D"></div>
+                            <div class="chord-name">D</div>
+                            <div class="chord-type">Major</div>
+                            <div class="chord-status learned">Learned</div>
+                        </div>
+                        <div class="chord-card learned" onclick="openChord('Em')">
+                            <div class="chord-diagram" id="chord-Em"></div>
+                            <div class="chord-name">Em</div>
+                            <div class="chord-type">Minor</div>
+                            <div class="chord-status learned">Learned</div>
+                        </div>
+                        <div class="chord-card learned" onclick="openChord('Am')">
+                            <div class="chord-diagram" id="chord-Am"></div>
+                            <div class="chord-name">Am</div>
+                            <div class="chord-type">Minor</div>
+                            <div class="chord-status learned">Learned</div>
+                        </div>
+                        <div class="chord-card learned" onclick="openChord('E')">
+                            <div class="chord-diagram" id="chord-E"></div>
+                            <div class="chord-name">E</div>
+                            <div class="chord-type">Major</div>
+                            <div class="chord-status learned">Learned</div>
+                        </div>
+                        <div class="chord-card" onclick="openChord('A')">
+                            <div class="chord-diagram" id="chord-A"></div>
+                            <div class="chord-name">A</div>
+                            <div class="chord-type">Major</div>
+                            <div class="chord-status learning">Learning</div>
+                        </div>
+                        <div class="chord-card" onclick="openChord('F')">
+                            <div class="chord-diagram" id="chord-F"></div>
+                            <div class="chord-name">F</div>
+                            <div class="chord-type">Major</div>
+                            <div class="chord-status new">Up Next</div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Video Lessons -->
+                <section class="card video-section">
+                    <div class="card-header">
+                        <span class="card-title">Video Lessons</span>
+                        <span class="card-badge">Curated for you</span>
+                    </div>
+                    <div class="video-grid">
+                        <div class="video-card">
+                            <iframe class="video-embed" src="https://www.youtube.com/embed/5hLkLkBtTNc" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                            <div class="video-info">
+                                <div class="video-title">Beginner Guitar Lesson</div>
+                                <div class="video-meta">Guitar Tutorial  15 min</div>
+                            </div>
+                        </div>
+                        <div class="video-card">
+                            <iframe class="video-embed" src="https://www.youtube.com/embed/5WOPwDpHFAw" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                            <div class="video-info">
+                                <div class="video-title">Guitar Course for Beginners</div>
+                                <div class="video-meta">Beginner Playlist  20 min</div>
+                            </div>
+                        </div>
+                        <div class="video-card">
+                            <iframe class="video-embed" src="https://www.youtube.com/embed/iQfOCbKkCZA" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                            <div class="video-info">
+                                <div class="video-title">Quick Guitar Tips</div>
+                                <div class="video-meta">Short Tutorial  1 min</div>
+                            </div>
+                        </div>
+                        <div class="video-card">
+                            <iframe class="video-embed" src="https://www.youtube.com/embed/qPJKtFi2PmQ" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                            <div class="video-info">
+                                <div class="video-title">Guitar Chord Tutorial</div>
+                                <div class="video-meta">Chord Practice  18 min</div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Songs -->
+                <section class="card songs-section">
+                    <div class="card-header">
+                        <span class="card-title">Songs You Can Play</span>
+                    </div>
+                    <div class="song-item" onclick="alert('Opening Knockin on Heaven\'s Door...')">
+                        <div class="song-difficulty easy"></div>
+                        <div class="song-info">
+                            <div class="song-name">Knockin' on Heaven's Door</div>
+                            <div class="song-artist">Bob Dylan</div>
+                        </div>
+                        <div class="song-chords">
+                            <span class="song-chord">G</span>
+                            <span class="song-chord">D</span>
+                            <span class="song-chord">Am</span>
+                            <span class="song-chord">C</span>
+                        </div>
+                    </div>
+                    <div class="song-item" onclick="alert('Opening Horse With No Name...')">
+                        <div class="song-difficulty easy"></div>
+                        <div class="song-info">
+                            <div class="song-name">Horse With No Name</div>
+                            <div class="song-artist">America</div>
+                        </div>
+                        <div class="song-chords">
+                            <span class="song-chord">Em</span>
+                            <span class="song-chord">D</span>
+                        </div>
+                    </div>
+                    <div class="song-item" onclick="alert('Opening Wonderwall...')">
+                        <div class="song-difficulty medium"></div>
+                        <div class="song-info">
+                            <div class="song-name">Wonderwall</div>
+                            <div class="song-artist">Oasis</div>
+                        </div>
+                        <div class="song-chords">
+                            <span class="song-chord">Em</span>
+                            <span class="song-chord">G</span>
+                            <span class="song-chord">D</span>
+                            <span class="song-chord">A</span>
+                        </div>
+                    </div>
+                    <div class="song-item" onclick="alert('Opening Good Riddance...')">
+                        <div class="song-difficulty easy"></div>
+                        <div class="song-info">
+                            <div class="song-name">Good Riddance (Time of Your Life)</div>
+                            <div class="song-artist">Green Day</div>
+                        </div>
+                        <div class="song-chords">
+                            <span class="song-chord">G</span>
+                            <span class="song-chord">C</span>
+                            <span class="song-chord">D</span>
+                        </div>
+                    </div>
+                    <div class="song-item" onclick="alert('Opening Sweet Home Alabama...')">
+                        <div class="song-difficulty medium"></div>
+                        <div class="song-info">
+                            <div class="song-name">Sweet Home Alabama</div>
+                            <div class="song-artist">Lynyrd Skynyrd</div>
+                        </div>
+                        <div class="song-chords">
+                            <span class="song-chord">D</span>
+                            <span class="song-chord">C</span>
+                            <span class="song-chord">G</span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Exercises -->
+                <section class="card exercises-section">
+                    <div class="card-header">
+                        <span class="card-title">Skill Exercises</span>
+                    </div>
+                    <div class="exercise-card" onclick="alert('Starting chord transition drill...')">
+                        <div class="exercise-header">
+                            <span class="exercise-title">Chord Transition Speed</span>
+                            <span class="exercise-badge">+2 BPM today</span>
+                        </div>
+                        <div class="exercise-desc">G to C transitions at increasing tempo. Current best: 80 BPM</div>
+                        <div class="exercise-progress"><div class="exercise-bar" style="width: 65%"></div></div>
+                    </div>
+                    <div class="exercise-card" onclick="alert('Starting finger independence drill...')">
+                        <div class="exercise-header">
+                            <span class="exercise-title">Finger Independence</span>
+                            <span class="exercise-badge">Level 3</span>
+                        </div>
+                        <div class="exercise-desc">Spider walk exercise to improve finger control</div>
+                        <div class="exercise-progress"><div class="exercise-bar" style="width: 45%"></div></div>
+                    </div>
+                    <div class="exercise-card" onclick="alert('Starting strumming pattern drill...')">
+                        <div class="exercise-header">
+                            <span class="exercise-title">Strumming Patterns</span>
+                            <span class="exercise-badge">4 patterns</span>
+                        </div>
+                        <div class="exercise-desc">Master common down-up strumming rhythms</div>
+                        <div class="exercise-progress"><div class="exercise-bar" style="width: 75%"></div></div>
+                    </div>
+                </section>
+
+                <!-- Metronome -->
+                <section class="card metronome-section">
+                    <div class="card-header">
+                        <span class="card-title">Practice Metronome</span>
+                    </div>
+                    <div class="metronome-display">
+                        <div class="bpm-display" id="bpmDisplay">80</div>
+                        <div class="bpm-label">BPM</div>
+                        <div class="metronome-controls">
+                            <button class="met-btn" onclick="changeBPM(-5)">-</button>
+                            <button class="met-btn play" id="playBtn" onclick="toggleMetronome()">></button>
+                            <button class="met-btn" onclick="changeBPM(5)">+</button>
+                        </div>
+                        <div class="beat-indicator">
+                            <div class="beat-dot" id="beat1"></div>
+                            <div class="beat-dot" id="beat2"></div>
+                            <div class="beat-dot" id="beat3"></div>
+                            <div class="beat-dot" id="beat4"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Finger Stretches -->
+                <section class="card stretch-section">
+                    <div class="card-header">
+                        <span class="card-title">Finger Reach Exercises</span>
+                        <span class="card-badge warning">For small hands</span>
+                    </div>
+                    <div class="stretch-exercise">
+                        <div class="stretch-title">1-2-3-4 Spider Walk</div>
+                        <div class="stretch-desc">Place one finger per fret, moving up strings</div>
+                        <div class="stretch-frets">
+                            <div class="fret-box">1</div>
+                            <div class="fret-box">2</div>
+                            <div class="fret-box">3</div>
+                            <div class="fret-box">4</div>
+                        </div>
+                        <div class="stretch-tip">Start slow, focus on clean notes</div>
+                    </div>
+                    <div class="stretch-exercise">
+                        <div class="stretch-title">Fret Stretch (1-4)</div>
+                        <div class="stretch-desc">Index on fret 1, pinky stretch to fret 4</div>
+                        <div class="stretch-frets">
+                            <div class="fret-box">1</div>
+                            <div class="fret-box" style="opacity: 0.3">2</div>
+                            <div class="fret-box" style="opacity: 0.3">3</div>
+                            <div class="fret-box">4</div>
+                        </div>
+                        <div class="stretch-tip">Hold for 10 seconds, repeat 5x</div>
+                    </div>
+                </section>
+
+                <!-- Devices -->
+                <section class="card devices-section">
+                    <div class="card-header">
+                        <span class="card-title">Connected Devices</span>
+                    </div>
+                    <div class="devices-grid">
+                        <div class="device-card connected" onclick="alert('Tuner is ready!')">
+                            <div class="device-icon">🎸</div>
+                            <div class="device-name">Guitar Tuner</div>
+                            <div class="device-status connected"> Active</div>
+                        </div>
+                        <div class="device-card" onclick="alert('Connect microphone to record your practice')">
+                            <div class="device-icon">🎤</div>
+                            <div class="device-name">Microphone</div>
+                            <div class="device-status">Record Audio</div>
+                        </div>
+                        <div class="device-card" onclick="alert('Connect to Spotify for backing tracks')">
+                            <div class="device-icon">S</div>
+                            <div class="device-name">Spotify</div>
+                            <div class="device-status">Connect</div>
+                        </div>
+                        <div class="device-card" onclick="alert('Connect amp for practice')">
+                            <div class="device-icon">A</div>
+                            <div class="device-name">Guitar Amp</div>
+                            <div class="device-status">Connect</div>
+                        </div>
+                        <div class="device-card connected">
+                            <div class="device-icon">U</div>
+                            <div class="device-name">Ultimate Guitar</div>
+                            <div class="device-status connected"> Synced</div>
+                        </div>
+                        <div class="device-card" onclick="alert('Connect looper pedal')">
+                            <div class="device-icon">L</div>
+                            <div class="device-name">Loop Pedal</div>
+                            <div class="device-status">Connect</div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Progress Timeline -->
+                <section class="card progress-section">
+                    <div class="card-header">
+                        <span class="card-title">Your Learning Journey</span>
+                    </div>
+                    <div class="progress-timeline">
+                        <div class="progress-week">
+                            <div class="week-label">Week 1-2</div>
+                            <div class="week-focus">Basic chords G, C, D</div>
+                            <div class="week-status complete">Complete</div>
+                        </div>
+                        <div class="progress-week">
+                            <div class="week-label">Week 3-4</div>
+                            <div class="week-focus">Em, Am + First songs</div>
+                            <div class="week-status complete">Complete</div>
+                        </div>
+                        <div class="progress-week current">
+                            <div class="week-label">Week 5-6</div>
+                            <div class="week-focus">E, A chords + Strumming</div>
+                            <div class="week-status current">Current</div>
+                        </div>
+                        <div class="progress-week">
+                            <div class="week-label">Week 7-8</div>
+                            <div class="week-focus">F chord + Barre intro</div>
+                            <div class="week-status upcoming">Upcoming</div>
+                        </div>
+                        <div class="progress-week">
+                            <div class="week-label">Week 9-10</div>
+                            <div class="week-focus">Fingerpicking basics</div>
+                            <div class="week-status upcoming">Upcoming</div>
+                        </div>
+                        <div class="progress-week">
+                            <div class="week-label">Week 11-12</div>
+                            <div class="week-focus">Song repertoire</div>
+                            <div class="week-status upcoming">Upcoming</div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Chord Modal -->
+    <div class="modal-overlay" id="chordModal">
+        <div class="modal">
+            <div class="modal-chord-name" id="modalChordName">G</div>
+            <div class="modal-chord-type" id="modalChordType">Major</div>
+            <svg class="chord-svg" id="modalChordSvg" viewBox="0 0 100 120"></svg>
+            <div class="chord-fingers" id="modalFingers">Fingers: 2-1-3</div>
+            <div style="margin-top: 16px">
+                <button class="modal-btn secondary" onclick="closeChordModal()">Close</button>
+                <button class="modal-btn" onclick="alert('Playing chord audio...')">Hear It</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Chord data
+        const chords = {
+            G: { type: 'Major', fingers: '2-1-3', frets: [[3,2],[2,1],[1,3],[0,0],[0,0],[3,4]] },
+            C: { type: 'Major', fingers: '1-2-3', frets: [[0,0],[3,3],[2,2],[0,0],[1,1],[0,0]] },
+            D: { type: 'Major', fingers: '1-2-3', frets: [[0,0],[0,0],[0,0],[2,1],[3,3],[2,2]] },
+            Em: { type: 'Minor', fingers: '1-2', frets: [[0,0],[2,2],[2,1],[0,0],[0,0],[0,0]] },
+            Am: { type: 'Minor', fingers: '1-2-3', frets: [[0,0],[0,0],[2,2],[2,1],[1,3],[0,0]] },
+            E: { type: 'Major', fingers: '1-2-3', frets: [[0,0],[2,2],[2,1],[1,3],[0,0],[0,0]] },
+            A: { type: 'Major', fingers: '1-2-3', frets: [[0,0],[0,0],[2,1],[2,2],[2,3],[0,0]] },
+            F: { type: 'Major (Barre)', fingers: 'Barre + 2-3-4', frets: [[1,1],[1,1],[2,2],[3,3],[3,4],[1,1]] }
+        };
+
+        document.getElementById('currentDate').textContent = new Date().toLocaleDateString('en-US', {
+            weekday: 'long', month: 'short', day: 'numeric'
+        });
+
+        // Toggle practice item
+        function togglePractice(el) {
+            el.classList.toggle('completed');
+            el.querySelector('.practice-check').classList.toggle('checked');
+            saveState();
+        }
+
+        // Chord modal
+        function openChord(name) {
+            const chord = chords[name];
+            document.getElementById('modalChordName').textContent = name;
+            document.getElementById('modalChordType').textContent = chord.type;
+            document.getElementById('modalFingers').textContent = 'Fingers: ' + chord.fingers;
+            drawChord(chord.frets);
+            document.getElementById('chordModal').classList.add('show');
+        }
+
+        function closeChordModal() {
+            document.getElementById('chordModal').classList.remove('show');
+        }
+
+        function drawChord(frets) {
+            const svg = document.getElementById('modalChordSvg');
+            let html = `
+                <rect x="10" y="10" width="80" height="100" fill="none" stroke="var(--border)" stroke-width="2"/>
+                <line x1="10" y1="10" x2="90" y2="10" stroke="var(--text-primary)" stroke-width="4"/>
+            `;
+            // Fret lines
+            for (let i = 1; i < 5; i++) {
+                html += `<line x1="10" y1="${10 + i*20}" x2="90" y2="${10 + i*20}" stroke="var(--border)" stroke-width="1"/>`;
+            }
+            // String lines
+            for (let i = 0; i < 6; i++) {
+                html += `<line x1="${10 + i*16}" y1="10" x2="${10 + i*16}" y2="110" stroke="var(--border)" stroke-width="1"/>`;
+            }
+            // Finger positions
+            frets.forEach((f, i) => {
+                if (f[0] > 0) {
+                    html += `<circle cx="${10 + i*16}" cy="${f[0]*20}" r="6" fill="var(--accent)"/>`;
+                } else if (f[1] === 0) {
+                    html += `<circle cx="${10 + i*16}" cy="5" r="4" fill="none" stroke="var(--text-secondary)" stroke-width="1"/>`;
+                }
+            });
+            svg.innerHTML = html;
+        }
+
+        // Metronome
+        let bpm = 80;
+        let isPlaying = false;
+        let metronomeInterval;
+        let currentBeat = 0;
+
+        function changeBPM(delta) {
+            bpm = Math.max(40, Math.min(200, bpm + delta));
+            document.getElementById('bpmDisplay').textContent = bpm;
+            if (isPlaying) {
+                clearInterval(metronomeInterval);
+                startMetronome();
+            }
+        }
+
+        function toggleMetronome() {
+            isPlaying = !isPlaying;
+            document.getElementById('playBtn').textContent = isPlaying ? '||' : '>';
+            if (isPlaying) {
+                startMetronome();
+            } else {
+                clearInterval(metronomeInterval);
+                document.querySelectorAll('.beat-dot').forEach(d => d.classList.remove('active'));
+            }
+        }
+
+        function startMetronome() {
+            const interval = 60000 / bpm;
+            metronomeInterval = setInterval(() => {
+                document.querySelectorAll('.beat-dot').forEach(d => d.classList.remove('active'));
+                document.getElementById('beat' + (currentBeat + 1)).classList.add('active');
+                currentBeat = (currentBeat + 1) % 4;
+                // Play click sound (visual only for demo)
+            }, interval);
+        }
+
+        // State management
+        function saveState() {
+            if (window.envisage?.store) {
+                const practices = [...document.querySelectorAll('.practice-item')].map(p => p.classList.contains('completed'));
+                window.envisage.store.save({ practices, bpm });
+            }
+        }
+
+        function loadState() {
+            if (window.envisage?.store) {
+                window.envisage.store.load().then(data => {
+                    if (data?.practices) {
+                        document.querySelectorAll('.practice-item').forEach((item, idx) => {
+                            if (data.practices[idx]) {
+                                item.classList.add('completed');
+                                item.querySelector('.practice-check').classList.add('checked');
+                            }
+                        });
+                    }
+                    if (data?.bpm) {
+                        bpm = data.bpm;
+                        document.getElementById('bpmDisplay').textContent = bpm;
+                    }
+                });
+            }
+        }
+
+        // Theme handling
+        window.addEventListener('message', (e) => {
+            if (e.data?.type === 'envisage-theme-change') document.documentElement.setAttribute('data-theme', e.data.theme);
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadState();
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('theme')) document.documentElement.setAttribute('data-theme', params.get('theme'));
+        });
+
+        // Close modal on overlay click
+        document.getElementById('chordModal').addEventListener('click', (e) => {
+            if (e.target.id === 'chordModal') closeChordModal();
+        });
+    </script>
+</body>
+</html>

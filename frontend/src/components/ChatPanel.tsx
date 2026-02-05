@@ -157,7 +157,7 @@ export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, on
               }
               return [
                 ...prev,
-                { role: "assistant", content: res.message, actions: res.actions, blocks: res.blocks, phase: res.phase },
+                { role: "assistant", content: res.message, actions: res.actions, blocks: res.blocks, phase: res.phase, nav_context: res.nav_context },
               ];
             });
             if (isAudioMode) {
@@ -356,7 +356,7 @@ export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, on
                 setMessages((prev) => {
                   const last = prev[prev.length - 1];
                   if (last?.role === "assistant" && last.content === res.message) return prev;
-                  return [...prev, { role: "assistant", content: res.message, actions: res.actions, blocks: res.blocks, phase: res.phase }];
+                  return [...prev, { role: "assistant", content: res.message, actions: res.actions, blocks: res.blocks, phase: res.phase, nav_context: res.nav_context }];
                 });
                 if (isAudioMode) playTTS(res.message);
               }
@@ -494,23 +494,33 @@ export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, on
     onRunComplete?.();
   }, [synthesis, onRunComplete]);
 
-  // Track whether user has scrolled up
+  // Track whether user has scrolled up - check position before any state change
+  const checkIfNearBottom = () => {
+    const container = messagesContainerRef.current;
+    if (!container) return true; // Default to auto-scroll if no container
+    const { scrollTop, scrollHeight, clientHeight } = container;
+    return scrollHeight - scrollTop - clientHeight <= 100;
+  };
+
+  // Update scroll position tracking on scroll events
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
     const handleScroll = () => {
-      const { scrollTop, scrollHeight, clientHeight } = container;
-      // "Near bottom" = within 100px of the bottom
-      userScrolledUp.current = scrollHeight - scrollTop - clientHeight > 100;
+      userScrolledUp.current = !checkIfNearBottom();
     };
     container.addEventListener("scroll", handleScroll);
     return () => container.removeEventListener("scroll", handleScroll);
   }, []);
 
   // Auto-scroll only when user is already at the bottom
+  // Use a small delay to let DOM update first
   useEffect(() => {
-    if (!userScrolledUp.current) {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const shouldScroll = !userScrolledUp.current;
+    if (shouldScroll) {
+      requestAnimationFrame(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      });
     }
   }, [messages, activityLog, researchingTopic]);
 
@@ -556,7 +566,18 @@ export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, on
 
   const handleBlockSubmit = (blockId: string, text: string) => {
     setBlockSubmitted((prev) => new Set(prev).add(blockId));
-    sendChat(text, true);
+
+    // If this is a CTA action (build/adjust), include current selections from other blocks
+    if (text === "build" || text === "adjust") {
+      const selections = Object.entries(blockSelections)
+        .filter(([, values]) => values.length > 0)
+        .map(([id, values]) => `${id}:${values.join(",")}`)
+        .join("|");
+      const fullMessage = selections ? `${text}|${selections}` : text;
+      sendChat(fullMessage, true);
+    } else {
+      sendChat(text, true);
+    }
   };
 
   const handleActionClick = (actionText: string) => {

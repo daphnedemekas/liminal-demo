@@ -35,21 +35,32 @@ to personalize the implementation.
 """ + FLOW_GUARDRAILS + """
 
 ## Your task
-Ask 1-3 targeted questions to gather specific details needed to execute the selected proposals. \
-These questions should be about implementation specifics, NOT about understanding the goal \
-(that was the diagnose phase).
+Ask 1-3 targeted questions to gather specific details needed to make the app relevant to the user, ALIVE and \
+PERSONALIZED from the moment they open it. The goal is to collect enough context to pre-populate \
+the app with real content — not build an empty template.
+If you are asking for a lot of data, before doing so, offer to connect to relevant platforms to pull in data automatically.
 
-**CRITICAL: If the user is building a tracker, organizer, dashboard, or any system for managing \
-existing information (contacts, tasks, expenses, etc.), you MUST ask them to share their current \
-data.** This is the most important collect question — the tool should be built pre-populated with \
-their real data, not empty. Ask them to paste their data (notes, lists, spreadsheets) so the \
-system can be built with their information already loaded.
+**CRITICAL: Apps must launch pre-populated, not empty.** Ask for:
+- Any existing data they have (contacts, expenses, notes, lists) → import it
+- Specific details about their situation → tailor the content
+- Their starting point → so the app meets them where they are
+- Who they need to connect with → pre-load contacts and outreach templates
+
+The app should feel like it was built specifically for them, with real content ready to use.
 
 Good collect questions:
 - "Can you paste your current investor list / contacts / data so I can build the tracker pre-filled?" (for trackers & organizers — ALWAYS ask this)
-- "Which email should I use for the account?" (for tool setup)
+- "Would you like me to connect to [Google Calendar / Oura / Strava / etc.] to pull in your data automatically?" (for relevant integrations)
 - "Any specific tools or platforms you're already locked into?" (for integration constraints)
 - "What's your preferred learning style?" (for educational proposals)
+
+**Data integrations — ALWAYS offer when relevant:**
+If the app could benefit from external data, ask if they'd like to connect:
+- Health/fitness apps → "Want me to pull in your Oura/Strava/Apple Health data?"
+- Scheduling apps → "Should I sync with your Google Calendar?"
+- Finance apps → "Would you like to connect your bank accounts for automatic tracking?"
+
+Present integrations as a simple choice, not a requirement.
 
 Bad collect questions (too diagnostic):
 - "What's your budget?" (should have been asked in diagnose)
@@ -75,19 +86,25 @@ Return a JSON object:
 <selected_proposals>["Build custom investor pipeline tracker"]</selected_proposals>
 <response>
 {{
-  "message": "Let's build your pipeline tracker pre-loaded with your actual investor data so it's useful from day one. I just need your current info:",
+  "message": "I'll build your pipeline tracker pre-loaded with your investors so it's useful immediately. Share what you have:",
   "blocks": [
     {{
       "type": "input",
       "id": "existing_data",
-      "prompt": "Paste your current investor notes — names, stages, follow-ups, anything you have. I'll organize it all into the tracker.",
-      "placeholder": "e.g. Sequoia - had first call, need to send deck. Andreessen - waiting on partner meeting..."
+      "prompt": "Paste your current investor list — names, firms, stages, notes. I'll organize everything and set up follow-up reminders.",
+      "placeholder": "e.g. Sarah Chen (Sequoia) - had coffee, interested in Series A. Mike at a16z - intro pending from John..."
     }},
     {{
       "type": "input",
-      "id": "email",
-      "prompt": "Which email should I use if we need to set up any accounts?",
-      "placeholder": "Your primary email address"
+      "id": "raise_details",
+      "prompt": "Quick context on your raise — what stage, how much, and timeline? I'll tailor the tracker to your process.",
+      "placeholder": "e.g. Raising $2M seed, aiming to close by March"
+    }},
+    {{
+      "type": "select",
+      "id": "integrations",
+      "prompt": "Want me to connect to your calendar to track meetings automatically?",
+      "options": ["Yes, connect Google Calendar", "No, I'll log meetings manually"]
     }}
   ],
   "phase_complete": false,
@@ -97,22 +114,48 @@ Return a JSON object:
 </example>
 
 <example>
-<selected_proposals>["Set up Lunch Money", "Build a tax category layer"]</selected_proposals>
+<selected_proposals>["Build a fitness tracker dashboard"]</selected_proposals>
 <response>
 {{
-  "message": "Good choices — Lunch Money plus a custom tax layer will cover both your personal and freelance tracking. Two quick things I need:",
+  "message": "I'll build you a fitness dashboard that brings everything together. A couple quick questions:",
   "blocks": [
     {{
-      "type": "input",
-      "id": "existing_expenses",
-      "prompt": "Paste any recent expenses or categories you're already tracking — I'll import them so you don't start from scratch.",
-      "placeholder": "e.g. Jan: Figma $15, AWS $45, Notion $10..."
+      "type": "select",
+      "id": "integrations",
+      "prompt": "Would you like me to connect any of these to pull in your data automatically?",
+      "options": ["Oura Ring", "Strava", "Apple Health", "None — I'll enter data manually"],
+      "multi": true
     }},
     {{
       "type": "input",
-      "id": "tax_categories",
-      "prompt": "Any specific tax categories you know you need? (e.g. home office, mileage, equipment)",
-      "placeholder": "List the ones you can think of — I'll add standard ones too"
+      "id": "fitness_goals",
+      "prompt": "What metrics matter most to you? (e.g. sleep, steps, workouts, recovery)",
+      "placeholder": "e.g. I want to track sleep quality and workout frequency"
+    }}
+  ],
+  "phase_complete": false,
+  "context_answers": {{}}
+}}
+</response>
+</example>
+
+<example>
+<selected_proposals>["Build custom expense tracker"]</selected_proposals>
+<response>
+{{
+  "message": "I'll build you a clean expense tracker. Let me grab a few details:",
+  "blocks": [
+    {{
+      "type": "select",
+      "id": "bank_integration",
+      "prompt": "Would you like me to connect to your bank for automatic transaction import?",
+      "options": ["Yes, connect my bank", "No, I'll add expenses manually"]
+    }},
+    {{
+      "type": "input",
+      "id": "existing_expenses",
+      "prompt": "Paste any recent expenses you want pre-loaded — I'll organize them for you.",
+      "placeholder": "e.g. Jan: Figma $15, AWS $45, Notion $10..."
     }}
   ],
   "phase_complete": false,

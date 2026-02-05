@@ -1,0 +1,1622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Career Transition Hub | Olivia</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+        :root {
+            --bg-primary: #0f1219;
+            --bg-secondary: #1a1f2e;
+            --bg-tertiary: #242938;
+            --border: #2d3348;
+            --border-hover: #3d4560;
+            --text-primary: #e8eaed;
+            --text-secondary: #9aa0b0;
+            --text-tertiary: #6b7280;
+            --accent: #4a8fe7;
+            --accent-hover: #5c9df0;
+            --accent-subtle: rgba(74, 143, 231, 0.12);
+            --success: #34c759;
+            --warning: #f0a030;
+            --danger: #e54d4d;
+            --linkedin: #0077b5;
+            --radius-sm: 4px;
+            --radius-md: 6px;
+            --radius-lg: 8px;
+        }
+
+        :root[data-theme="light"] {
+            --bg-primary: #f7f6f3;
+            --bg-secondary: #ffffff;
+            --bg-tertiary: #f0f0f0;
+            --border: #e0e0e0;
+            --border-hover: #d0d0d0;
+            --text-primary: #1f2937;
+            --text-secondary: #5b6470;
+            --text-tertiary: #8a94a2;
+            --accent: #3566a8;
+            --accent-hover: #2a5590;
+            --accent-subtle: rgba(53, 102, 168, 0.12);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            font-size: 14px;
+            line-height: 1.6;
+            color: var(--text-primary);
+            background: var(--bg-primary);
+            -webkit-font-smoothing: antialiased;
+            min-height: 100vh;
+        }
+
+        .app-container { display: flex; height: 100vh; }
+
+        .sidebar {
+            width: 220px;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            padding: 20px 0;
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+        }
+
+        .logo {
+            padding: 0 20px 20px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 16px;
+        }
+
+        .logo h1 { font-size: 16px; font-weight: 600; color: var(--accent); }
+        .logo p { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+
+        .nav-item {
+            padding: 10px 20px;
+            cursor: pointer;
+            transition: background 0.15s ease;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .nav-item:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+        .nav-item.active { background: var(--accent-subtle); color: var(--accent); border-left: 2px solid var(--accent); }
+
+        .nav-icon { width: 16px; text-align: center; }
+
+        .streak-badge {
+            margin: auto 20px 20px;
+            background: var(--accent-subtle);
+            padding: 12px 16px;
+            border-radius: var(--radius-md);
+            text-align: center;
+        }
+
+        .streak-number { font-size: 24px; font-weight: 700; color: var(--accent); }
+        .streak-label { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+
+        .main-content { flex: 1; overflow-y: auto; padding: 24px; }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+
+        .header h2 { font-size: 20px; font-weight: 600; }
+        .header-date { font-size: 13px; color: var(--text-secondary); }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 16px;
+        }
+
+        .card {
+            background: var(--bg-secondary);
+            border-radius: var(--radius-lg);
+            padding: 20px;
+            border: 1px solid var(--border);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .card-title { font-size: 14px; font-weight: 600; }
+
+        .card-badge {
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 10px;
+            background: var(--accent-subtle);
+            color: var(--accent);
+            font-weight: 500;
+        }
+
+        .card-badge.success { background: rgba(52, 199, 89, 0.15); color: var(--success); }
+        .card-badge.warning { background: rgba(240, 160, 48, 0.15); color: var(--warning); }
+        .card-badge.linkedin { background: rgba(0, 119, 181, 0.15); color: var(--linkedin); }
+
+        /* Buttons */
+        .btn {
+            padding: 8px 14px;
+            border-radius: var(--radius-md);
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+            border: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-primary { background: var(--accent); color: white; }
+        .btn-primary:hover { background: var(--accent-hover); }
+
+        .btn-success { background: var(--success); color: white; }
+        .btn-success:hover { background: #2db350; }
+
+        .btn-linkedin { background: var(--linkedin); color: white; }
+        .btn-linkedin:hover { background: #006097; }
+
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+        }
+        .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+
+        .btn-sm { padding: 5px 10px; font-size: 11px; }
+        .btn-icon { padding: 6px 8px; }
+
+        /* Progress Stats */
+        .progress-overview { grid-column: span 8; }
+
+        .progress-stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .stat-box {
+            text-align: center;
+            padding: 16px 12px;
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-md);
+        }
+
+        .stat-value { font-size: 28px; font-weight: 700; color: var(--accent); }
+        .stat-label { font-size: 11px; color: var(--text-secondary); margin-top: 4px; }
+
+        /* Skills */
+        .skills-section { grid-column: span 4; }
+
+        .skill-item { margin-bottom: 14px; }
+
+        .skill-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 6px;
+        }
+
+        .skill-name { font-size: 13px; color: var(--text-primary); }
+        .skill-percent { font-size: 13px; color: var(--accent); font-weight: 600; }
+
+        .skill-bar {
+            height: 6px;
+            background: var(--bg-tertiary);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .skill-progress {
+            height: 100%;
+            background: var(--accent);
+            border-radius: 3px;
+            transition: width 0.5s ease;
+        }
+
+        /* Today's Focus */
+        .todays-focus { grid-column: span 6; }
+
+        .focus-list { list-style: none; }
+
+        .focus-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-md);
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .focus-item:hover { background: var(--border); }
+
+        .focus-checkbox {
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--border-hover);
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.15s;
+            flex-shrink: 0;
+        }
+
+        .focus-checkbox.checked { background: var(--accent); border-color: var(--accent); }
+        .focus-checkbox.checked::after { content: ""; color: white; font-size: 12px; }
+
+        .focus-content { flex: 1; }
+        .focus-title { font-size: 13px; font-weight: 500; }
+        .focus-meta { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+
+        .focus-item.completed .focus-title { text-decoration: line-through; color: var(--text-tertiary); }
+
+        /* Opportunities - Enhanced */
+        .opportunities { grid-column: span 6; }
+
+        .opportunity-card {
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-md);
+            padding: 14px;
+            margin-bottom: 12px;
+            border-left: 3px solid var(--accent);
+        }
+
+        .opp-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 8px;
+        }
+
+        .opp-company { font-size: 14px; font-weight: 600; }
+        .opp-role { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+
+        .opp-match {
+            background: rgba(52, 199, 89, 0.15);
+            color: var(--success);
+            padding: 3px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .opp-tags {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+
+        .opp-tag {
+            font-size: 10px;
+            padding: 3px 6px;
+            background: var(--bg-secondary);
+            border-radius: var(--radius-sm);
+            color: var(--text-secondary);
+        }
+
+        .opp-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        /* Video Section */
+        .learning-section { grid-column: span 8; }
+
+        .video-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+
+        .video-card {
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-md);
+            overflow: hidden;
+        }
+
+        .video-embed {
+            width: 100%;
+            aspect-ratio: 16/9;
+            border: none;
+        }
+
+        .video-info { padding: 12px; }
+        .video-title { font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+        .video-meta { font-size: 11px; color: var(--text-secondary); }
+
+        /* Network Section - Enhanced */
+        .network-section { grid-column: span 4; }
+
+        .connection-list { display: flex; flex-direction: column; gap: 10px; }
+
+        .connection-item {
+            background: var(--bg-tertiary);
+            padding: 14px;
+            border-radius: var(--radius-md);
+        }
+
+        .connection-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 10px;
+        }
+
+        .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--accent-subtle);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 13px;
+            color: var(--accent);
+            flex-shrink: 0;
+        }
+
+        .connection-info { flex: 1; }
+        .connection-name { font-size: 13px; font-weight: 500; }
+        .connection-role { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+
+        .connection-actions {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        /* Quick Actions Panel */
+        .quick-actions { grid-column: span 12; }
+
+        .actions-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 12px;
+        }
+
+        .action-card {
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-md);
+            padding: 16px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.15s;
+            border: 1px solid transparent;
+        }
+
+        .action-card:hover {
+            border-color: var(--accent);
+            transform: translateY(-2px);
+        }
+
+        .action-icon { font-size: 24px; margin-bottom: 8px; }
+        .action-label { font-size: 12px; font-weight: 500; }
+        .action-desc { font-size: 10px; color: var(--text-secondary); margin-top: 4px; }
+
+        /* Email Composer */
+        .email-section { grid-column: span 6; }
+
+        .email-composer {
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-md);
+            padding: 16px;
+        }
+
+        .email-field {
+            margin-bottom: 12px;
+        }
+
+        .email-label {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+            display: block;
+        }
+
+        .email-input {
+            width: 100%;
+            padding: 10px 12px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            color: var(--text-primary);
+            font-size: 13px;
+            outline: none;
+        }
+
+        .email-input:focus { border-color: var(--accent); }
+
+        .email-textarea {
+            width: 100%;
+            padding: 10px 12px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            color: var(--text-primary);
+            font-size: 13px;
+            outline: none;
+            resize: vertical;
+            min-height: 100px;
+            font-family: inherit;
+        }
+
+        .email-textarea:focus { border-color: var(--accent); }
+
+        .email-actions {
+            display: flex;
+            gap: 8px;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .email-templates {
+            display: flex;
+            gap: 6px;
+        }
+
+        .template-chip {
+            font-size: 10px;
+            padding: 4px 8px;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .template-chip:hover {
+            background: var(--accent-subtle);
+            color: var(--accent);
+        }
+
+        /* Integrations Panel */
+        .integrations-section { grid-column: span 6; }
+
+        .integration-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px;
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-md);
+            margin-bottom: 8px;
+        }
+
+        .integration-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .integration-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .integration-icon.linkedin { background: rgba(0, 119, 181, 0.15); color: var(--linkedin); }
+        .integration-icon.gmail { background: rgba(234, 67, 53, 0.15); color: #ea4335; }
+        .integration-icon.calendar { background: rgba(66, 133, 244, 0.15); color: #4285f4; }
+        .integration-icon.notion { background: var(--bg-secondary); color: var(--text-primary); }
+        .integration-icon.figma { background: rgba(242, 78, 30, 0.15); color: #f24e1e; }
+
+        .integration-name { font-size: 13px; font-weight: 500; }
+        .integration-status { font-size: 11px; color: var(--text-secondary); }
+        .integration-status.connected { color: var(--success); }
+
+        /* Scheduled Actions */
+        .scheduled-section { grid-column: span 6; }
+
+        .scheduled-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-md);
+            margin-bottom: 8px;
+        }
+
+        .scheduled-time {
+            text-align: center;
+            min-width: 50px;
+        }
+
+        .scheduled-day { font-size: 10px; color: var(--text-secondary); }
+        .scheduled-hour { font-size: 14px; font-weight: 600; color: var(--accent); }
+
+        .scheduled-info { flex: 1; }
+        .scheduled-title { font-size: 13px; font-weight: 500; }
+        .scheduled-desc { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+
+        .scheduled-actions { display: flex; gap: 6px; }
+
+        /* Portfolio */
+        .portfolio-section { grid-column: span 6; }
+
+        .portfolio-item {
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-md);
+            padding: 14px;
+            margin-bottom: 10px;
+        }
+
+        .portfolio-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 8px;
+        }
+
+        .portfolio-status {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+        }
+
+        .status-dot.in-progress { background: var(--warning); }
+        .status-dot.complete { background: var(--success); }
+        .status-dot.planned { background: var(--text-tertiary); }
+
+        .portfolio-title { font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+        .portfolio-desc { font-size: 11px; color: var(--text-secondary); line-height: 1.4; margin-bottom: 10px; }
+
+        .portfolio-actions { display: flex; gap: 6px; }
+
+        /* Activity Feed */
+        .activity-section { grid-column: span 6; }
+
+        .activity-item {
+            display: flex;
+            gap: 12px;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .activity-item:last-child { border-bottom: none; }
+
+        .activity-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: var(--accent-subtle);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+
+        .activity-content { flex: 1; }
+        .activity-text { font-size: 13px; }
+        .activity-time { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
+
+        /* Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.7);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.show { display: flex; }
+
+        .modal {
+            background: var(--bg-secondary);
+            border-radius: var(--radius-lg);
+            max-width: 500px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            border: 1px solid var(--border);
+        }
+
+        .modal-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-title { font-size: 16px; font-weight: 600; }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 20px;
+            cursor: pointer;
+        }
+
+        .modal-body { padding: 20px; }
+
+        .modal-footer {
+            padding: 16px 20px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+
+        /* Toast Notification */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 14px 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.3s ease;
+            z-index: 1001;
+        }
+
+        .toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .toast-icon { font-size: 20px; }
+        .toast-message { font-size: 13px; }
+
+        .toast.success { border-left: 4px solid var(--success); }
+        .toast.info { border-left: 4px solid var(--accent); }
+
+        @media (max-width: 1200px) {
+            .sidebar { display: none; }
+            .dashboard { grid-template-columns: repeat(6, 1fr); }
+            .progress-overview, .learning-section, .quick-actions { grid-column: span 6; }
+            .skills-section, .todays-focus, .opportunities, .network-section, .email-section, .integrations-section, .scheduled-section, .portfolio-section, .activity-section { grid-column: span 6; }
+            .actions-grid { grid-template-columns: repeat(3, 1fr); }
+        }
+
+        @media (max-width: 768px) {
+            .dashboard { grid-template-columns: 1fr; }
+            .dashboard > * { grid-column: span 1 !important; }
+            .progress-stats { grid-template-columns: repeat(2, 1fr); }
+            .video-grid, .actions-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <nav class="sidebar">
+            <div class="logo">
+                <h1>Career Hub</h1>
+                <p>PM  Product Design</p>
+            </div>
+            <div class="nav-item active"><span class="nav-icon">📊</span> Dashboard</div>
+            <div class="nav-item"><span class="nav-icon">📚</span> Learning</div>
+            <div class="nav-item"><span class="nav-icon">💼</span> Portfolio</div>
+            <div class="nav-item"><span class="nav-icon">🎯</span> Opportunities</div>
+            <div class="nav-item"><span class="nav-icon">👥</span> Network</div>
+            <div class="nav-item"><span class="nav-icon">📧</span> Outreach</div>
+            <div class="nav-item"><span class="nav-icon">📅</span> Schedule</div>
+            <div class="nav-item"><span class="nav-icon">⚙️</span> Settings</div>
+            <div class="streak-badge">
+                <div class="streak-number">12</div>
+                <div class="streak-label">Day Streak</div>
+            </div>
+        </nav>
+
+        <main class="main-content">
+            <header class="header">
+                <div>
+                    <h2>Welcome back, Olivia</h2>
+                    <p style="color: var(--text-secondary); font-size: 13px; margin-top: 4px;">Week 6 of 12 - 3 new opportunities match your profile</p>
+                </div>
+                <div class="header-date" id="currentDate"></div>
+            </header>
+
+            <div class="dashboard">
+                <!-- Quick Actions -->
+                <section class="card quick-actions">
+                    <div class="card-header">
+                        <span class="card-title">Quick Actions</span>
+                        <span class="card-badge">Connected</span>
+                    </div>
+                    <div class="actions-grid">
+                        <div class="action-card" onclick="openLinkedInSearch()">
+                            <div class="action-icon">🔍</div>
+                            <div class="action-label">Find Designers</div>
+                            <div class="action-desc">Search LinkedIn for mentors</div>
+                        </div>
+                        <div class="action-card" onclick="openEmailComposer('networking')">
+                            <div class="action-icon">✉️</div>
+                            <div class="action-label">Send Outreach</div>
+                            <div class="action-desc">Draft networking email</div>
+                        </div>
+                        <div class="action-card" onclick="scheduleCoffeeChat()">
+                            <div class="action-icon">☕</div>
+                            <div class="action-label">Book Coffee Chat</div>
+                            <div class="action-desc">Schedule via Calendly</div>
+                        </div>
+                        <div class="action-card" onclick="openJobSearch()">
+                            <div class="action-icon">💼</div>
+                            <div class="action-label">Job Search</div>
+                            <div class="action-desc">Browse matching roles</div>
+                        </div>
+                        <div class="action-card" onclick="openPortfolioEditor()">
+                            <div class="action-icon">🎨</div>
+                            <div class="action-label">Edit Portfolio</div>
+                            <div class="action-desc">Update in Figma</div>
+                        </div>
+                        <div class="action-card" onclick="syncAllPlatforms()">
+                            <div class="action-icon">🔄</div>
+                            <div class="action-label">Sync All</div>
+                            <div class="action-desc">Update from all sources</div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Progress Overview -->
+                <section class="card progress-overview">
+                    <div class="card-header">
+                        <span class="card-title">Your Transition Progress</span>
+                        <span class="card-badge success">On Track</span>
+                    </div>
+                    <div class="progress-stats">
+                        <div class="stat-box">
+                            <div class="stat-value">47%</div>
+                            <div class="stat-label">Overall Progress</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value">23</div>
+                            <div class="stat-label">Hours Learned</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value">3</div>
+                            <div class="stat-label">Portfolio Pieces</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-value">8</div>
+                            <div class="stat-label">Connections</div>
+                        </div>
+                    </div>
+                    <div class="skill-item">
+                        <div class="skill-header">
+                            <span class="skill-name">Overall Transition</span>
+                            <span class="skill-percent">47%</span>
+                        </div>
+                        <div class="skill-bar"><div class="skill-progress" style="width: 47%"></div></div>
+                    </div>
+                </section>
+
+                <!-- Skills -->
+                <section class="card skills-section">
+                    <div class="card-header">
+                        <span class="card-title">Skill Development</span>
+                    </div>
+                    <div class="skill-item">
+                        <div class="skill-header"><span class="skill-name">Figma</span><span class="skill-percent">65%</span></div>
+                        <div class="skill-bar"><div class="skill-progress" style="width: 65%"></div></div>
+                    </div>
+                    <div class="skill-item">
+                        <div class="skill-header"><span class="skill-name">User Research</span><span class="skill-percent">52%</span></div>
+                        <div class="skill-bar"><div class="skill-progress" style="width: 52%"></div></div>
+                    </div>
+                    <div class="skill-item">
+                        <div class="skill-header"><span class="skill-name">Prototyping</span><span class="skill-percent">40%</span></div>
+                        <div class="skill-bar"><div class="skill-progress" style="width: 40%"></div></div>
+                    </div>
+                    <div class="skill-item">
+                        <div class="skill-header"><span class="skill-name">Design Systems</span><span class="skill-percent">35%</span></div>
+                        <div class="skill-bar"><div class="skill-progress" style="width: 35%"></div></div>
+                    </div>
+                    <div class="skill-item">
+                        <div class="skill-header"><span class="skill-name">Visual Design</span><span class="skill-percent">28%</span></div>
+                        <div class="skill-bar"><div class="skill-progress" style="width: 28%"></div></div>
+                    </div>
+                </section>
+
+                <!-- Opportunities - Enhanced with actions -->
+                <section class="card opportunities">
+                    <div class="card-header">
+                        <span class="card-title">Opportunities For You</span>
+                        <span class="card-badge">3 new</span>
+                    </div>
+                    <div class="opportunity-card">
+                        <div class="opp-header">
+                            <div>
+                                <div class="opp-company">Notion</div>
+                                <div class="opp-role">Associate Product Designer</div>
+                            </div>
+                            <span class="opp-match">92% Match</span>
+                        </div>
+                        <div class="opp-tags">
+                            <span class="opp-tag">Remote</span>
+                            <span class="opp-tag">PM Background Welcome</span>
+                            <span class="opp-tag">$120-150k</span>
+                        </div>
+                        <div class="opp-actions">
+                            <button class="btn btn-linkedin btn-sm" onclick="applyLinkedIn('Notion')">
+                                <span>in</span> Easy Apply
+                            </button>
+                            <button class="btn btn-outline btn-sm" onclick="saveJob('Notion')">Save</button>
+                            <button class="btn btn-outline btn-sm" onclick="findReferral('Notion')">Find Referral</button>
+                        </div>
+                    </div>
+                    <div class="opportunity-card">
+                        <div class="opp-header">
+                            <div>
+                                <div class="opp-company">Figma</div>
+                                <div class="opp-role">Product Designer, Growth</div>
+                            </div>
+                            <span class="opp-match">88% Match</span>
+                        </div>
+                        <div class="opp-tags">
+                            <span class="opp-tag">San Francisco</span>
+                            <span class="opp-tag">Entry-Mid Level</span>
+                            <span class="opp-tag">$130-160k</span>
+                        </div>
+                        <div class="opp-actions">
+                            <button class="btn btn-primary btn-sm" onclick="openApplication('Figma')">Apply Now</button>
+                            <button class="btn btn-outline btn-sm" onclick="saveJob('Figma')">Save</button>
+                            <button class="btn btn-outline btn-sm" onclick="findReferral('Figma')">Find Referral</button>
+                        </div>
+                    </div>
+                    <div class="opportunity-card">
+                        <div class="opp-header">
+                            <div>
+                                <div class="opp-company">Stripe</div>
+                                <div class="opp-role">Product Designer</div>
+                            </div>
+                            <span class="opp-match">85% Match</span>
+                        </div>
+                        <div class="opp-tags">
+                            <span class="opp-tag">Hybrid SF</span>
+                            <span class="opp-tag">Design Systems</span>
+                            <span class="opp-tag">$140-170k</span>
+                        </div>
+                        <div class="opp-actions">
+                            <button class="btn btn-linkedin btn-sm" onclick="applyLinkedIn('Stripe')">
+                                <span>in</span> Easy Apply
+                            </button>
+                            <button class="btn btn-outline btn-sm" onclick="saveJob('Stripe')">Save</button>
+                            <button class="btn btn-outline btn-sm" onclick="findReferral('Stripe')">Find Referral</button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Today's Focus -->
+                <section class="card todays-focus">
+                    <div class="card-header">
+                        <span class="card-title">Today's Focus</span>
+                        <span class="card-badge">5 tasks</span>
+                    </div>
+                    <ul class="focus-list">
+                        <li class="focus-item completed" onclick="toggleTask(this)">
+                            <div class="focus-checkbox checked"></div>
+                            <div class="focus-content">
+                                <div class="focus-title">Complete Figma Auto-Layout lesson</div>
+                                <div class="focus-meta">Figma Fundamentals  25 min</div>
+                            </div>
+                        </li>
+                        <li class="focus-item completed" onclick="toggleTask(this)">
+                            <div class="focus-checkbox checked"></div>
+                            <div class="focus-content">
+                                <div class="focus-title">Read "Don't Make Me Think" Chapter 4</div>
+                                <div class="focus-meta">UX Reading  20 min</div>
+                            </div>
+                        </li>
+                        <li class="focus-item" onclick="toggleTask(this)">
+                            <div class="focus-checkbox"></div>
+                            <div class="focus-content">
+                                <div class="focus-title">Practice component creation exercise</div>
+                                <div class="focus-meta">Hands-on Practice  30 min</div>
+                            </div>
+                        </li>
+                        <li class="focus-item" onclick="toggleTask(this)">
+                            <div class="focus-checkbox"></div>
+                            <div class="focus-content">
+                                <div class="focus-title">Send LinkedIn message to Sarah M.</div>
+                                <div class="focus-meta">Networking  5 min</div>
+                            </div>
+                        </li>
+                        <li class="focus-item" onclick="toggleTask(this)">
+                            <div class="focus-checkbox"></div>
+                            <div class="focus-content">
+                                <div class="focus-title">Apply to Notion Designer role</div>
+                                <div class="focus-meta">Job Application  15 min</div>
+                            </div>
+                        </li>
+                    </ul>
+                </section>
+
+                <!-- Network Section - Enhanced -->
+                <section class="card network-section">
+                    <div class="card-header">
+                        <span class="card-title">Your Network</span>
+                        <span class="card-badge linkedin">LinkedIn Connected</span>
+                    </div>
+                    <div class="connection-list">
+                        <div class="connection-item">
+                            <div class="connection-header">
+                                <div class="avatar">SM</div>
+                                <div class="connection-info">
+                                    <div class="connection-name">Sarah Mitchell</div>
+                                    <div class="connection-role">Sr. Product Designer @ Airbnb</div>
+                                </div>
+                            </div>
+                            <div class="connection-actions">
+                                <button class="btn btn-linkedin btn-sm" onclick="messageLinkedIn('Sarah Mitchell')">Message</button>
+                                <button class="btn btn-outline btn-sm" onclick="scheduleCoffeeWith('Sarah Mitchell')">Schedule Call</button>
+                            </div>
+                        </div>
+                        <div class="connection-item">
+                            <div class="connection-header">
+                                <div class="avatar">JC</div>
+                                <div class="connection-info">
+                                    <div class="connection-name">James Chen</div>
+                                    <div class="connection-role">Design Manager @ Slack</div>
+                                </div>
+                            </div>
+                            <div class="connection-actions">
+                                <button class="btn btn-linkedin btn-sm" onclick="connectLinkedIn('James Chen')">Connect</button>
+                                <button class="btn btn-outline btn-sm" onclick="openEmailComposer('intro', 'James Chen')">Email Intro</button>
+                            </div>
+                        </div>
+                        <div class="connection-item">
+                            <div class="connection-header">
+                                <div class="avatar">AL</div>
+                                <div class="connection-info">
+                                    <div class="connection-name">Alex Lopez</div>
+                                    <div class="connection-role">Product Designer @ Notion</div>
+                                </div>
+                            </div>
+                            <div class="connection-actions">
+                                <button class="btn btn-linkedin btn-sm" onclick="messageLinkedIn('Alex Lopez')">Message</button>
+                                <button class="btn btn-outline btn-sm" onclick="askForReferral('Alex Lopez', 'Notion')">Ask Referral</button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Email Composer -->
+                <section class="card email-section">
+                    <div class="card-header">
+                        <span class="card-title">Quick Outreach</span>
+                        <span class="card-badge">AI-Assisted</span>
+                    </div>
+                    <div class="email-composer">
+                        <div class="email-field">
+                            <label class="email-label">To</label>
+                            <input type="text" class="email-input" id="emailTo" placeholder="Enter name or email...">
+                        </div>
+                        <div class="email-field">
+                            <label class="email-label">Subject</label>
+                            <input type="text" class="email-input" id="emailSubject" placeholder="Subject line...">
+                        </div>
+                        <div class="email-field">
+                            <label class="email-label">Message</label>
+                            <textarea class="email-textarea" id="emailBody" placeholder="Write your message..."></textarea>
+                        </div>
+                        <div class="email-actions">
+                            <div class="email-templates">
+                                <span class="template-chip" onclick="loadTemplate('networking')">Networking</span>
+                                <span class="template-chip" onclick="loadTemplate('referral')">Ask Referral</span>
+                                <span class="template-chip" onclick="loadTemplate('followup')">Follow-up</span>
+                                <span class="template-chip" onclick="loadTemplate('thankyou')">Thank You</span>
+                            </div>
+                            <div style="display: flex; gap: 8px;">
+                                <button class="btn btn-outline btn-sm" onclick="generateWithAI()">AI Draft</button>
+                                <button class="btn btn-primary btn-sm" onclick="sendEmail()">Send</button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Integrations -->
+                <section class="card integrations-section">
+                    <div class="card-header">
+                        <span class="card-title">Connected Platforms</span>
+                    </div>
+                    <div class="integration-item">
+                        <div class="integration-info">
+                            <div class="integration-icon linkedin">in</div>
+                            <div>
+                                <div class="integration-name">LinkedIn</div>
+                                <div class="integration-status connected"> Connected  245 connections</div>
+                            </div>
+                        </div>
+                        <button class="btn btn-outline btn-sm" onclick="syncLinkedIn()">Sync</button>
+                    </div>
+                    <div class="integration-item">
+                        <div class="integration-info">
+                            <div class="integration-icon gmail">G</div>
+                            <div>
+                                <div class="integration-name">Gmail</div>
+                                <div class="integration-status connected"> Connected  olivia@gmail.com</div>
+                            </div>
+                        </div>
+                        <button class="btn btn-outline btn-sm" onclick="openGmail()">Open</button>
+                    </div>
+                    <div class="integration-item">
+                        <div class="integration-info">
+                            <div class="integration-icon calendar">C</div>
+                            <div>
+                                <div class="integration-name">Google Calendar</div>
+                                <div class="integration-status connected"> Connected  3 upcoming</div>
+                            </div>
+                        </div>
+                        <button class="btn btn-outline btn-sm" onclick="openCalendar()">View</button>
+                    </div>
+                    <div class="integration-item">
+                        <div class="integration-info">
+                            <div class="integration-icon figma">F</div>
+                            <div>
+                                <div class="integration-name">Figma</div>
+                                <div class="integration-status connected"> Connected  12 files</div>
+                            </div>
+                        </div>
+                        <button class="btn btn-outline btn-sm" onclick="openFigma()">Open</button>
+                    </div>
+                    <div class="integration-item">
+                        <div class="integration-info">
+                            <div class="integration-icon notion">N</div>
+                            <div>
+                                <div class="integration-name">Notion</div>
+                                <div class="integration-status connected"> Connected  Learning tracker</div>
+                            </div>
+                        </div>
+                        <button class="btn btn-outline btn-sm" onclick="openNotion()">Open</button>
+                    </div>
+                </section>
+
+                <!-- Scheduled Actions -->
+                <section class="card scheduled-section">
+                    <div class="card-header">
+                        <span class="card-title">Upcoming</span>
+                        <button class="btn btn-outline btn-sm" onclick="addToCalendar()">+ Add</button>
+                    </div>
+                    <div class="scheduled-item">
+                        <div class="scheduled-time">
+                            <div class="scheduled-day">Today</div>
+                            <div class="scheduled-hour">2:00</div>
+                        </div>
+                        <div class="scheduled-info">
+                            <div class="scheduled-title">Coffee chat with Sarah M.</div>
+                            <div class="scheduled-desc">Zoom  Product design career advice</div>
+                        </div>
+                        <div class="scheduled-actions">
+                            <button class="btn btn-primary btn-sm" onclick="joinMeeting()">Join</button>
+                        </div>
+                    </div>
+                    <div class="scheduled-item">
+                        <div class="scheduled-time">
+                            <div class="scheduled-day">Thu</div>
+                            <div class="scheduled-hour">11:00</div>
+                        </div>
+                        <div class="scheduled-info">
+                            <div class="scheduled-title">Portfolio review with mentor</div>
+                            <div class="scheduled-desc">Google Meet  Case study feedback</div>
+                        </div>
+                        <div class="scheduled-actions">
+                            <button class="btn btn-outline btn-sm" onclick="prepareForMeeting()">Prep</button>
+                        </div>
+                    </div>
+                    <div class="scheduled-item">
+                        <div class="scheduled-time">
+                            <div class="scheduled-day">Fri</div>
+                            <div class="scheduled-hour">3:00</div>
+                        </div>
+                        <div class="scheduled-info">
+                            <div class="scheduled-title">SF Design Meetup</div>
+                            <div class="scheduled-desc">In-person  Mission District</div>
+                        </div>
+                        <div class="scheduled-actions">
+                            <button class="btn btn-outline btn-sm" onclick="rsvpEvent()">RSVP'd</button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Video Learning -->
+                <section class="card learning-section">
+                    <div class="card-header">
+                        <span class="card-title">Continue Learning</span>
+                        <span class="card-badge">Curated for you</span>
+                    </div>
+                    <div class="video-grid">
+                        <div class="video-card">
+                            <iframe class="video-embed" src="https://www.youtube.com/embed/jQ1sfKIl50E" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                            <div class="video-info">
+                                <div class="video-title">Figma Tutorial</div>
+                                <div class="video-meta">Design Course  30 min</div>
+                            </div>
+                        </div>
+                        <div class="video-card">
+                            <iframe class="video-embed" src="https://www.youtube.com/embed/ODpB9-MCa5s" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                            <div class="video-info">
+                                <div class="video-title">UI/UX Design Basics</div>
+                                <div class="video-meta">Design Tutorial  25 min</div>
+                            </div>
+                        </div>
+                        <div class="video-card">
+                            <iframe class="video-embed" src="https://www.youtube.com/embed/_8vLkIj_Lsk" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                            <div class="video-info">
+                                <div class="video-title">Product Design Guide</div>
+                                <div class="video-meta">UX Tutorial  20 min</div>
+                            </div>
+                        </div>
+                        <div class="video-card">
+                            <iframe class="video-embed" src="https://www.youtube.com/embed/F0bXN6aqACk" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                            <div class="video-info">
+                                <div class="video-title">UX Portfolio Tips</div>
+                                <div class="video-meta">Career Guide  15 min</div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Portfolio -->
+                <section class="card portfolio-section">
+                    <div class="card-header">
+                        <span class="card-title">Portfolio Projects</span>
+                        <button class="btn btn-outline btn-sm" onclick="openFigmaPortfolio()">Open in Figma</button>
+                    </div>
+                    <div class="portfolio-item">
+                        <div class="portfolio-header">
+                            <div class="portfolio-status">
+                                <span class="status-dot complete"></span>
+                                <span style="font-size: 10px; color: var(--success)">Complete</span>
+                            </div>
+                        </div>
+                        <div class="portfolio-title">Mobile App Redesign</div>
+                        <div class="portfolio-desc">Redesigned a fitness app onboarding flow with 40% improved completion</div>
+                        <div class="portfolio-actions">
+                            <button class="btn btn-outline btn-sm" onclick="editInFigma('mobile-app')">Edit</button>
+                            <button class="btn btn-outline btn-sm" onclick="sharePortfolio('mobile-app')">Share Link</button>
+                            <button class="btn btn-outline btn-sm" onclick="addToLinkedIn('mobile-app')">Add to LinkedIn</button>
+                        </div>
+                    </div>
+                    <div class="portfolio-item">
+                        <div class="portfolio-header">
+                            <div class="portfolio-status">
+                                <span class="status-dot in-progress"></span>
+                                <span style="font-size: 10px; color: var(--warning)">In Progress</span>
+                            </div>
+                        </div>
+                        <div class="portfolio-title">E-commerce Case Study</div>
+                        <div class="portfolio-desc">User research & checkout flow optimization for boutique retailer</div>
+                        <div class="portfolio-actions">
+                            <button class="btn btn-primary btn-sm" onclick="editInFigma('ecommerce')">Continue</button>
+                            <button class="btn btn-outline btn-sm" onclick="getMentorFeedback('ecommerce')">Get Feedback</button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Activity Feed -->
+                <section class="card activity-section">
+                    <div class="card-header">
+                        <span class="card-title">Recent Activity</span>
+                    </div>
+                    <div class="activity-item">
+                        <div class="activity-icon">📨</div>
+                        <div class="activity-content">
+                            <div class="activity-text"><strong>Sarah Mitchell</strong> accepted your connection request</div>
+                            <div class="activity-time">2 hours ago  via LinkedIn</div>
+                        </div>
+                    </div>
+                    <div class="activity-item">
+                        <div class="activity-icon">✅</div>
+                        <div class="activity-content">
+                            <div class="activity-text">Completed <strong>Figma Auto-Layout</strong> lesson</div>
+                            <div class="activity-time">3 hours ago</div>
+                        </div>
+                    </div>
+                    <div class="activity-item">
+                        <div class="activity-icon">💼</div>
+                        <div class="activity-content">
+                            <div class="activity-text">New job match: <strong>Notion - Associate Product Designer</strong></div>
+                            <div class="activity-time">5 hours ago  92% match</div>
+                        </div>
+                    </div>
+                    <div class="activity-item">
+                        <div class="activity-icon">📅</div>
+                        <div class="activity-content">
+                            <div class="activity-text">Coffee chat with <strong>Sarah M.</strong> confirmed for today</div>
+                            <div class="activity-time">Yesterday  via Calendly</div>
+                        </div>
+                    </div>
+                    <div class="activity-item">
+                        <div class="activity-icon">🎨</div>
+                        <div class="activity-content">
+                            <div class="activity-text">Portfolio synced from <strong>Figma</strong> - 2 new versions</div>
+                            <div class="activity-time">Yesterday</div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast" id="toast">
+        <span class="toast-icon" id="toastIcon"></span>
+        <span class="toast-message" id="toastMessage"></span>
+    </div>
+
+    <!-- Email Modal -->
+    <div class="modal-overlay" id="emailModal">
+        <div class="modal">
+            <div class="modal-header">
+                <span class="modal-title">Compose Message</span>
+                <button class="modal-close" onclick="closeEmailModal()">x</button>
+            </div>
+            <div class="modal-body" id="emailModalBody"></div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeEmailModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="sendEmailFromModal()">Send via Gmail</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize
+        document.getElementById('currentDate').textContent = new Date().toLocaleDateString('en-US', {
+            weekday: 'long', month: 'short', day: 'numeric'
+        });
+
+        // Toast notifications
+        function showToast(message, type = 'info', icon = '') {
+            const toast = document.getElementById('toast');
+            const toastMessage = document.getElementById('toastMessage');
+            const toastIcon = document.getElementById('toastIcon');
+
+            toast.className = 'toast ' + type;
+            toastMessage.textContent = message;
+            toastIcon.textContent = icon || (type === 'success' ? '' : 'i');
+
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        // Quick Actions
+        function openLinkedInSearch() {
+            showToast('Opening LinkedIn search for Product Designers...', 'info', '🔍');
+            setTimeout(() => window.open('https://www.linkedin.com/search/results/people/?keywords=product%20designer&origin=SWITCH_SEARCH_VERTICAL', '_blank'), 500);
+        }
+
+        function openJobSearch() {
+            showToast('Opening job search with your filters...', 'info', '💼');
+            setTimeout(() => window.open('https://www.linkedin.com/jobs/search/?keywords=product%20designer&location=San%20Francisco', '_blank'), 500);
+        }
+
+        function scheduleCoffeeChat() {
+            showToast('Opening Calendly to schedule coffee chat...', 'info', '☕');
+            // In real app, would open Calendly or calendar integration
+        }
+
+        function openPortfolioEditor() {
+            showToast('Opening portfolio in Figma...', 'info', '🎨');
+            setTimeout(() => window.open('https://www.figma.com', '_blank'), 500);
+        }
+
+        function syncAllPlatforms() {
+            showToast('Syncing LinkedIn, Gmail, Figma, Notion...', 'info', '🔄');
+            setTimeout(() => showToast('All platforms synced successfully!', 'success', ''), 2000);
+        }
+
+        // Job Actions
+        function applyLinkedIn(company) {
+            showToast(`Opening ${company} application on LinkedIn...`, 'info', 'in');
+            setTimeout(() => window.open('https://www.linkedin.com/jobs/', '_blank'), 500);
+        }
+
+        function openApplication(company) {
+            showToast(`Opening ${company} careers page...`, 'info', '💼');
+        }
+
+        function saveJob(company) {
+            showToast(`Saved ${company} to your job list`, 'success', '');
+        }
+
+        function findReferral(company) {
+            showToast(`Searching your network for ${company} connections...`, 'info', '👥');
+            setTimeout(() => showToast(`Found 2 connections at ${company}!`, 'success', ''), 1500);
+        }
+
+        // Networking Actions
+        function messageLinkedIn(name) {
+            showToast(`Opening LinkedIn message to ${name}...`, 'info', '💬');
+            setTimeout(() => window.open('https://www.linkedin.com/messaging/', '_blank'), 500);
+        }
+
+        function connectLinkedIn(name) {
+            showToast(`Sending connection request to ${name}...`, 'info', 'in');
+            setTimeout(() => showToast(`Connection request sent to ${name}!`, 'success', ''), 1000);
+        }
+
+        function scheduleCoffeeWith(name) {
+            showToast(`Opening scheduler for ${name}...`, 'info', '📅');
+        }
+
+        function askForReferral(name, company) {
+            document.getElementById('emailTo').value = name;
+            document.getElementById('emailSubject').value = `Referral request for ${company}`;
+            loadTemplate('referral');
+            showToast('Referral request template loaded', 'info', '📝');
+        }
+
+        // Email Templates
+        const templates = {
+            networking: {
+                subject: 'Would love to connect about product design',
+                body: `Hi [Name],
+
+I came across your profile and was really impressed by your journey into product design. I'm currently transitioning from project management to product design and would love to learn from your experience.
+
+Would you be open to a 15-minute coffee chat? I'd love to hear about:
+- How you made the transition
+- What skills were most valuable to develop
+- Any advice for someone starting out
+
+I'm happy to work around your schedule. Thank you for considering!
+
+Best,
+Olivia`
+            },
+            referral: {
+                subject: 'Referral request - [Company] Product Designer role',
+                body: `Hi [Name],
+
+I hope you're doing well! I noticed [Company] is hiring for a Product Designer position, and I'm very interested in applying.
+
+Given your experience there, I was wondering if you'd be comfortable providing a referral? I've attached my portfolio and resume for your reference.
+
+I completely understand if you're not able to - I appreciate you considering it either way!
+
+Best,
+Olivia`
+            },
+            followup: {
+                subject: 'Following up - Great chatting with you!',
+                body: `Hi [Name],
+
+Thank you so much for taking the time to chat with me [yesterday/last week]. I really appreciated your insights on [topic discussed].
+
+I've already started implementing your suggestion about [specific advice], and it's been really helpful.
+
+Would love to stay in touch and keep you updated on my progress. Thanks again!
+
+Best,
+Olivia`
+            },
+            thankyou: {
+                subject: 'Thank you for your time!',
+                body: `Hi [Name],
+
+I wanted to send a quick note to thank you for [meeting/chatting/helping with referral]. Your [advice/time/support] means a lot to me.
+
+[Specific thing you appreciated or learned]
+
+I'll be sure to keep you posted on how things progress. Thanks again!
+
+Best,
+Olivia`
+            }
+        };
+
+        function loadTemplate(type) {
+            const template = templates[type];
+            if (template) {
+                document.getElementById('emailSubject').value = template.subject;
+                document.getElementById('emailBody').value = template.body;
+                showToast(`${type.charAt(0).toUpperCase() + type.slice(1)} template loaded`, 'info', '📝');
+            }
+        }
+
+        function generateWithAI() {
+            showToast('Generating personalized draft with AI...', 'info', '');
+            setTimeout(() => {
+                const recipient = document.getElementById('emailTo').value || 'the recipient';
+                document.getElementById('emailBody').value = `Hi ${recipient},
+
+[AI-generated personalized message based on their LinkedIn profile and your career goals would appear here]
+
+I've been following your work on [relevant project] and was impressed by [specific detail]. As someone transitioning from PM to product design, I'd love to learn from your experience.
+
+Would you have 15 minutes for a quick call? I'm happy to work around your schedule.
+
+Best,
+Olivia`;
+                showToast('AI draft generated! Review and personalize before sending.', 'success', '');
+            }, 1500);
+        }
+
+        function sendEmail() {
+            const to = document.getElementById('emailTo').value;
+            const subject = document.getElementById('emailSubject').value;
+            const body = document.getElementById('emailBody').value;
+
+            if (!to || !subject || !body) {
+                showToast('Please fill in all fields', 'info', '');
+                return;
+            }
+
+            showToast('Opening Gmail to send...', 'info', '📧');
+            const gmailUrl = `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(to)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+            setTimeout(() => window.open(gmailUrl, '_blank'), 500);
+        }
+
+        // Integration Actions
+        function syncLinkedIn() {
+            showToast('Syncing LinkedIn connections and activity...', 'info', '🔄');
+            setTimeout(() => showToast('LinkedIn synced: 3 new connections this week', 'success', ''), 1500);
+        }
+
+        function openGmail() {
+            window.open('https://mail.google.com', '_blank');
+        }
+
+        function openCalendar() {
+            window.open('https://calendar.google.com', '_blank');
+        }
+
+        function openFigma() {
+            window.open('https://www.figma.com', '_blank');
+        }
+
+        function openNotion() {
+            window.open('https://www.notion.so', '_blank');
+        }
+
+        // Calendar Actions
+        function addToCalendar() {
+            showToast('Opening Google Calendar...', 'info', '📅');
+            window.open('https://calendar.google.com/calendar/r/eventedit', '_blank');
+        }
+
+        function joinMeeting() {
+            showToast('Joining Zoom meeting...', 'info', '📹');
+        }
+
+        function prepareForMeeting() {
+            showToast('Opening meeting prep checklist...', 'info', '📋');
+        }
+
+        function rsvpEvent() {
+            showToast('You\'re RSVP\'d for SF Design Meetup!', 'success', '');
+        }
+
+        // Portfolio Actions
+        function openFigmaPortfolio() {
+            showToast('Opening portfolio in Figma...', 'info', '🎨');
+            window.open('https://www.figma.com', '_blank');
+        }
+
+        function editInFigma(project) {
+            showToast(`Opening ${project} in Figma...`, 'info', '🎨');
+            window.open('https://www.figma.com', '_blank');
+        }
+
+        function sharePortfolio(project) {
+            showToast('Portfolio link copied to clipboard!', 'success', '');
+        }
+
+        function addToLinkedIn(project) {
+            showToast('Opening LinkedIn to add to Featured section...', 'info', 'in');
+            window.open('https://www.linkedin.com/in/me/', '_blank');
+        }
+
+        function getMentorFeedback(project) {
+            document.getElementById('emailTo').value = 'Sarah Mitchell';
+            document.getElementById('emailSubject').value = 'Would love your feedback on my case study';
+            document.getElementById('emailBody').value = `Hi Sarah,
+
+I've been working on my e-commerce case study and would really value your expert feedback before I finalize it for my portfolio.
+
+Here's the Figma link: [link]
+
+Specifically, I'd love your thoughts on:
+- The problem framing
+- My research methodology
+- The visual presentation
+
+Would you have 15 minutes to review it? No pressure at all if you're too busy!
+
+Thanks so much,
+Olivia`;
+            showToast('Feedback request drafted - review and send!', 'info', '📝');
+        }
+
+        // Task Management
+        function toggleTask(element) {
+            element.classList.toggle('completed');
+            element.querySelector('.focus-checkbox').classList.toggle('checked');
+            saveState();
+        }
+
+        // State Management
+        function saveState() {
+            if (window.envisage?.store) {
+                const tasks = [...document.querySelectorAll('.focus-item')].map(i => i.classList.contains('completed'));
+                window.envisage.store.save({ completedTasks: tasks });
+            }
+        }
+
+        function loadState() {
+            if (window.envisage?.store) {
+                window.envisage.store.load().then(data => {
+                    if (data?.completedTasks) {
+                        document.querySelectorAll('.focus-item').forEach((item, idx) => {
+                            if (data.completedTasks[idx]) {
+                                item.classList.add('completed');
+                                item.querySelector('.focus-checkbox').classList.add('checked');
+                            }
+                        });
+                    }
+                });
+            }
+        }
+
+        // Theme handling
+        window.addEventListener('message', (e) => {
+            if (e.data?.type === 'envisage-theme-change') document.documentElement.setAttribute('data-theme', e.data.theme);
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadState();
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('theme')) document.documentElement.setAttribute('data-theme', params.get('theme'));
+        });
+
+        // Email modal functions
+        function openEmailComposer(type, name = '') {
+            if (name) document.getElementById('emailTo').value = name;
+            if (type) loadTemplate(type);
+        }
+
+        function closeEmailModal() {
+            document.getElementById('emailModal').classList.remove('show');
+        }
+    </script>
+</body>
+</html>

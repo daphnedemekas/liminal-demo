@@ -1,0 +1,1291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gluten-Free Journey | Olivia</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+        :root {
+            --bg-primary: #0f1219;
+            --bg-secondary: #1a1f2e;
+            --bg-tertiary: #242938;
+            --border: #2d3348;
+            --border-hover: #3d4560;
+            --text-primary: #e8eaed;
+            --text-secondary: #9aa0b0;
+            --text-tertiary: #6b7280;
+            --accent: #4a8fe7;
+            --accent-hover: #5c9df0;
+            --accent-subtle: rgba(74, 143, 231, 0.12);
+            --success: #34c759;
+            --warning: #f0a030;
+            --danger: #e54d4d;
+            --radius-sm: 4px;
+            --radius-md: 6px;
+            --radius-lg: 8px;
+        }
+
+        :root[data-theme="light"] {
+            --bg-primary: #f7f6f3;
+            --bg-secondary: #ffffff;
+            --bg-tertiary: #f0f0f0;
+            --border: #e0e0e0;
+            --border-hover: #d0d0d0;
+            --text-primary: #1f2937;
+            --text-secondary: #5b6470;
+            --text-tertiary: #8a94a2;
+            --accent: #3566a8;
+            --accent-hover: #2a5590;
+            --accent-subtle: rgba(53, 102, 168, 0.12);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            font-size: 14px;
+            line-height: 1.6;
+            color: var(--text-primary);
+            background: var(--bg-primary);
+            -webkit-font-smoothing: antialiased;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .app-container { display: flex; height: 100vh; }
+
+        .sidebar {
+            width: 220px;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            padding: 20px 0;
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+        }
+
+        .logo {
+            padding: 0 20px 20px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 16px;
+        }
+
+        .logo h1 { font-size: 16px; font-weight: 600; color: var(--success); }
+        .logo p { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+
+        .nav-item {
+            padding: 10px 20px;
+            cursor: pointer;
+            transition: background 0.15s ease;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .nav-item:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+        .nav-item.active { background: var(--accent-subtle); color: var(--accent); border-left: 2px solid var(--accent); }
+
+        .streak-box {
+            margin: auto 20px 20px;
+            background: rgba(52, 199, 89, 0.12);
+            padding: 14px;
+            border-radius: var(--radius-md);
+            text-align: center;
+        }
+
+        .streak-num { font-size: 28px; font-weight: 700; color: var(--success); }
+        .streak-label { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+
+        .main-content { flex: 1; overflow-y: auto; padding: 24px; }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+
+        .header h2 { font-size: 20px; font-weight: 600; }
+        .header-date { font-size: 13px; color: var(--text-secondary); }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 16px;
+        }
+
+        .card {
+            background: var(--bg-secondary);
+            border-radius: var(--radius-lg);
+            padding: 20px;
+            border: 1px solid var(--border);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .card-title { font-size: 14px; font-weight: 600; }
+
+        .card-badge {
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 10px;
+            background: var(--accent-subtle);
+            color: var(--accent);
+            font-weight: 500;
+        }
+
+        .card-badge.success { background: rgba(52, 199, 89, 0.15); color: var(--success); }
+        .card-badge.warning { background: rgba(240, 160, 48, 0.15); color: var(--warning); }
+
+        /* Stats Grid */
+        .stats-section { grid-column: span 12; }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+        }
+
+        .stat-card {
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-md);
+            padding: 16px;
+            text-align: center;
+        }
+
+        .stat-value { font-size: 28px; font-weight: 700; color: var(--accent); }
+        .stat-value.energy { color: var(--success); }
+        .stat-value.streak { color: var(--warning); }
+        .stat-label { font-size: 11px; color: var(--text-secondary); margin-top: 4px; }
+
+        /* Energy Tracker */
+        .energy-section { grid-column: span 6; }
+
+        .energy-chart {
+            display: flex;
+            align-items: flex-end;
+            gap: 8px;
+            height: 120px;
+            padding: 16px 0;
+        }
+
+        .energy-bar-wrapper {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .energy-bar {
+            width: 100%;
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+            height: 100px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .energy-fill {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            background: linear-gradient(to top, var(--success), #86efac);
+            border-radius: 4px;
+            transition: height 0.3s ease;
+        }
+
+        .energy-day { font-size: 10px; color: var(--text-secondary); }
+
+        /* Meal Log */
+        .meal-section { grid-column: span 6; }
+
+        .meal-form {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .input-group { display: flex; gap: 8px; }
+
+        .input-field {
+            flex: 1;
+            padding: 10px 12px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            color: var(--text-primary);
+            font-size: 13px;
+            outline: none;
+        }
+
+        .input-field:focus { border-color: var(--accent); }
+
+        select.input-field {
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%239aa0b0' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10l-5 5z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            padding-right: 32px;
+        }
+
+        .btn {
+            padding: 10px 16px;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: var(--radius-md);
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .btn:hover { background: var(--accent-hover); }
+
+        .recent-meals { margin-top: 16px; }
+
+        .meal-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 12px;
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-md);
+            margin-bottom: 8px;
+        }
+
+        .meal-info { flex: 1; }
+        .meal-name { font-size: 13px; font-weight: 500; }
+        .meal-meta { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+        .meal-energy { font-size: 12px; font-weight: 600; color: var(--success); }
+
+        /* Recipes */
+        .recipes-section { grid-column: span 8; }
+
+        .recipes-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+
+        .recipe-card {
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-md);
+            overflow: hidden;
+        }
+
+        .recipe-video {
+            width: 100%;
+            aspect-ratio: 16/9;
+            border: none;
+        }
+
+        .recipe-info { padding: 12px; }
+        .recipe-title { font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+        .recipe-meta { font-size: 11px; color: var(--text-secondary); }
+
+        .recipe-tags {
+            display: flex;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
+        .recipe-tag {
+            font-size: 10px;
+            padding: 2px 6px;
+            background: var(--bg-secondary);
+            border-radius: var(--radius-sm);
+            color: var(--text-secondary);
+        }
+
+        /* Quick Recipes */
+        .quick-recipes { grid-column: span 4; }
+
+        .quick-recipe-item {
+            display: flex;
+            gap: 12px;
+            padding: 12px;
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-md);
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .quick-recipe-item:hover { background: var(--border); }
+
+        .recipe-emoji { font-size: 24px; }
+
+        .quick-recipe-info { flex: 1; }
+        .quick-recipe-name { font-size: 13px; font-weight: 500; }
+        .quick-recipe-time { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+
+        /* Restaurants */
+        .restaurants-section { grid-column: span 12; }
+
+        .restaurants-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+        }
+
+        .restaurant-card {
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-md);
+            overflow: hidden;
+            cursor: pointer;
+            transition: all 0.15s;
+            border: 1px solid transparent;
+        }
+
+        .restaurant-card:hover { border-color: var(--accent); }
+
+        .restaurant-img {
+            width: 100%;
+            height: 120px;
+            object-fit: cover;
+            background: var(--bg-secondary);
+        }
+
+        .restaurant-info { padding: 14px; }
+        .restaurant-name { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+        .restaurant-cuisine { font-size: 12px; color: var(--text-secondary); }
+
+        .restaurant-rating {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-top: 8px;
+        }
+
+        .stars { color: var(--warning); font-size: 12px; }
+        .rating-text { font-size: 11px; color: var(--text-secondary); }
+
+        .restaurant-tags {
+            display: flex;
+            gap: 4px;
+            margin-top: 8px;
+            flex-wrap: wrap;
+        }
+
+        .rest-tag {
+            font-size: 10px;
+            padding: 2px 6px;
+            background: rgba(52, 199, 89, 0.15);
+            color: var(--success);
+            border-radius: var(--radius-sm);
+        }
+
+        /* Restaurant Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.7);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.show { display: flex; }
+
+        .modal {
+            background: var(--bg-secondary);
+            border-radius: var(--radius-lg);
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            border: 1px solid var(--border);
+        }
+
+        .modal-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-title { font-size: 18px; font-weight: 600; }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 24px;
+            cursor: pointer;
+        }
+
+        .modal-body { padding: 20px; }
+
+        .menu-section { margin-bottom: 20px; }
+        .menu-section-title { font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--accent); }
+
+        .menu-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .menu-item:last-child { border-bottom: none; }
+        .menu-item-name { font-size: 13px; }
+        .menu-item-price { font-size: 13px; color: var(--text-secondary); }
+
+        .gf-badge {
+            display: inline-block;
+            font-size: 9px;
+            padding: 2px 5px;
+            background: rgba(52, 199, 89, 0.15);
+            color: var(--success);
+            border-radius: 3px;
+            margin-left: 6px;
+        }
+
+        /* Devices */
+        .devices-section { grid-column: span 6; }
+
+        .devices-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+
+        .device-card {
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-md);
+            padding: 14px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.15s;
+            border: 1px solid transparent;
+        }
+
+        .device-card:hover { border-color: var(--accent); }
+        .device-card.connected { border-color: var(--success); }
+
+        .device-icon { font-size: 22px; margin-bottom: 6px; }
+        .device-name { font-size: 11px; font-weight: 500; }
+        .device-status { font-size: 10px; color: var(--text-secondary); margin-top: 2px; }
+        .device-status.connected { color: var(--success); }
+
+        /* Tips */
+        .tips-section { grid-column: span 6; }
+
+        .tip-card {
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-md);
+            padding: 14px;
+            margin-bottom: 10px;
+            border-left: 3px solid var(--accent);
+        }
+
+        .tip-title { font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+        .tip-text { font-size: 12px; color: var(--text-secondary); line-height: 1.4; }
+
+        /* Grocery List */
+        .grocery-section { grid-column: span 4; }
+
+        .grocery-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-md);
+            margin-bottom: 6px;
+            cursor: pointer;
+        }
+
+        .grocery-check {
+            width: 18px;
+            height: 18px;
+            border: 2px solid var(--border-hover);
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.15s;
+        }
+
+        .grocery-check.checked { background: var(--success); border-color: var(--success); }
+        .grocery-check.checked::after { content: ""; font-size: 10px; color: white; }
+
+        .grocery-text { font-size: 13px; }
+        .grocery-item.checked .grocery-text { text-decoration: line-through; color: var(--text-tertiary); }
+
+        /* Weekly Plan */
+        .weekly-section { grid-column: span 8; }
+
+        .week-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 8px;
+        }
+
+        .day-card {
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-md);
+            padding: 10px;
+            text-align: center;
+            min-height: 100px;
+        }
+
+        .day-card.today { border: 2px solid var(--accent); }
+
+        .day-name { font-size: 10px; color: var(--text-secondary); margin-bottom: 4px; text-transform: uppercase; }
+        .day-date { font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+
+        .day-meals { font-size: 11px; color: var(--text-secondary); }
+        .day-emoji { font-size: 18px; margin-bottom: 4px; }
+
+        @media (max-width: 1200px) {
+            .sidebar { display: none; }
+            .dashboard { grid-template-columns: repeat(6, 1fr); }
+            .stats-section, .restaurants-section { grid-column: span 6; }
+            .energy-section, .meal-section, .recipes-section, .quick-recipes, .devices-section, .tips-section, .grocery-section, .weekly-section { grid-column: span 6; }
+            .stats-grid, .restaurants-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        @media (max-width: 768px) {
+            .dashboard { grid-template-columns: 1fr; }
+            .dashboard > * { grid-column: span 1 !important; }
+            .stats-grid, .restaurants-grid, .recipes-grid, .week-grid, .devices-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <nav class="sidebar">
+            <div class="logo">
+                <h1>GF Journey</h1>
+                <p>Your Gluten-Free Tracker</p>
+            </div>
+            <div class="nav-item active"><span>📊</span> Dashboard</div>
+            <div class="nav-item"><span>🍽️</span> Meal Log</div>
+            <div class="nav-item"><span>📖</span> Recipes</div>
+            <div class="nav-item"><span>📍</span> Restaurants</div>
+            <div class="nav-item"><span>🛒</span> Grocery List</div>
+            <div class="nav-item"><span>📅</span> Meal Plan</div>
+            <div class="nav-item"><span>⚙️</span> Settings</div>
+            <div class="streak-box">
+                <div class="streak-num">18</div>
+                <div class="streak-label">GF Streak Days</div>
+            </div>
+        </nav>
+
+        <main class="main-content">
+            <header class="header">
+                <div>
+                    <h2>Good morning, Olivia</h2>
+                    <p style="color: var(--text-secondary); font-size: 13px; margin-top: 4px;">Your gluten-free journey is going strong!</p>
+                </div>
+                <div class="header-date" id="currentDate"></div>
+            </header>
+
+            <div class="dashboard">
+                <!-- Stats Overview -->
+                <section class="card stats-section">
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-value streak">18</div>
+                            <div class="stat-label">Day Streak</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value energy">8.2</div>
+                            <div class="stat-label">Avg Energy Level</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">47</div>
+                            <div class="stat-label">Meals Logged</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">12</div>
+                            <div class="stat-label">Recipes Tried</div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Energy Tracker -->
+                <section class="card energy-section">
+                    <div class="card-header">
+                        <span class="card-title">Energy Levels This Week</span>
+                        <span class="card-badge success">+15% vs last week</span>
+                    </div>
+                    <div class="energy-chart">
+                        <div class="energy-bar-wrapper">
+                            <div class="energy-bar"><div class="energy-fill" style="height: 70%"></div></div>
+                            <span class="energy-day">Mon</span>
+                        </div>
+                        <div class="energy-bar-wrapper">
+                            <div class="energy-bar"><div class="energy-fill" style="height: 75%"></div></div>
+                            <span class="energy-day">Tue</span>
+                        </div>
+                        <div class="energy-bar-wrapper">
+                            <div class="energy-bar"><div class="energy-fill" style="height: 80%"></div></div>
+                            <span class="energy-day">Wed</span>
+                        </div>
+                        <div class="energy-bar-wrapper">
+                            <div class="energy-bar"><div class="energy-fill" style="height: 85%"></div></div>
+                            <span class="energy-day">Thu</span>
+                        </div>
+                        <div class="energy-bar-wrapper">
+                            <div class="energy-bar"><div class="energy-fill" style="height: 90%"></div></div>
+                            <span class="energy-day">Fri</span>
+                        </div>
+                        <div class="energy-bar-wrapper">
+                            <div class="energy-bar"><div class="energy-fill" style="height: 82%"></div></div>
+                            <span class="energy-day">Sat</span>
+                        </div>
+                        <div class="energy-bar-wrapper">
+                            <div class="energy-bar"><div class="energy-fill" style="height: 88%"></div></div>
+                            <span class="energy-day">Sun</span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Log Meal -->
+                <section class="card meal-section">
+                    <div class="card-header">
+                        <span class="card-title">Log Your Meal</span>
+                    </div>
+                    <div class="meal-form">
+                        <div class="input-group">
+                            <input type="text" class="input-field" id="mealInput" placeholder="What did you eat?">
+                            <select class="input-field" id="mealType" style="width: 120px;">
+                                <option>Breakfast</option>
+                                <option>Lunch</option>
+                                <option>Dinner</option>
+                                <option>Snack</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <select class="input-field" id="energyLevel">
+                                <option value="">Energy after meal...</option>
+                                <option value="10">10 - Amazing!</option>
+                                <option value="9">9 - Great</option>
+                                <option value="8">8 - Good</option>
+                                <option value="7">7 - Okay</option>
+                                <option value="6">6 - Meh</option>
+                                <option value="5">5 - Low</option>
+                            </select>
+                            <button class="btn" style="background: var(--bg-tertiary); border: 1px solid var(--border);" onclick="takeMealPhoto()">📷</button>
+                            <button class="btn" onclick="logMeal()">Log Meal</button>
+                        </div>
+                    </div>
+                    <div class="recent-meals" id="recentMeals">
+                        <div class="meal-item">
+                            <div class="meal-info">
+                                <div class="meal-name">Quinoa Buddha Bowl</div>
+                                <div class="meal-meta">Lunch  12:30 PM</div>
+                            </div>
+                            <div class="meal-energy">Energy: 9/10</div>
+                        </div>
+                        <div class="meal-item">
+                            <div class="meal-info">
+                                <div class="meal-name">GF Oatmeal with Berries</div>
+                                <div class="meal-meta">Breakfast  8:00 AM</div>
+                            </div>
+                            <div class="meal-energy">Energy: 8/10</div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Recipe Videos -->
+                <section class="card recipes-section">
+                    <div class="card-header">
+                        <span class="card-title">Gluten-Free Recipe Videos</span>
+                        <span class="card-badge">Chef recommended</span>
+                    </div>
+                    <div class="recipes-grid">
+                        <div class="recipe-card">
+                            <iframe class="recipe-video" src="https://www.youtube.com/embed/uk8QoYgtuS8" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                            <div class="recipe-info">
+                                <div class="recipe-title">GF Recipe Favorites</div>
+                                <div class="recipe-meta">Cooking Tutorial  10 min</div>
+                                <div class="recipe-tags">
+                                    <span class="recipe-tag">Dairy-Free Option</span>
+                                    <span class="recipe-tag">Easy</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="recipe-card">
+                            <iframe class="recipe-video" src="https://www.youtube.com/embed/M36UFYKXlsw" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                            <div class="recipe-info">
+                                <div class="recipe-title">Healthy Meal Ideas</div>
+                                <div class="recipe-meta">Recipe Guide  15 min</div>
+                                <div class="recipe-tags">
+                                    <span class="recipe-tag">High Protein</span>
+                                    <span class="recipe-tag">Meal Prep</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="recipe-card">
+                            <iframe class="recipe-video" src="https://www.youtube.com/embed/zFkDZ1ljNC8" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                            <div class="recipe-info">
+                                <div class="recipe-title">Easy GF Dessert</div>
+                                <div class="recipe-meta">Baking Tutorial  12 min</div>
+                                <div class="recipe-tags">
+                                    <span class="recipe-tag">Dessert</span>
+                                    <span class="recipe-tag">GF</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="recipe-card">
+                            <iframe class="recipe-video" src="https://www.youtube.com/embed/2nX83NoZFIo" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                            <div class="recipe-info">
+                                <div class="recipe-title">Quick GF Lunch</div>
+                                <div class="recipe-meta">Recipe Video  8 min</div>
+                                <div class="recipe-tags">
+                                    <span class="recipe-tag">Healthy</span>
+                                    <span class="recipe-tag">Quick</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Quick Recipes -->
+                <section class="card quick-recipes">
+                    <div class="card-header">
+                        <span class="card-title">Quick GF Meals</span>
+                    </div>
+                    <div class="quick-recipe-item" onclick="alert('Opening Quinoa Stir Fry recipe...')">
+                        <div class="recipe-emoji">🥗</div>
+                        <div class="quick-recipe-info">
+                            <div class="quick-recipe-name">Quinoa Veggie Stir Fry</div>
+                            <div class="quick-recipe-time">15 min  High Protein</div>
+                        </div>
+                    </div>
+                    <div class="quick-recipe-item" onclick="alert('Opening Zucchini Noodles recipe...')">
+                        <div class="recipe-emoji">🍝</div>
+                        <div class="quick-recipe-info">
+                            <div class="quick-recipe-name">Zucchini Noodles + Pesto</div>
+                            <div class="quick-recipe-time">10 min  Low Carb</div>
+                        </div>
+                    </div>
+                    <div class="quick-recipe-item" onclick="alert('Opening Rice Bowl recipe...')">
+                        <div class="recipe-emoji">🍚</div>
+                        <div class="quick-recipe-info">
+                            <div class="quick-recipe-name">Thai Coconut Rice Bowl</div>
+                            <div class="quick-recipe-time">20 min  Dairy Free</div>
+                        </div>
+                    </div>
+                    <div class="quick-recipe-item" onclick="alert('Opening Smoothie Bowl recipe...')">
+                        <div class="recipe-emoji">🫐</div>
+                        <div class="quick-recipe-info">
+                            <div class="quick-recipe-name">Acai Smoothie Bowl</div>
+                            <div class="quick-recipe-time">5 min  Breakfast</div>
+                        </div>
+                    </div>
+                    <div class="quick-recipe-item" onclick="alert('Opening Stuffed Peppers recipe...')">
+                        <div class="recipe-emoji">🫑</div>
+                        <div class="quick-recipe-info">
+                            <div class="quick-recipe-name">GF Stuffed Bell Peppers</div>
+                            <div class="quick-recipe-time">35 min  Meal Prep</div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- SF Restaurants -->
+                <section class="card restaurants-section">
+                    <div class="card-header">
+                        <span class="card-title">GF-Friendly Restaurants in SF</span>
+                        <span class="card-badge success">Verified GF options</span>
+                    </div>
+                    <div class="restaurants-grid">
+                        <div class="restaurant-card" onclick="openRestaurant('gracias')">
+                            <div class="restaurant-img" style="background: linear-gradient(135deg, #ff6b6b, #feca57);"></div>
+                            <div class="restaurant-info">
+                                <div class="restaurant-name">Gracias Madre</div>
+                                <div class="restaurant-cuisine">Mexican  Vegan  Mission</div>
+                                <div class="restaurant-rating">
+                                    <span class="stars">           </span>
+                                    <span class="rating-text">4.5 (2.1k reviews)</span>
+                                </div>
+                                <div class="restaurant-tags">
+                                    <span class="rest-tag">100% GF Kitchen</span>
+                                    <span class="rest-tag">Dedicated Fryer</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="restaurant-card" onclick="openRestaurant('pica')">
+                            <div class="restaurant-img" style="background: linear-gradient(135deg, #a29bfe, #6c5ce7);"></div>
+                            <div class="restaurant-info">
+                                <div class="restaurant-name">Pica Pica Arepa Kitchen</div>
+                                <div class="restaurant-cuisine">Venezuelan  Noe Valley</div>
+                                <div class="restaurant-rating">
+                                    <span class="stars">           </span>
+                                    <span class="rating-text">4.6 (1.8k reviews)</span>
+                                </div>
+                                <div class="restaurant-tags">
+                                    <span class="rest-tag">100% GF</span>
+                                    <span class="rest-tag">Corn-Based</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="restaurant-card" onclick="openRestaurant('burma')">
+                            <div class="restaurant-img" style="background: linear-gradient(135deg, #74b9ff, #0984e3);"></div>
+                            <div class="restaurant-info">
+                                <div class="restaurant-name">Burma Superstar</div>
+                                <div class="restaurant-cuisine">Burmese  Inner Richmond</div>
+                                <div class="restaurant-rating">
+                                    <span class="stars">           </span>
+                                    <span class="rating-text">4.4 (5.2k reviews)</span>
+                                </div>
+                                <div class="restaurant-tags">
+                                    <span class="rest-tag">GF Menu Available</span>
+                                    <span class="rest-tag">Rice Noodles</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="restaurant-card" onclick="openRestaurant('nopa')">
+                            <div class="restaurant-img" style="background: linear-gradient(135deg, #00b894, #55efc4);"></div>
+                            <div class="restaurant-info">
+                                <div class="restaurant-name">Nopa</div>
+                                <div class="restaurant-cuisine">American  NOPA</div>
+                                <div class="restaurant-rating">
+                                    <span class="stars">           </span>
+                                    <span class="rating-text">4.5 (3.1k reviews)</span>
+                                </div>
+                                <div class="restaurant-tags">
+                                    <span class="rest-tag">GF Accommodating</span>
+                                    <span class="rest-tag">Farm to Table</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="restaurant-card" onclick="openRestaurant('kitava')">
+                            <div class="restaurant-img" style="background: linear-gradient(135deg, #fd79a8, #e84393);"></div>
+                            <div class="restaurant-info">
+                                <div class="restaurant-name">Kitava</div>
+                                <div class="restaurant-cuisine">Healthy Bowls  Mission</div>
+                                <div class="restaurant-rating">
+                                    <span class="stars">           </span>
+                                    <span class="rating-text">4.3 (890 reviews)</span>
+                                </div>
+                                <div class="restaurant-tags">
+                                    <span class="rest-tag">100% GF</span>
+                                    <span class="rest-tag">Paleo-Friendly</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="restaurant-card" onclick="openRestaurant('flour')">
+                            <div class="restaurant-img" style="background: linear-gradient(135deg, #fdcb6e, #f39c12);"></div>
+                            <div class="restaurant-info">
+                                <div class="restaurant-name">Flour + Water</div>
+                                <div class="restaurant-cuisine">Italian  Mission</div>
+                                <div class="restaurant-rating">
+                                    <span class="stars">           </span>
+                                    <span class="rating-text">4.6 (4.5k reviews)</span>
+                                </div>
+                                <div class="restaurant-tags">
+                                    <span class="rest-tag">GF Pasta Available</span>
+                                    <span class="rest-tag">Upscale</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Devices -->
+                <section class="card devices-section">
+                    <div class="card-header">
+                        <span class="card-title">Connected Devices</span>
+                    </div>
+                    <div class="devices-grid">
+                        <div class="device-card connected">
+                            <div class="device-icon">W</div>
+                            <div class="device-name">Apple Watch</div>
+                            <div class="device-status connected"> Synced</div>
+                        </div>
+                        <div class="device-card connected">
+                            <div class="device-icon">M</div>
+                            <div class="device-name">MyFitnessPal</div>
+                            <div class="device-status connected"> Synced</div>
+                        </div>
+                        <div class="device-card" onclick="alert('Connect to Instacart for easy GF grocery shopping')">
+                            <div class="device-icon">I</div>
+                            <div class="device-name">Instacart</div>
+                            <div class="device-status">Connect</div>
+                        </div>
+                        <div class="device-card" onclick="alert('Connect OpenTable for restaurant reservations')">
+                            <div class="device-icon">O</div>
+                            <div class="device-name">OpenTable</div>
+                            <div class="device-status">Connect</div>
+                        </div>
+                        <div class="device-card" onclick="alert('Connect Yummly for recipe recommendations')">
+                            <div class="device-icon">Y</div>
+                            <div class="device-name">Yummly</div>
+                            <div class="device-status">Connect</div>
+                        </div>
+                        <div class="device-card" onclick="alert('Scan food labels for gluten')">
+                            <div class="device-icon">S</div>
+                            <div class="device-name">Barcode Scanner</div>
+                            <div class="device-status">Open</div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Tips -->
+                <section class="card tips-section">
+                    <div class="card-header">
+                        <span class="card-title">Today's Tips</span>
+                        <span class="card-badge">Personalized</span>
+                    </div>
+                    <div class="tip-card">
+                        <div class="tip-title">Watch for Hidden Gluten</div>
+                        <div class="tip-text">Soy sauce often contains wheat! Look for tamari or coconut aminos as GF alternatives.</div>
+                    </div>
+                    <div class="tip-card">
+                        <div class="tip-title">Energy Boost Tip</div>
+                        <div class="tip-text">Your energy peaks after high-protein meals. Try adding more lean proteins to lunch!</div>
+                    </div>
+                    <div class="tip-card">
+                        <div class="tip-title">New Recipe Alert</div>
+                        <div class="tip-text">Based on your preferences: Try the GF Cauliflower Mac & Cheese - rated 4.9 stars!</div>
+                    </div>
+                </section>
+
+                <!-- Grocery List -->
+                <section class="card grocery-section">
+                    <div class="card-header">
+                        <span class="card-title">GF Grocery List</span>
+                    </div>
+                    <div id="groceryList">
+                        <div class="grocery-item" onclick="toggleGrocery(this)">
+                            <div class="grocery-check checked"></div>
+                            <span class="grocery-text">Bob's Red Mill GF Flour</span>
+                        </div>
+                        <div class="grocery-item" onclick="toggleGrocery(this)">
+                            <div class="grocery-check checked"></div>
+                            <span class="grocery-text">Quinoa (2 lbs)</span>
+                        </div>
+                        <div class="grocery-item" onclick="toggleGrocery(this)">
+                            <div class="grocery-check"></div>
+                            <span class="grocery-text">Almond Flour</span>
+                        </div>
+                        <div class="grocery-item" onclick="toggleGrocery(this)">
+                            <div class="grocery-check"></div>
+                            <span class="grocery-text">GF Tamari Sauce</span>
+                        </div>
+                        <div class="grocery-item" onclick="toggleGrocery(this)">
+                            <div class="grocery-check"></div>
+                            <span class="grocery-text">Rice Noodles</span>
+                        </div>
+                        <div class="grocery-item" onclick="toggleGrocery(this)">
+                            <div class="grocery-check"></div>
+                            <span class="grocery-text">Banza GF Pasta</span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Weekly Meal Plan -->
+                <section class="card weekly-section">
+                    <div class="card-header">
+                        <span class="card-title">This Week's Meal Plan</span>
+                    </div>
+                    <div class="week-grid" id="weekGrid"></div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Restaurant Modal -->
+    <div class="modal-overlay" id="restaurantModal">
+        <div class="modal">
+            <div class="modal-header">
+                <span class="modal-title" id="modalTitle">Restaurant Menu</span>
+                <button class="modal-close" onclick="closeModal()">x</button>
+            </div>
+            <div class="modal-body" id="modalBody"></div>
+        </div>
+    </div>
+
+    <script>
+        // Restaurant menus data
+        const restaurants = {
+            gracias: {
+                name: "Gracias Madre",
+                sections: [
+                    { title: "Starters", items: [
+                        { name: "Guacamole & Chips", price: "$16", gf: true },
+                        { name: "Queso Fundido (cashew)", price: "$14", gf: true },
+                        { name: "Ceviche de Corazon", price: "$18", gf: true }
+                    ]},
+                    { title: "Tacos (Corn Tortillas)", items: [
+                        { name: "Carnitas (jackfruit)", price: "$17", gf: true },
+                        { name: "Al Pastor (mushroom)", price: "$17", gf: true },
+                        { name: "Baja (beer-battered cauliflower)", price: "$17", gf: true }
+                    ]},
+                    { title: "Mains", items: [
+                        { name: "Enchiladas Verdes", price: "$22", gf: true },
+                        { name: "Burrito Bowl", price: "$19", gf: true },
+                        { name: "Pozole Rojo", price: "$18", gf: true }
+                    ]}
+                ]
+            },
+            pica: {
+                name: "Pica Pica Arepa Kitchen",
+                sections: [
+                    { title: "Arepas (All GF - Corn-based)", items: [
+                        { name: "La Pelua (shredded beef)", price: "$14", gf: true },
+                        { name: "Reina Pepiada (chicken avocado)", price: "$14", gf: true },
+                        { name: "La Catira (chicken, cheese)", price: "$13", gf: true },
+                        { name: "Vegana (black beans, plantains)", price: "$12", gf: true }
+                    ]},
+                    { title: "Bowls", items: [
+                        { name: "Pabellon Bowl", price: "$16", gf: true },
+                        { name: "Chicken Avocado Bowl", price: "$16", gf: true }
+                    ]},
+                    { title: "Sides", items: [
+                        { name: "Tostones (fried plantains)", price: "$6", gf: true },
+                        { name: "Yuca Fries", price: "$7", gf: true }
+                    ]}
+                ]
+            },
+            burma: {
+                name: "Burma Superstar",
+                sections: [
+                    { title: "GF Appetizers", items: [
+                        { name: "Tea Leaf Salad", price: "$15", gf: true },
+                        { name: "Rainbow Salad", price: "$14", gf: true },
+                        { name: "Samusa Soup", price: "$8", gf: false }
+                    ]},
+                    { title: "GF Mains", items: [
+                        { name: "Coconut Rice Noodles", price: "$18", gf: true },
+                        { name: "Chili Lamb", price: "$24", gf: true },
+                        { name: "Fiery Tofu", price: "$16", gf: true }
+                    ]},
+                    { title: "Rice Dishes", items: [
+                        { name: "Burmese Chicken Curry", price: "$19", gf: true },
+                        { name: "Mango Pork", price: "$21", gf: true }
+                    ]}
+                ]
+            },
+            nopa: {
+                name: "Nopa",
+                sections: [
+                    { title: "Starters (GF available)", items: [
+                        { name: "Roasted Beet Salad", price: "$16", gf: true },
+                        { name: "Grilled Octopus", price: "$22", gf: true },
+                        { name: "Burrata & Stone Fruit", price: "$19", gf: true }
+                    ]},
+                    { title: "Mains (GF)", items: [
+                        { name: "Wood-Grilled Pork Chop", price: "$38", gf: true },
+                        { name: "Rotisserie Chicken", price: "$34", gf: true },
+                        { name: "Grilled King Salmon", price: "$36", gf: true }
+                    ]},
+                    { title: "Sides", items: [
+                        { name: "Crispy Potatoes", price: "$10", gf: true },
+                        { name: "Sauteed Greens", price: "$9", gf: true }
+                    ]}
+                ]
+            },
+            kitava: {
+                name: "Kitava",
+                sections: [
+                    { title: "Bowls (All GF)", items: [
+                        { name: "OG Bowl (chicken, sweet potato)", price: "$16", gf: true },
+                        { name: "Grass-Fed Steak Bowl", price: "$19", gf: true },
+                        { name: "Wild Salmon Bowl", price: "$18", gf: true },
+                        { name: "Vegan Power Bowl", price: "$15", gf: true }
+                    ]},
+                    { title: "Sides", items: [
+                        { name: "Cauliflower Rice", price: "$4", gf: true },
+                        { name: "Sweet Potato", price: "$4", gf: true },
+                        { name: "Avocado", price: "$3", gf: true }
+                    ]},
+                    { title: "Drinks", items: [
+                        { name: "Bone Broth", price: "$6", gf: true },
+                        { name: "Kombucha", price: "$5", gf: true }
+                    ]}
+                ]
+            },
+            flour: {
+                name: "Flour + Water",
+                sections: [
+                    { title: "Antipasti", items: [
+                        { name: "Burrata", price: "$22", gf: true },
+                        { name: "Beef Carpaccio", price: "$19", gf: true }
+                    ]},
+                    { title: "Pasta (GF Available +$4)", items: [
+                        { name: "Cacio e Pepe (GF option)", price: "$26", gf: true },
+                        { name: "Pappardelle Bolognese (GF option)", price: "$28", gf: true },
+                        { name: "Spaghetti Pomodoro (GF option)", price: "$24", gf: true }
+                    ]},
+                    { title: "Secondi", items: [
+                        { name: "Grilled Branzino", price: "$42", gf: true },
+                        { name: "Bistecca", price: "$58", gf: true }
+                    ]}
+                ]
+            }
+        };
+
+        // Initialize
+        document.getElementById('currentDate').textContent = new Date().toLocaleDateString('en-US', {
+            weekday: 'long', month: 'short', day: 'numeric'
+        });
+
+        // Generate week grid
+        function generateWeekGrid() {
+            const grid = document.getElementById('weekGrid');
+            const today = new Date();
+            const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            const meals = [
+                { emoji: '🥗', meal: 'Quinoa Salad' },
+                { emoji: '🍝', meal: 'GF Pasta' },
+                { emoji: '🥘', meal: 'Curry Bowl' },
+                { emoji: '🌮', meal: 'Tacos' },
+                { emoji: '🍣', meal: 'Poke Bowl' },
+                { emoji: '🥩', meal: 'Steak & Veg' },
+                { emoji: '🍕', meal: 'GF Pizza' }
+            ];
+
+            for (let i = 0; i < 7; i++) {
+                const date = new Date(today);
+                date.setDate(today.getDate() - today.getDay() + i);
+                const isToday = date.toDateString() === today.toDateString();
+
+                grid.innerHTML += `
+                    <div class="day-card ${isToday ? 'today' : ''}">
+                        <div class="day-name">${dayNames[i]}</div>
+                        <div class="day-date">${date.getDate()}</div>
+                        <div class="day-emoji">${meals[i].emoji}</div>
+                        <div class="day-meals">${meals[i].meal}</div>
+                    </div>
+                `;
+            }
+        }
+        generateWeekGrid();
+
+        // Take meal photo
+        function takeMealPhoto() {
+            showToast('Opening camera...', 'info');
+            setTimeout(() => showToast('Photo captured! Analyzing meal...', 'success'), 1000);
+            setTimeout(() => {
+                document.getElementById('mealInput').value = 'Grilled Salmon with Quinoa';
+                showToast('AI detected: Grilled Salmon with Quinoa - GF Safe!', 'success');
+            }, 2500);
+        }
+
+        function showToast(msg, type) {
+            const toast = document.createElement('div');
+            toast.style.cssText = `position:fixed;bottom:24px;right:24px;background:var(--bg-secondary);border:1px solid var(--border);border-left:4px solid ${type === 'success' ? 'var(--success)' : 'var(--accent)'};padding:14px 20px;border-radius:6px;z-index:1000;font-size:13px;box-shadow:0 4px 20px rgba(0,0,0,0.3);`;
+            toast.textContent = msg;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        // Log meal
+        function logMeal() {
+            const meal = document.getElementById('mealInput').value;
+            const type = document.getElementById('mealType').value;
+            const energy = document.getElementById('energyLevel').value;
+
+            if (!meal) { alert('Please enter what you ate'); return; }
+
+            const mealHtml = `
+                <div class="meal-item">
+                    <div class="meal-info">
+                        <div class="meal-name">${meal}</div>
+                        <div class="meal-meta">${type}  Just now</div>
+                    </div>
+                    <div class="meal-energy">Energy: ${energy || '?'}/10</div>
+                </div>
+            `;
+
+            document.getElementById('recentMeals').insertAdjacentHTML('afterbegin', mealHtml);
+            document.getElementById('mealInput').value = '';
+            document.getElementById('energyLevel').value = '';
+            saveState();
+        }
+
+        // Toggle grocery item
+        function toggleGrocery(el) {
+            el.classList.toggle('checked');
+            el.querySelector('.grocery-check').classList.toggle('checked');
+            saveState();
+        }
+
+        // Restaurant modal
+        function openRestaurant(id) {
+            const r = restaurants[id];
+            document.getElementById('modalTitle').textContent = r.name + ' - GF Menu';
+
+            let html = '';
+            r.sections.forEach(section => {
+                html += `<div class="menu-section">
+                    <div class="menu-section-title">${section.title}</div>`;
+                section.items.forEach(item => {
+                    html += `<div class="menu-item">
+                        <span class="menu-item-name">${item.name}${item.gf ? '<span class="gf-badge">GF</span>' : ''}</span>
+                        <span class="menu-item-price">${item.price}</span>
+                    </div>`;
+                });
+                html += '</div>';
+            });
+
+            document.getElementById('modalBody').innerHTML = html;
+            document.getElementById('restaurantModal').classList.add('show');
+        }
+
+        function closeModal() {
+            document.getElementById('restaurantModal').classList.remove('show');
+        }
+
+        // State management
+        function saveState() {
+            if (window.envisage?.store) {
+                const groceries = [...document.querySelectorAll('.grocery-item')].map(g => g.classList.contains('checked'));
+                window.envisage.store.save({ groceries });
+            }
+        }
+
+        function loadState() {
+            if (window.envisage?.store) {
+                window.envisage.store.load().then(data => {
+                    if (data?.groceries) {
+                        document.querySelectorAll('.grocery-item').forEach((item, idx) => {
+                            if (data.groceries[idx]) {
+                                item.classList.add('checked');
+                                item.querySelector('.grocery-check').classList.add('checked');
+                            }
+                        });
+                    }
+                });
+            }
+        }
+
+        // Theme handling
+        window.addEventListener('message', (e) => {
+            if (e.data?.type === 'envisage-theme-change') document.documentElement.setAttribute('data-theme', e.data.theme);
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadState();
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('theme')) document.documentElement.setAttribute('data-theme', params.get('theme'));
+        });
+
+        // Close modal on overlay click
+        document.getElementById('restaurantModal').addEventListener('click', (e) => {
+            if (e.target.id === 'restaurantModal') closeModal();
+        });
+    </script>
+</body>
+</html>

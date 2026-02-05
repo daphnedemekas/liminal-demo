@@ -91,7 +91,7 @@ def tts_endpoint(req: _TTSRequest):
 from backend.database import Artifact, Project, UserProfile, get_session_factory
 
 
-def _build_envisage_sdk(artifact_id: int, user, project) -> str:
+def _build_envisage_sdk(artifact_id: int, user, project, theme: str = "dark") -> str:
     """Generate the Envisage SDK script tag injected into app HTML."""
     user_info = json.dumps({"name": user.name} if user else {})
     project_info = json.dumps({
@@ -99,11 +99,37 @@ def _build_envisage_sdk(artifact_id: int, user, project) -> str:
         "description": project.description or "",
     } if project else {})
 
-    return f"""<script>
+    # Light mode CSS overrides - generated apps default to dark mode
+    theme_css = """<style id="envisage-theme-overrides">
+/* Light mode overrides for generated apps */
+:root[data-theme="light"] {
+  --bg-primary: #f7f6f3 !important;
+  --bg-secondary: #ffffff !important;
+  --bg-tertiary: #f0f0f0 !important;
+  --border: #e0e0e0 !important;
+  --text-primary: #1f2937 !important;
+  --text-secondary: #5b6470 !important;
+  --text-muted: #8a94a2 !important;
+  --accent: #3566a8 !important;
+  --accent-hover: #2a5590 !important;
+  --success: #16a34a !important;
+  --warning: #ca8a04 !important;
+  --error: #dc2626 !important;
+  color-scheme: light;
+}
+:root[data-theme="light"] body {
+  background: var(--bg-primary) !important;
+  color: var(--text-primary) !important;
+}
+</style>
+"""
+
+    return theme_css + f"""<script>
 window.envisage = {{
   artifactId: {artifact_id},
   user: {user_info},
   project: {project_info},
+  theme: "{theme}",
   store: {{
     _cache: null,
     async save(data) {{
@@ -141,13 +167,27 @@ window.envisage = {{
       }} catch(_) {{}}
       return null;
     }}
+  }},
+  applyTheme(isDark) {{
+    document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
   }}
 }};
+
+// Apply initial theme
+window.envisage.applyTheme(window.envisage.theme === 'dark');
+
+// Listen for theme changes from parent platform
+window.addEventListener('message', (event) => {{
+  if (event.data && event.data.type === 'envisage-theme-change') {{
+    window.envisage.theme = event.data.theme;
+    window.envisage.applyTheme(event.data.theme === 'dark');
+  }}
+}});
 </script>"""
 
 
 @app.get("/app/{artifact_id}")
-async def serve_app(artifact_id: int):
+async def serve_app(artifact_id: int, theme: str = "dark"):
     """Serve an app artifact as a full HTML page with Envisage SDK injected."""
     session = get_session_factory()()
     try:
@@ -163,7 +203,7 @@ async def serve_app(artifact_id: int):
             user = session.query(UserProfile).filter_by(id=project.user_id).first()
 
         html = artifact.content.get("html", "") if isinstance(artifact.content, dict) else ""
-        sdk_script = _build_envisage_sdk(artifact_id, user, project)
+        sdk_script = _build_envisage_sdk(artifact_id, user, project, theme)
 
         # Inject SDK before </head> or at start of document
         if "</head>" in html:

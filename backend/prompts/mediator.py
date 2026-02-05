@@ -222,11 +222,12 @@ MEDIATOR_GREETING_PROMPT = """\
 {run_context}
 </run_context>
 
-The user just opened the project "{project_name}". {greeting_instruction}
+The user just opened {project_name}. {greeting_instruction}
 
 IMPORTANT: Keep your greeting brief and conversational. DO NOT include detailed research, comparisons, \
 or tool recommendations in your greeting. Save proactive research for when the user asks a question. \
-Your greeting should be warm, contextual, and focused on understanding what they want to work on.
+Your greeting should be warm, contextual, and focused on understanding what they want to work on. \
+Do NOT mention the project name if it's generic like "this new task" — just greet them naturally.
 
 """ + REMINDER_GREETING + """
 

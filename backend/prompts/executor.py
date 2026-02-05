@@ -119,11 +119,12 @@ Build a SINGLE self-contained .html file that delivers real value:
 **Responsive** — works well on both desktop and mobile screens.
 
 ## Design System
-Use this exact design foundation. You may adjust the accent color to suit the domain.
+Use this exact design foundation with BOTH dark and light theme support. The app will receive its theme from the platform via `window.envisage.theme` and `data-theme` attribute on the root element.
 
 ```css
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
 
+/* Dark theme (default) */
 :root {{
   --bg-primary: #0f1219;
   --bg-secondary: #1a1f2e;
@@ -142,6 +143,21 @@ Use this exact design foundation. You may adjust the accent color to suit the do
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 8px;
+}}
+
+/* Light theme */
+:root[data-theme="light"] {{
+  --bg-primary: #f7f6f3;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f0f0f0;
+  --border: #e0e0e0;
+  --border-hover: #d0d0d0;
+  --text-primary: #1f2937;
+  --text-secondary: #5b6470;
+  --text-tertiary: #8a94a2;
+  --accent: #3566a8;
+  --accent-hover: #2a5590;
+  --accent-subtle: rgba(53, 102, 168, 0.12);
 }}
 
 * {{ margin: 0; padding: 0; box-sizing: border-box; }}

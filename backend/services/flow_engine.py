@@ -780,11 +780,12 @@ class FlowEngine:
 {run_context}
 </run_context>
 
-The user just opened the project "{display_name}". {greeting_instruction}
+The user just opened {display_name}. {greeting_instruction}
 
 Keep your greeting brief and conversational (1-2 sentences).
 Don't include detailed research or tool recommendations yet.
 Ask a genuine question to understand what they want to work on.
+Do NOT mention the project name if it's generic like "this new task" — just greet them naturally.
 
 Respond with JSON:
 {{"message": "your greeting", "actions": []}}

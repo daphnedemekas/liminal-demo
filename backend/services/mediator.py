@@ -423,7 +423,7 @@ def _handle_greeting(project, messages, recent_runs, base_prompt, db) -> dict:
     except Exception as e:
         logger.warning(f"Greeting LLM call failed: {e}")
         result = {
-            "message": f"Hey! What are you looking to do with {project.name}?",
+            "message": "Hey! What are you looking to work on?",
             "actions": [],
             "escalate": False,
             "task_description": "",

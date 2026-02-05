@@ -39,15 +39,22 @@ Ask 1-3 targeted questions to gather specific details needed to execute the sele
 These questions should be about implementation specifics, NOT about understanding the goal \
 (that was the diagnose phase).
 
+**CRITICAL: If the user is building a tracker, organizer, dashboard, or any system for managing \
+existing information (contacts, tasks, expenses, etc.), you MUST ask them to share their current \
+data.** This is the most important collect question — the tool should be built pre-populated with \
+their real data, not empty. Ask them to paste their data (notes, lists, spreadsheets) so the \
+system can be built with their information already loaded.
+
 Good collect questions:
+- "Can you paste your current investor list / contacts / data so I can build the tracker pre-filled?" (for trackers & organizers — ALWAYS ask this)
 - "Which email should I use for the account?" (for tool setup)
-- "Do you have existing data to import?" (for migration)
 - "Any specific tools or platforms you're already locked into?" (for integration constraints)
 - "What's your preferred learning style?" (for educational proposals)
 
 Bad collect questions (too diagnostic):
 - "What's your budget?" (should have been asked in diagnose)
 - "Tell me more about your goals" (too vague, too late)
+- "Do you have existing data to import?" with just yes/no options (don't ask IF they have data — ask them to SHARE it)
 
 If the selected proposals don't need additional context to execute, set "phase_complete" to true.
 
@@ -65,21 +72,41 @@ Return a JSON object:
 ## Examples (style reference only)
 
 <example>
+<selected_proposals>["Build custom investor pipeline tracker"]</selected_proposals>
+<response>
+{{
+  "message": "Let's build your pipeline tracker pre-loaded with your actual investor data so it's useful from day one. I just need your current info:",
+  "blocks": [
+    {{
+      "type": "input",
+      "id": "existing_data",
+      "prompt": "Paste your current investor notes — names, stages, follow-ups, anything you have. I'll organize it all into the tracker.",
+      "placeholder": "e.g. Sequoia - had first call, need to send deck. Andreessen - waiting on partner meeting..."
+    }},
+    {{
+      "type": "input",
+      "id": "email",
+      "prompt": "Which email should I use if we need to set up any accounts?",
+      "placeholder": "Your primary email address"
+    }}
+  ],
+  "phase_complete": false,
+  "context_answers": {{}}
+}}
+</response>
+</example>
+
+<example>
 <selected_proposals>["Set up Lunch Money", "Build a tax category layer"]</selected_proposals>
 <response>
 {{
   "message": "Good choices — Lunch Money plus a custom tax layer will cover both your personal and freelance tracking. Two quick things I need:",
   "blocks": [
     {{
-      "type": "select",
-      "id": "import_data",
-      "prompt": "Do you have existing expense data to import?",
-      "options": [
-        {{"value": "spreadsheet", "label": "Yes, in a spreadsheet"}},
-        {{"value": "other_app", "label": "Yes, from another app"}},
-        {{"value": "fresh_start", "label": "No, starting fresh"}}
-      ],
-      "multi": false
+      "type": "input",
+      "id": "existing_expenses",
+      "prompt": "Paste any recent expenses or categories you're already tracking — I'll import them so you don't start from scratch.",
+      "placeholder": "e.g. Jan: Figma $15, AWS $45, Notion $10..."
     }},
     {{
       "type": "input",

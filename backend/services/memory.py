@@ -40,6 +40,7 @@ Rules:
 - "stated" = user said it directly. "inferred" = reading between the lines
 - Be concise: "Lives in Austin" not "The user mentioned they live in Austin, TX"
 - Skip trivial/transient things ("I'm tired today", "thanks")
+- Keywords MUST include full proper nouns as multi-word phrases (e.g. "Emmett Shear,OpenAI,a16z" not "emmett,shear,openai")
 - Return [] if nothing worth extracting
 
 Return ONLY the JSON array."""
@@ -138,6 +139,7 @@ Rules:
 - Extract 2-5 key facts about the topic
 - Be concise: "Softmax: AI alignment startup by Emmett Shear, backed by a16z"
 - Include the most useful/relevant facts, skip minor details
+- Keywords MUST include full proper nouns as multi-word phrases (e.g. "Emmett Shear,Softmax,a16z" not "emmett,shear,softmax")
 - CRITICAL: If the topic is a person, company, or entity name and the research found MULTIPLE \
 different people/entities with the same name, only extract facts about the ONE that matches \
 the conversation context. Do NOT save facts about unrelated people. If you truly cannot \
@@ -215,7 +217,8 @@ def retrieve_insights(
 ) -> str:
     """Retrieve relevant insights for prompt injection.
 
-    Strategy: always include bio/value/preference + keyword match + recency.
+    Strategy: always include bio/value/preference + research facts,
+    then keyword match (with multi-word phrase support), then recency.
     """
     all_insights = (
         db.query(Insight)
@@ -227,21 +230,43 @@ def retrieve_insights(
     if not all_insights:
         return ""
 
-    # Always include core identity insights
-    always = [i for i in all_insights if i.category in ("bio", "value", "preference")]
+    # Always include core identity insights AND research-sourced facts
+    always = [
+        i for i in all_insights
+        if i.category in ("bio", "value", "preference")
+        or i.source_layer == "research"
+    ]
 
-    # Keyword match remaining against context
-    context_words = set(context.lower().split()) if context else set()
+    # Keyword match remaining against context.
+    # Support multi-word keyword phrases (e.g. "Emmett Shear") by checking
+    # if phrase appears anywhere in context, not just single-word overlap.
+    context_lower = context.lower() if context else ""
+    context_words = set(context_lower.split()) if context_lower else set()
     scored = []
     always_ids = {i.id for i in always}
     for i in all_insights:
         if i.id in always_ids:
             continue
-        kw = set(k.strip() for k in i.keywords.lower().split(",")) if i.keywords else set()
+        score = 0
+        # Check each keyword phrase — multi-word phrases match as substrings
+        if i.keywords:
+            for phrase in i.keywords.lower().split(","):
+                phrase = phrase.strip()
+                if not phrase:
+                    continue
+                if " " in phrase:
+                    # Multi-word: substring match against full context
+                    if phrase in context_lower:
+                        score += 3
+                else:
+                    # Single word: set membership
+                    if phrase in context_words:
+                        score += 1
+        # Also check content words (single-word only)
         content_words = set(i.content.lower().split())
-        overlap = len((kw | content_words) & context_words)
-        if overlap > 0:
-            scored.append((overlap, i))
+        score += len(content_words & context_words)
+        if score > 0:
+            scored.append((score, i))
     scored.sort(key=lambda x: -x[0])
     matched = [i for _, i in scored[: limit - len(always)]]
 
@@ -261,10 +286,15 @@ def retrieve_insights(
 
 
 def already_researched(user_id: str, topic: str, db: Session) -> bool:
-    """Check if we already have research insights matching this topic."""
+    """Check if we already have research insights matching this topic.
+
+    Uses a higher threshold (3) to avoid blocking re-research when the first
+    pass returned poor or tangential results.
+    """
     if not topic:
         return False
-    topic_words = set(topic.lower().split())
+    topic_lower = topic.lower()
+    topic_words = set(topic_lower.split())
     # Check insights from research layer
     research_insights = (
         db.query(Insight)
@@ -273,9 +303,20 @@ def already_researched(user_id: str, topic: str, db: Session) -> bool:
         .all()
     )
     for ins in research_insights:
-        kw = set(k.strip() for k in ins.keywords.lower().split(",")) if ins.keywords else set()
+        score = 0
+        if ins.keywords:
+            for phrase in ins.keywords.lower().split(","):
+                phrase = phrase.strip()
+                if not phrase:
+                    continue
+                if " " in phrase:
+                    if phrase in topic_lower:
+                        score += 3
+                else:
+                    if phrase in topic_words:
+                        score += 1
         content_words = set(ins.content.lower().split())
-        overlap = len((kw | content_words) & topic_words)
-        if overlap >= 2:
+        score += len(content_words & topic_words)
+        if score >= 3:
             return True
     return False

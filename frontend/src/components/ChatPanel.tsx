@@ -107,6 +107,8 @@ export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, on
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [logsCollapsed, setLogsCollapsed] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const userScrolledUp = useRef(false);
   const { events, synthesis } = useRunStream(activeRunId);
   const {
     isAudioMode, isRecording, isPlaying, transcript,
@@ -492,9 +494,24 @@ export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, on
     onRunComplete?.();
   }, [synthesis, onRunComplete]);
 
-  // Auto-scroll
+  // Track whether user has scrolled up
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      // "Near bottom" = within 100px of the bottom
+      userScrolledUp.current = scrollHeight - scrollTop - clientHeight > 100;
+    };
+    container.addEventListener("scroll", handleScroll);
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  // Auto-scroll only when user is already at the bottom
+  useEffect(() => {
+    if (!userScrolledUp.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages, activityLog, researchingTopic]);
 
   // When recording stops and we have a transcript, send it
@@ -591,7 +608,7 @@ export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, on
         </div>
       </div>
 
-      <div className="chat-messages">
+      <div className="chat-messages" ref={messagesContainerRef}>
         {messages.length === 0 && busy && (
           <div className="chat-loading-indicator">
             <span className="loading-dot" />

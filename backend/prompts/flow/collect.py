@@ -104,7 +104,10 @@ Return a JSON object:
       "type": "select",
       "id": "integrations",
       "prompt": "Want me to connect to your calendar to track meetings automatically?",
-      "options": ["Yes, connect Google Calendar", "No, I'll log meetings manually"]
+      "options": [
+        {{"value": "yes_calendar", "label": "Yes, connect Google Calendar"}},
+        {{"value": "no_manual", "label": "No, I'll log meetings manually"}}
+      ]
     }}
   ],
   "phase_complete": false,
@@ -123,7 +126,12 @@ Return a JSON object:
       "type": "select",
       "id": "integrations",
       "prompt": "Would you like me to connect any of these to pull in your data automatically?",
-      "options": ["Oura Ring", "Strava", "Apple Health", "None — I'll enter data manually"],
+      "options": [
+        {{"value": "oura", "label": "Oura Ring"}},
+        {{"value": "strava", "label": "Strava"}},
+        {{"value": "apple_health", "label": "Apple Health"}},
+        {{"value": "none", "label": "None — I'll enter data manually"}}
+      ],
       "multi": true
     }},
     {{
@@ -149,7 +157,10 @@ Return a JSON object:
       "type": "select",
       "id": "bank_integration",
       "prompt": "Would you like me to connect to your bank for automatic transaction import?",
-      "options": ["Yes, connect my bank", "No, I'll add expenses manually"]
+      "options": [
+        {{"value": "yes_bank", "label": "Yes, connect my bank"}},
+        {{"value": "no_manual", "label": "No, I'll add expenses manually"}}
+      ]
     }},
     {{
       "type": "input",

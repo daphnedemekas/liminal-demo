@@ -57,8 +57,15 @@ class FlowEngine:
 
         state = dict(project.flow_state or {})
 
-        # No user message and no phase yet — greeting case
+        # No user message and no phase yet — greeting or auto-start from nav context
         if not user_message and not state.get("phase"):
+            # If the project has a description (e.g. from home chat nav_context),
+            # treat it as the first user message and jump straight into Frame phase
+            if project.description and project.description.strip():
+                nav_context = project.description.strip()
+                db.add(ChatMessage(project_id=project.id, role="user", content=nav_context))
+                db.commit()
+                return self._run_frame(project, user, nav_context, state, db)
             return self._handle_greeting(project, user, db)
 
         # No user message but already have conversation — return last message

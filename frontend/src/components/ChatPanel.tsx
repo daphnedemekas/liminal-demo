@@ -539,7 +539,7 @@ export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, on
 
   const handleBlockSubmit = (blockId: string, text: string) => {
     setBlockSubmitted((prev) => new Set(prev).add(blockId));
-    sendChat(text);
+    sendChat(text, true);
   };
 
   const handleActionClick = (actionText: string) => {
@@ -562,7 +562,7 @@ export function ChatPanel({ project, userId, onProjectRenamed, onRunComplete, on
       }
     }
 
-    sendChat(actionText);
+    sendChat(actionText, true);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

@@ -166,8 +166,9 @@ ARTIFACT_TYPE_SCHEMAS = """\
 2. **checklist** — actionable items grouped by category
    content: {"categories": [{"name": "Category name", "items": [{"text": "Item description", "checked": false}]}]}
 
-3. **video_collection** — YouTube or other video recommendations
-   content: {"videos": [{"title": "Video title", "url": "https://youtube.com/...", "description": "Why this is useful"}]}
+3. **video_collection** — YouTube or other video recommendations (videos will be embedded inline)
+   content: {"videos": [{"title": "Video title", "url": "https://www.youtube.com/watch?v=VIDEO_ID", "description": "Why this is useful"}]}
+   IMPORTANT: URLs MUST be specific video watch URLs (e.g. https://www.youtube.com/watch?v=abc123), NOT channel URLs (/@channel) or playlist URLs. Only include videos you found real watch URLs for.
 
 4. **resource_list** — links, tools, websites, references
    content: {"resources": [{"title": "Resource name", "url": "https://...", "description": "What it is", "category": "Optional grouping"}]}
@@ -256,7 +257,7 @@ Return ONLY a JSON object with this shape:
 - **schedule** — Use for time-based plans (daily routines, weekly schedules, project timelines).
 - **comparison_table** — Use when comparing options side-by-side (tools, services, approaches).
 - **resource_list** — ONLY use when you have real, verified URLs. Every resource MUST have a valid URL starting with https://. If you don't have real URLs, use a report artifact instead.
-- **video_collection** — ONLY use when you have real YouTube or video URLs from the agent's research.
+- **video_collection** — ONLY use when you have real YouTube video watch URLs (e.g. youtube.com/watch?v=...) from the agent's research. Videos are embedded inline so URLs MUST be specific video watch URLs, NOT channel or playlist URLs.
 
 ### Critical rules
 - NEVER create a resource_list with empty or placeholder URLs. If the agent didn't find real URLs, use a report artifact.
